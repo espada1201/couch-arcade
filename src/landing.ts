@@ -17,7 +17,7 @@ function heroField(): HTMLCanvasElement {
   const c = h('canvas.hero-field', { 'aria-hidden': 'true' });
   const cols = 22;
   const rows = 9;
-  const wave: WaveProgram = { kind: 'wave', t0: 0, period: 3600, shape: 'ripple', angle: 0, origin: { x: 0.18, y: 0.7 }, width: 0.16, rgb: [255, 176, 0], voice: 'off' };
+  const wave: WaveProgram = { kind: 'wave', t0: 0, period: 3600, shape: 'ripple', angle: 0, origin: { x: 0.8, y: 0.35 }, width: 0.16, rgb: [255, 176, 0], voice: 'off' };
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const draw = (t: number) => {
     const r = c.getBoundingClientRect();
@@ -34,7 +34,7 @@ function heroField(): HTMLCanvasElement {
     for (let y = 0; y < rows; y++)
       for (let x = 0; x < cols; x++) {
         const pos = { x: x / (cols - 1), y: y / (rows - 1) };
-        const f = render(wave, { seat: 0, pos, aspect }, reduced ? 1400 : t);
+        const f = render(wave, { seat: 0, pos, aspect }, reduced ? 1400 : t + 1200);
         ctx.fillStyle = css(f.rgb.map((v) => Math.max(v, 22)));
         const pw = cw * 0.42;
         const ph = ch * 0.7;
