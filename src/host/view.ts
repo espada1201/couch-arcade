@@ -2,6 +2,7 @@ import qrcode from 'qrcode-generator';
 import { carry } from '../landing';
 import { pickTransport } from '../net/pick';
 import { h } from '../ui/dom';
+import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel, type Director } from './play';
 import { HostSession } from './session';
@@ -85,6 +86,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   const tabs: [string, string, () => HTMLElement][] = [
     ['locate', 'Locate', () => locatePanel(session, params, () => director.take())],
     ['card', 'Card stunt', () => cardPanel(session, director)],
+    ['live', 'Live screen', () => livePanel(session, director)],
     ['wave', 'Wave', () => wavePanel(session, stage, director)],
     ['sound', 'Sound', () => soundPanel(session, stage, director)],
     ['territory', 'Territory', () => territoryPanel(session, director)],

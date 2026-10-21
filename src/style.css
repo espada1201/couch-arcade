@@ -144,7 +144,7 @@ body.host { overflow-x: hidden; }
 .chip[data-offline] { border-style: dashed; color: var(--muted); }
 
 .controls { grid-area: controls; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--ink-2); }
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
 .tab {
   appearance: none; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted);
   padding: 12px 8px 10px; text-align: left; font: 600 13px var(--display); font-stretch: 112%; cursor: pointer;
@@ -159,6 +159,7 @@ body.host { overflow-x: hidden; }
 .panel-intro { margin: 0; color: #d9d0bc; font-size: 14px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .grow { flex: 1; }
+label.grow { flex: 1 1 180px; }
 label.grow, label.num, label.file { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 label.num input, label.num select { width: 110px; }
 .check { display: flex; gap: 10px; align-items: center; font-size: 14px; cursor: pointer; }
@@ -196,6 +197,7 @@ progress::-moz-progress-bar { background: var(--amber); }
 .thumb { appearance: none; padding: 0; border: 2px solid transparent; border-radius: 8px; background: none; color: var(--muted); font: 500 11px var(--display); cursor: pointer; display: grid; gap: 4px; justify-items: center; }
 .thumb canvas { width: 100%; aspect-ratio: 1; border-radius: 6px; display: block; }
 .thumb[aria-pressed='true'] { border-color: var(--amber); color: var(--text); }
+.live-preview { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; image-rendering: pixelated; background: #000; }
 .stunt-preview canvas { width: 100%; max-height: 180px; object-fit: contain; border-radius: 8px; display: block; background: #000; }
 
 .sound-list { display: grid; gap: 6px; }

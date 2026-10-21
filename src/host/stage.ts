@@ -182,7 +182,7 @@ export class Stage {
       ctx.fillText('Tap the floor to set the ripple centre', this.box.x, this.box.y - 10 * dpr);
     }
 
-    const size = Math.max(14 * dpr, Math.min(46 * dpr, (Math.sqrt((w * hh) / n) * 0.5)));
+    const size = Math.max(14 * dpr, Math.min(72 * dpr, (Math.sqrt((w * hh) / n) * 0.5)));
     const now = this.session.now();
     for (const [seat, p0] of positions) {
       const s = this.session.seats.get(seat);

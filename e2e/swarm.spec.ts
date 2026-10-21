@@ -152,6 +152,18 @@ test('a wave reaches the left of the room before the right', async ({ context })
   expect(peaks[0].t).toBeLessThan(peaks[1].t);
   expect(peaks[1].t).toBeLessThan(peaks[2].t);
   await room.host.screenshot({ path: 'test-results/host-wave.png' });
+
+  // Live screen: a moving picture, so each phone's colour keeps changing.
+  await room.host.getByRole('tab', { name: /Live screen/ }).click();
+  await room.host.getByRole('button', { name: 'Go live' }).click();
+  await expect(room.host.getByText(/Broadcasting to 3 phones/)).toBeVisible();
+  const seen = new Set<string>();
+  for (let i = 0; i < 10; i++) {
+    seen.add((await bg(room.phones[1])).join());
+    await room.phones[1].waitForTimeout(150);
+  }
+  expect(seen.size).toBeGreaterThan(3);
+  await room.host.screenshot({ path: 'test-results/host-live.png' });
   expect(errors).toEqual([]);
 });
 

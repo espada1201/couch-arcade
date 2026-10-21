@@ -29,6 +29,7 @@ export type Program =
   | { kind: 'blink'; schedule: BlinkSchedule }
   | { kind: 'grid'; rows: number; seats: number }
   | { kind: 'card'; rgb: RGB; at: number }
+  | { kind: 'live'; rgb: RGB; prev: RGB; at: number }
   | WaveProgram
   | { kind: 'territory'; state: TerritoryState; colors: [RGB, RGB] }
   | { kind: 'potato'; state: PotatoState };
@@ -136,6 +137,9 @@ export function render(prog: Program, me: Me, t: number): Frame {
       const left = Math.ceil((prog.at - t) / 1000);
       return { rgb: [14, 13, 11], label: left <= 3 ? String(left) : undefined };
     }
+    case 'live':
+      // Every phone swaps to the new frame at the same synced instant: no tearing across the crowd.
+      return { rgb: t >= prog.at ? prog.rgb : prog.prev };
     case 'wave': {
       if (!me.pos) return { rgb: BLACK };
       const level = waveLevel(prog, travel(prog, me.pos, me.aspect), t);

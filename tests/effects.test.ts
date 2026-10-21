@@ -60,6 +60,12 @@ describe('rendering', () => {
     expect(render({ kind: 'card', rgb: [1, 2, 3], at: 5000 }, me, 5000).rgb).toEqual([1, 2, 3]);
   });
 
+  it('live frames swap on the shared clock, not on arrival', () => {
+    const live = { kind: 'live' as const, rgb: [9, 9, 9] as [number, number, number], prev: [1, 1, 1] as [number, number, number], at: 100 };
+    expect(render(live, me, 99).rgb).toEqual([1, 1, 1]);
+    expect(render(live, me, 100).rgb).toEqual([9, 9, 9]);
+  });
+
   it('lobby and identify show the seat number', () => {
     expect(render({ kind: 'lobby' }, me, 0).label).toBe('5');
     expect(render({ kind: 'identify' }, me, 0).label).toBe('5');
