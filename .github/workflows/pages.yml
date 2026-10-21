@@ -26,9 +26,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # Pages must be switched on once (Settings > Pages > Source: GitHub Actions); until then, skip instead of failing.
+      - id: pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+        with:
+          enablement: true
+      - if: steps.pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
       - id: deployment
+        if: steps.pages.outcome == 'success'
         uses: actions/deploy-pages@v4

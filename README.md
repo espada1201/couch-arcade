@@ -30,9 +30,9 @@ plain http, so phones can't keep their screens awake: set Auto-Lock to Never, or
 ## Hosting it online
 
 The GitHub Pages workflow publishes the app; phones then connect over the internet through the
-free PeerJS broker, over https (so screens stay awake). Pages needs a public repository; the
-workflow skips while the repo is private. (The repo name `couch-arcade` is a
-leftover; feel free to rename it.)
+free PeerJS broker, over https (so screens stay awake). Switch it on once in the repo's
+**Settings > Pages > Source: GitHub Actions** (Pages needs a public repo); until then the deploy
+step is skipped. (The repo name `couch-arcade` is a leftover; feel free to rename it.)
 
 ## How it works
 
