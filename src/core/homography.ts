@@ -42,17 +42,42 @@ export function fitHomography(from: Point[], to: Point[]): Homography | null {
   return h ? [...h, 1] : null;
 }
 
-export function applyHomography(H: Homography, p: Point): Point {
+/**
+ * Floor position of an image point, or null for points at or beyond the horizon (they
+ * are not on the floor). Far-off results are clamped so one stray phone can't squash the map.
+ */
+export function applyHomography(H: Homography, p: Point): Point | null {
   const w = H[6] * p.x + H[7] * p.y + H[8];
-  return { x: (H[0] * p.x + H[1] * p.y + H[2]) / w, y: (H[3] * p.x + H[4] * p.y + H[5]) / w };
+  if (w <= 1e-6) return null;
+  const clamp = (v: number) => Math.min(1.5, Math.max(-0.5, v));
+  return { x: clamp((H[0] * p.x + H[1] * p.y + H[2]) / w), y: clamp((H[3] * p.x + H[4] * p.y + H[5]) / w) };
 }
 
-/** Corners clicked in the camera image, in order: back-left, back-right, front-right, front-left. */
+/** Corners must form a convex quad clicked clockwise on screen (top-left, top-right, bottom-right, bottom-left). */
+export function validCorners(c: Point[]): boolean {
+  if (c.length !== 4) return false;
+  for (let i = 0; i < 4; i++) {
+    const a = c[i];
+    const b = c[(i + 1) % 4];
+    const d = c[(i + 2) % 4];
+    // Screen y points down, so a clockwise turn has a positive cross product.
+    if ((b.x - a.x) * (d.y - b.y) - (b.y - a.y) * (d.x - b.x) <= 0) return false;
+  }
+  return true;
+}
+
+/** Corners clicked in the camera image, in order: top-left, top-right, bottom-right, bottom-left of the area. */
 export function floorPlan(corners: Point[]): Homography | null {
-  return fitHomography(corners, [
+  if (!validCorners(corners)) return null;
+  const H = fitHomography(corners, [
     { x: 0, y: 0 },
     { x: 1, y: 0 },
     { x: 1, y: 1 },
     { x: 0, y: 1 },
   ]);
+  if (!H) return null;
+  // Scale so the floor side of the horizon has w > 0; applyHomography relies on that sign.
+  const cx = corners.reduce((a, c) => a + c.x, 0) / 4;
+  const cy = corners.reduce((a, c) => a + c.y, 0) / 4;
+  return H[6] * cx + H[7] * cy + H[8] < 0 ? H.map((v) => -v) : H;
 }

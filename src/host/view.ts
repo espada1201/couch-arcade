@@ -103,7 +103,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   });
 
   const tabs: [string, string, () => HTMLElement][] = [
-    ['locate', 'Locate', () => locatePanel(session, params, () => director.take())],
+    ['locate', 'Locate', () => locatePanel(session, params, (stop) => director.take(stop))],
     ['show', 'Show', () => showPanel(session, director)],
     ['card', 'Card stunt', () => cardPanel(session, director)],
     ['live', 'Live screen', () => livePanel(session, director)],

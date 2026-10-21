@@ -103,17 +103,27 @@ function waveControls(stage: Stage, initial: Partial<WaveProgram>, onChange: (w:
           }
         : null;
   };
+  const press = (group: HTMLElement, pressed: (i: number) => boolean) =>
+    group.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-pressed', String(pressed(i))));
+  const DIRS: [string, number, string][] = [
+    ['→', 0, 'Left to right'],
+    ['↓', 90, 'Front to back'],
+    ['←', 180, 'Right to left'],
+    ['↑', 270, 'Back to front'],
+    ['↘', 45, 'Diagonal'],
+  ];
   const dirs = h(
     'div.dirs',
     { role: 'group', 'aria-label': 'Direction' },
-    ...[
-      ['→', 0, 'Left to right'],
-      ['↓', 90, 'Front to back'],
-      ['←', 180, 'Right to left'],
-      ['↑', 270, 'Back to front'],
-      ['↘', 45, 'Diagonal'],
-    ].map(([g, a, label]) =>
-      h('button.dir', { type: 'button', 'aria-label': String(label), title: String(label), onclick: () => ((w.angle = Number(a)), emit()) }, String(g)),
+    ...DIRS.map(([g, a, label]) =>
+      h('button.dir', { type: 'button', 'aria-label': label, title: label, 'aria-pressed': String(a === w.angle), onclick: () => ((w.angle = a), press(dirs, (i) => DIRS[i][1] === a), emit()) }, g),
+    ),
+  );
+  const swatches = h(
+    'div.swatches',
+    { role: 'group', 'aria-label': 'Colour' },
+    ...COLORS.map(([name, rgb]) =>
+      h('button.swatch', { type: 'button', 'aria-label': name, title: name, style: `--c:${css(rgb)}`, 'aria-pressed': String(rgb === w.rgb), onclick: () => ((w.rgb = rgb), press(swatches, (i) => COLORS[i][1] === rgb), emit()) }),
     ),
   );
   const el = h(
@@ -128,33 +138,49 @@ function waveControls(stage: Stage, initial: Partial<WaveProgram>, onChange: (w:
     dirs,
     slider('Speed', 0.6, 8, 0.1, w.period / 1000, (v) => `${v.toFixed(1)} s per pass`, (v) => ((w.period = v * 1000), emit())),
     slider('Band width', 0.04, 0.4, 0.01, w.width, (v) => `${Math.round(v * 100)}%`, (v) => ((w.width = v), emit())),
-    withColor
-      ? h(
-          'div.swatches',
-          { role: 'group', 'aria-label': 'Colour' },
-          ...COLORS.map(([name, rgb]) => h('button.swatch', { type: 'button', 'aria-label': name, title: name, style: `--c:${css(rgb)}`, onclick: () => ((w.rgb = rgb), emit()) })),
-        )
-      : null,
+    withColor ? swatches : null,
   );
   return { el, get: () => ({ ...w }), arm: picking };
 }
 
 export function wavePanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
   const msg = h('p.note', { role: 'status' });
-  let running = false;
+  let wave: WaveProgram | null = null;
+  let sentAt = 0;
+  let pending = 0;
+  const send = () => {
+    pending = 0;
+    sentAt = performance.now();
+    if (wave) session.setProgram({ ...wave });
+  };
   const go = (w: Omit<WaveProgram, 't0' | 'kind'>) => {
     const err = needPlaced(session);
     if (err) return void (msg.textContent = err);
     director.take(() => {
-      running = false;
+      wave = null;
+      clearTimeout(pending);
+      pending = 0;
       stage.onPick = null;
     });
     controls.arm();
-    running = true;
-    session.setProgram({ kind: 'wave', t0: session.now() + 250, ...w });
+    wave = { kind: 'wave', t0: session.now() + 250, ...w };
+    send();
     msg.textContent = 'Rolling. Change anything and it updates live.';
   };
-  const controls = waveControls(stage, {}, (w) => running && go(w), true);
+  // Live edits keep the wave's phase so the band never jumps and phones keep their audio
+  // schedule; a new speed rebases t0 so the band stays where it is (pingpong parity included).
+  const retune = (w: Omit<WaveProgram, 't0' | 'kind'>) => {
+    if (!wave) return;
+    const now = session.now();
+    let t0 = wave.t0;
+    if (w.period !== wave.period && now > t0) t0 = now - (((now - t0) / wave.period) % 2) * w.period;
+    wave = { kind: 'wave', t0, ...w };
+    // Slider drags fire per pixel; at most one broadcast per 150 ms, trailing edge included.
+    const wait = 150 - (performance.now() - sentAt);
+    if (wait <= 0) send();
+    else pending ||= window.setTimeout(send, wait);
+  };
+  const controls = waveControls(stage, {}, retune, true);
   return h(
     'div.panel-body',
     {},

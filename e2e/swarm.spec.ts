@@ -113,6 +113,15 @@ test('the camera finds every phone, then the crowd shows a card stunt', async ({
     await expect(room.phones[i].locator('.status')).toContainText('placed');
   }
 
+  // Keyboard placement: pick a phone on the map with ] and nudge it with an arrow key.
+  const firstRow = room.host.locator('tr[data-seat]').first();
+  const before = Number(await firstRow.getAttribute('data-x'));
+  await room.host.locator('.stage-canvas').focus();
+  await room.host.keyboard.press(']');
+  await room.host.keyboard.press('Shift+ArrowRight');
+  await expect.poll(async () => Number(await firstRow.getAttribute('data-x'))).toBeGreaterThan(before + 0.05);
+  await room.host.keyboard.press('Shift+ArrowLeft');
+
   // Card stunt: a four-colour picture; every phone must show its quadrant's colour.
   await room.host.getByRole('tab', { name: /Card stunt/ }).click();
   await room.host.locator('#stunt-file').setInputFiles({

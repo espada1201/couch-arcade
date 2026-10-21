@@ -45,13 +45,15 @@ interface Accum {
   weights: Float32Array;
 }
 
-/** Median brightness of a frame: tracks the camera's auto-exposure, but not the phones (a minority of pixels). */
-function frameLevel(d: Uint8Array): number {
-  const hist = new Uint32Array(256);
-  for (let i = 0; i < d.length; i++) hist[d[i]]++;
-  let seen = 0;
-  for (let v = 0; v < 256; v++) if ((seen += hist[v]) * 2 >= d.length) return v;
-  return 0;
+/**
+ * Mean brightness of the pixels that never blink: it follows the camera's auto-exposure
+ * but not the phones themselves, even when one phone fills most of the frame.
+ */
+function frameLevel(d: Uint8Array, still: Int32Array): number {
+  if (still.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < still.length; i++) sum += d[still[i]];
+  return sum / still.length;
 }
 
 function accumulate(frames: GrayFrame[], levels: number[], s: BlinkSchedule, lag: number, pix: Int32Array): Accum {
@@ -128,7 +130,10 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
   const stride = Math.max(1, Math.floor(active.length / 1500));
   const sample = Int32Array.from(active.filter((_, i) => i % stride === 0));
   const bits = new Array<number>(BITS_PER_CODE);
-  const levels = window.map((f) => frameLevel(f.data));
+  const quiet: number[] = [];
+  for (let p = 0; p < n; p++) if (hi[p] - lo[p] < minRange) quiet.push(p);
+  const still = quiet.length < 50 ? new Int32Array(0) : Int32Array.from(quiet.filter((_, i) => i % Math.max(1, Math.floor(quiet.length / 2000)) === 0));
+  const levels = window.map((f) => frameLevel(f.data, still));
   const score = (lag: number) => {
     const acc = accumulate(window, levels, s, lag, sample);
     let total = 0;
@@ -152,17 +157,28 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
     if (v > bestScore) [bestScore, bestLag] = [v, lag];
   }
 
-  const acc = accumulate(window, levels, s, bestLag, pix);
   const groups = new Map<number, { xs: number[]; ys: number[]; conf: number }>();
-  for (let i = 0; i < pix.length; i++) {
-    const p = pix[i];
-    const r = decodePixel(acc, i, hi[p] - lo[p], bits);
-    if (r.id < 0 || r.conf < minConfidence) continue;
-    let g = groups.get(r.id);
-    if (!g) groups.set(r.id, (g = { xs: [], ys: [], conf: 0 }));
-    g.xs.push(p % w);
-    g.ys.push(Math.floor(p / w));
-    g.conf += r.conf;
+  // Phones disagree a little about the time (clock error, display lag). Pixels that don't
+  // decode at the crowd's delay get a second chance at nearby delays.
+  let pending = pix;
+  for (const offset of [0, -0.25, 0.25, -0.5, 0.5, -0.75, 0.75]) {
+    if (pending.length === 0) break;
+    const acc = accumulate(window, levels, s, bestLag + offset * s.halfMs, pending);
+    const failed: number[] = [];
+    for (let i = 0; i < pending.length; i++) {
+      const p = pending[i];
+      const r = decodePixel(acc, i, hi[p] - lo[p], bits);
+      if (r.id < 0 || r.conf < minConfidence) {
+        failed.push(p);
+        continue;
+      }
+      let g = groups.get(r.id);
+      if (!g) groups.set(r.id, (g = { xs: [], ys: [], conf: 0 }));
+      g.xs.push(p % w);
+      g.ys.push(Math.floor(p / w));
+      g.conf += r.conf;
+    }
+    pending = Int32Array.from(failed);
   }
 
   const detections: Detection[] = [];

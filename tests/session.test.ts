@@ -63,6 +63,8 @@ describe('host session', () => {
     expect(session.layout.positions.get(2)).toEqual(before.get(2));
     session.placeManually(2, { x: 0.6, y: 0.5 });
     expect(session.layout.positions.get(1)).toEqual(before.get(1));
+    // Frozen positions are room coordinates now; a later camera scan must not treat them as camera ones.
+    expect([...session.seats.values()].map((x) => x.source)).toEqual(['manual', 'manual', 'manual']);
   });
 
   it('games only see phones that are connected and placed', async () => {

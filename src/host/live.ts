@@ -70,43 +70,54 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   let video: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let last = new Map<number, RGB>();
+  let live = false;
+  // Bumped by every start and stop, so a start whose camera prompt or video load resolves
+  // after it was superseded drops what it opened instead of leaving the camera on.
+  let gen = 0;
 
+  const drop = (s: MediaStream | null, v: HTMLVideoElement | null) => {
+    s?.getTracks().forEach((t) => t.stop());
+    if (v?.src) URL.revokeObjectURL(v.src);
+  };
   const release = () => {
-    stream?.getTracks().forEach((t) => t.stop());
+    drop(stream, video);
     stream = null;
-    if (video?.src) URL.revokeObjectURL(video.src);
     video = null;
   };
 
-  const prepare = async (): Promise<boolean> => {
-    release();
+  const prepare = async (mine: number): Promise<boolean> => {
+    const fail = (text: string) => {
+      if (mine === gen) msg.textContent = text;
+      return false;
+    };
+    let s: MediaStream | null = null;
+    let v: HTMLVideoElement | null = null;
     if (kind === 'camera') {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 } }, audio: false });
+        s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 } }, audio: false });
       } catch {
-        msg.textContent = 'The camera could not be opened. Allow it in the address bar, or pick another source.';
-        return false;
+        return fail('The camera could not be opened. Allow it in the address bar, or pick another source.');
       }
-      video = h('video', { muted: true, playsinline: true });
-      video.srcObject = stream;
+      v = h('video', { muted: true, playsinline: true });
+      v.srcObject = s;
     } else if (kind === 'video') {
       const f = file.files?.[0];
-      if (!f) {
-        msg.textContent = 'Choose a video file first.';
-        return false;
-      }
-      video = h('video', { muted: true, playsinline: true, loop: true });
-      video.src = URL.createObjectURL(f);
+      if (!f) return fail('Choose a video file first.');
+      v = h('video', { muted: true, playsinline: true, loop: true });
+      v.src = URL.createObjectURL(f);
     }
-    if (video) {
-      video.muted = true;
+    if (v) {
+      v.muted = true;
       try {
-        await video.play();
+        await v.play();
       } catch {
-        msg.textContent = 'That video could not be played in this browser.';
-        return false;
+        drop(s, v);
+        return fail('That video could not be played in this browser.');
       }
     }
+    if (mine !== gen) return drop(s, v), false;
+    stream = s;
+    video = v;
     return true;
   };
 
@@ -118,7 +129,12 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     last = castFrame(session, ctx, last);
   };
 
+  const goLive = h('button.btn.primary', { type: 'button' }, 'Go live');
+
   const stop = () => {
+    gen++;
+    live = false;
+    goLive.disabled = false;
     clearInterval(timer);
     timer = 0;
     release();
@@ -127,11 +143,18 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   const start = async () => {
     if (session.layout.positions.size === 0) return void (msg.textContent = 'Place some phones on the map first (Locate tab).');
     director.take(stop);
-    if (!(await prepare())) return;
+    const mine = ++gen;
+    live = true;
+    goLive.disabled = true;
+    const ok = await prepare(mine);
+    if (mine !== gen) return;
+    goLive.disabled = false;
+    if (!ok) return void (live = false);
     last = new Map();
     timer = window.setInterval(frame, 1000 / fps);
     msg.textContent = `Broadcasting to ${session.layout.positions.size} phones at ${fps} frames a second.`;
   };
+  goLive.addEventListener('click', start);
 
   return h(
     'div.panel-body',
@@ -140,7 +163,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     segmented<SourceKind>('Source', [['aurora', 'Aurora'], ['fire', 'Fire'], ['camera', 'Camera'], ['video', 'Video']], kind, (v) => {
       kind = v;
       fileLabel.hidden = file.hidden = v !== 'video';
-      if (timer) void start();
+      if (live) void start();
     }),
     fileLabel,
     slider('Frame rate', 2, 20, 1, fps, (v) => `${v} fps`, (v) => {
@@ -151,7 +174,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
       }
     }),
     canvas,
-    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: start }, 'Go live'), h('button.btn.ghost', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), (msg.textContent = '')) }, 'Stop')),
+    h('div.row', {}, goLive, h('button.btn.ghost', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), (msg.textContent = '')) }, 'Stop')),
     msg,
   );
 }

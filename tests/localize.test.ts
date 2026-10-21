@@ -3,7 +3,7 @@ import { scheduleDuration, litAt, type BlinkSchedule } from '../src/core/blinkco
 import { localize, type GrayFrame } from '../src/core/localize';
 import { gaussian, rng } from './rng';
 
-interface Phone { id: number; x: number; y: number; w: number; h: number }
+interface Phone { id: number; x: number; y: number; w: number; h: number; /** This phone's clock error (ms). */ skew?: number }
 
 interface SceneOpts {
   fps?: number;
@@ -38,7 +38,7 @@ function film(phones: Phone[], s: BlinkSchedule, o: SceneOpts = {}): GrayFrame[]
     const g = o.gain ? o.gain(capture) : 1;
     for (let p = 0; p < data.length; p++) data[p] = 28;
     for (const ph of phones) {
-      const v = litAt(ph.id, s, capture) ? 235 : 40;
+      const v = litAt(ph.id, s, capture + (ph.skew ?? 0)) ? 235 : 40;
       const x0 = Math.round(ph.x * W - ph.w / 2);
       const y0 = Math.round(ph.y * H - ph.h / 2);
       for (let y = Math.max(0, y0); y < Math.min(H, y0 + ph.h); y++)
@@ -154,6 +154,16 @@ describe('localize', () => {
     expect(far).toBeDefined();
     expect(Math.abs(far!.x * 160 - 121)).toBeLessThan(1.5);
     expect(res.detections.map((d) => d.id)).toEqual([0, 1, 2, 3, 42]);
+  });
+
+  it('a phone held right up to the webcam, filling most of the frame, is still read', () => {
+    const phones = [{ id: 77, x: 0.5, y: 0.5, w: 130, h: 100 }];
+    expectFound(phones, localize(film(phones, S, { seed: 31 }), S), 3);
+  });
+
+  it('phones whose clocks disagree by 100 ms are all still found', () => {
+    const phones = grid(20, 5).map((p, i) => ({ ...p, skew: i % 2 ? 50 : -50 }));
+    expectFound(phones, localize(film(phones, S, { seed: 41, drop: 0.05 }), S));
   });
 
   it('returns nothing for an empty room', () => {

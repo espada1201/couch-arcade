@@ -6,7 +6,7 @@
   "description": "Turn a room full of phones into one display and speaker array.",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": "^22.12.0 || >=24"
   },
   "scripts": {
     "dev": "vite",

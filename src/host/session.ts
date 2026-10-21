@@ -129,8 +129,9 @@ export class HostSession {
 
   setProgram(p: Program | ((seat: number) => Program)): void {
     this.programFor = typeof p === 'function' ? p : () => p;
+    // Programs change many times a second (live screen, games); they are not roster changes,
+    // so no persistence or listener churn here. The stage reads programOf() every frame.
     for (const s of this.online) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
-    this.changed();
   }
 
   /** The program a seat is running (for the host's live mirror of the crowd). */
@@ -161,12 +162,21 @@ export class HostSession {
   placeManually(seat: number, p: Point): void {
     if (this.frame === 'source') {
       // Freeze the current layout so that moving one phone never rescales the others.
-      for (const s of this.seats.values()) s.raw = this.layout.positions.get(s.seat) ?? null;
+      for (const s of this.seats.values()) {
+        s.raw = this.layout.positions.get(s.seat) ?? null;
+        // Frozen positions are room coordinates now, not camera ones: never mix them with a rescan.
+        s.source = s.raw ? 'manual' : null;
+      }
       this.roomAspect = this.layout.positions.size > 1 ? this.layout.aspect : 16 / 9;
       this.frame = 'room';
       this.mirror = false;
     }
     this.applyRaw(new Map([[seat, { x: clamp01(p.x), y: clamp01(p.y) }]]), 'manual');
+  }
+
+  /** Whether a saved perspective correction is actually shaping the map right now. */
+  get perspectiveActive(): boolean {
+    return this.frame === 'source' && !!this.perspective && [...this.seats.values()].some((s) => s.raw && s.source === 'camera') && [...this.seats.values()].every((s) => !s.raw || s.source === 'camera');
   }
 
   setPerspective(p: Perspective | null): void {
@@ -191,7 +201,11 @@ export class HostSession {
     const fromCamera = [...this.seats.values()].every((s) => !s.raw || s.source === 'camera');
     if (this.frame === 'room') this.layout = { positions: raw, aspect: this.roomAspect };
     else if (H && fromCamera && this.perspective) {
-      const floor = new Map([...raw].map(([seat, p]) => [seat, applyHomography(H, p)]));
+      const floor = new Map<number, Point>();
+      for (const [seat, p] of raw) {
+        const q = applyHomography(H, p);
+        if (q) floor.set(seat, q);
+      }
       this.layout = normalize(floor, { mirror: this.mirror, sourceAspect: this.perspective.width / this.perspective.depth });
     } else this.layout = normalize(raw, { mirror: this.mirror, sourceAspect: this.sourceAspect });
     if (broadcast) for (const s of this.online) this.sendPos(s);
@@ -256,8 +270,10 @@ export class HostSession {
       if (s.token === token) {
         if (s.link && s.link !== link) {
           // The same phone opened the room again (new tab); the newest wins and the old one stands down.
-          s.link.send({ t: 'replaced' } satisfies HostMsg);
-          s.link.close();
+          const old = s.link;
+          old.send({ t: 'replaced' } satisfies HostMsg);
+          // Give the message time to arrive: WebRTC drops queued data on an immediate close.
+          setTimeout(() => old.close(), 400);
         }
         s.link = link;
         s.sync = Infinity;

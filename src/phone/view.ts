@@ -34,6 +34,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       h('p.eyebrow', {}, 'Room'),
       h('p.room-code', {}, room),
       h('p.gate-copy', {}, 'Your phone is about to become one pixel and one speaker in something much bigger. Turn the brightness all the way up, sound on, and keep this page open.'),
+      'wakeLock' in navigator ? null : h('p.gate-copy', {}, 'This phone can’t be kept awake from here, so set Auto-Lock (screen timeout) to Never for the show.'),
       joinBtn,
     ),
   );
@@ -119,7 +120,9 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
         ...(client.status === 'failed' ? [h('button.btn.primary', { type: 'button', onclick: () => client.retry() }, 'Try again')] : []),
       );
     } else if (p.kind === 'grid' && client.status === 'live') {
-      if (overlay.hidden || !overlay.querySelector('form')) {
+      const ask = `${p.rows}x${p.seats}`;
+      if (overlay.hidden || overlay.dataset.ask !== ask) {
+        overlay.dataset.ask = ask;
         overlay.hidden = false;
         const row = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: p.rows, required: true, id: 'row' });
         const seat = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: p.seats, required: true, id: 'seatno' });
@@ -146,6 +149,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       }
     } else {
       overlay.hidden = true;
+      delete overlay.dataset.ask;
       overlay.replaceChildren();
     }
   };

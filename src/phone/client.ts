@@ -128,7 +128,13 @@ export class PhoneClient {
     this.retries++;
     this.status = this.retries > 8 ? 'failed' : 'reconnecting';
     this.onChange();
-    if (this.status === 'reconnecting') setTimeout(() => this.connect(), Math.min(5000, 400 * 2 ** this.retries));
+    if (this.status !== 'reconnecting') return;
+    const again = () => {
+      // A hidden tab (a second copy, a locked phone) shouldn't fight for the seat.
+      if (document.hidden) document.addEventListener('visibilitychange', again, { once: true });
+      else void this.connect();
+    };
+    setTimeout(again, Math.min(5000, 400 * 2 ** this.retries));
   }
 
   retry(): void {

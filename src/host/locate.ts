@@ -3,6 +3,7 @@
 // dragging phones around the map by hand.
 import { DEFAULT_HALF_MS, DEFAULT_REPEATS, scheduleDuration, type BlinkSchedule } from '../core/blinkcode';
 import { seatGridPoint, type Point } from '../core/layout';
+import { validCorners } from '../core/homography';
 import { localize, type GrayFrame, type LocalizeResult } from '../core/localize';
 import { h } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
@@ -10,7 +11,7 @@ import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function locatePanel(session: HostSession, params: URLSearchParams, takeOver: () => void): HTMLElement {
+export function locatePanel(session: HostSession, params: URLSearchParams, takeOver: (stop?: () => void) => void): HTMLElement {
   const synthetic = params.get('camera') === 'synthetic';
   let source: FrameSource | null = null;
   let lastScan: LocalizeResult | null = null;
@@ -49,7 +50,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
   };
   let corners: Point[] = [];
   let marking = false;
-  const CORNER_NAMES = ['back-left', 'back-right', 'front-right', 'front-left'];
+  // Named as they appear in the picture, which stays unambiguous whichever way the camera faces.
+  const CORNER_NAMES = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
   const drawOverlay = () => {
     if (!source) return;
     overlay.width = view.clientWidth;
@@ -125,6 +127,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
       result.textContent = 'Waiting for every phone’s clock to lock on…';
       await sleep(100);
     }
+    const shaky = session.online.filter((s) => s.sync > 40).map((s) => s.seat + 1);
     const schedule: BlinkSchedule = { t0: session.now() + 1200, halfMs: DEFAULT_HALF_MS, repeats: DEFAULT_REPEATS };
     const frames: GrayFrame[] = [];
     source.onFrame = (f) => {
@@ -160,6 +163,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
       found.size === 0
         ? `Couldn’t see any codes (${frames.length} frames). Check every screen faces the camera at full brightness, then scan again.`
         : `Placed ${found.size} of ${online.length} phones.` + (missing.length ? ` Not seen: ${missing.join(', ')}. Scan again, or drag them onto the map.` : '');
+    if (shaky.length && missing.length) result.textContent += ` Phones ${shaky.join(', ')} had a weak connection during the scan.`;
     progress.hidden = true;
     scanBtn.disabled = false;
     scanning = false;
@@ -183,7 +187,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     marking = true;
     corners = [];
     view.classList.add('marking');
-    perspectiveMsg.textContent = `Click the ${CORNER_NAMES[0]} corner of the seating area on the camera picture.`;
+    perspectiveMsg.textContent = `Click the ${CORNER_NAMES[0]} corner of the area, as it appears in the camera picture.`;
     drawOverlay();
   });
   overlay.addEventListener('click', (e) => {
@@ -195,8 +199,15 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     else {
       marking = false;
       view.classList.remove('marking');
-      perspectiveMsg.textContent = 'Perspective corrected: the map is now a true floor plan.';
-      commit();
+      if (!validCorners(corners)) {
+        perspectiveMsg.textContent = 'Those corners cross over. Click “Correct perspective” and go round in order: top-left, top-right, bottom-right, bottom-left.';
+        corners = [];
+      } else {
+        commit();
+        perspectiveMsg.textContent = session.perspectiveActive
+          ? 'Perspective corrected: the map is now a true floor plan.'
+          : 'Saved. It applies to phones placed by the camera, so scan the room to use it.';
+      }
     }
     drawOverlay();
   });
@@ -210,8 +221,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
 
   identify.addEventListener('click', () => {
     const on = identify.getAttribute('aria-pressed') !== 'true';
+    takeOver(on ? () => identify.setAttribute('aria-pressed', 'false') : undefined);
     identify.setAttribute('aria-pressed', String(on));
-    takeOver();
     session.setProgram({ kind: on ? 'identify' : 'lobby' });
   });
 

@@ -19,10 +19,14 @@ const TYPES = {
   '.png': 'image/png',
 };
 
+// Prefer the Wi-Fi/Ethernet adapter (en0/en1 on a Mac) over VPN tunnels and bridges.
 function lanAddress() {
-  for (const list of Object.values(networkInterfaces()))
-    for (const a of list ?? []) if (a.family === 'IPv4' && !a.internal) return a.address;
-  return 'localhost';
+  const all = Object.entries(networkInterfaces()).flatMap(([name, list]) =>
+    (list ?? []).filter((a) => a.family === 'IPv4' && !a.internal).map((a) => ({ name, address: a.address })),
+  );
+  const rank = (n) => (/^(en|eth|wl)/.test(n) ? 0 : /^(utun|tun|tap|bridge|vbox|docker|vmnet)/.test(n) ? 2 : 1);
+  all.sort((a, b) => rank(a.name) - rank(b.name));
+  return all[0]?.address ?? 'localhost';
 }
 
 const lanUrl = `http://${lanAddress()}:${PORT}/`;

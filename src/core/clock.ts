@@ -14,6 +14,8 @@ export function sampleFrom(t0: number, t1: number, t2: number, t3: number): Cloc
 
 export class ClockEstimator {
   private samples: ClockSample[] = [];
+  /** Offset to use until fresh samples arrive after a reset. */
+  private fallback = 0;
 
   constructor(private readonly keep = 40) {}
 
@@ -25,6 +27,8 @@ export class ClockEstimator {
 
   /** Forget everything: the host's clock may have restarted, or this device slept. */
   reset(): void {
+    // Keep showing the last estimate until the first new round trip lands, rather than jumping to 0.
+    this.fallback = this.offset;
     this.samples = [];
   }
 
@@ -35,7 +39,7 @@ export class ClockEstimator {
   /** Estimated host - local offset (ms); add it to local time to get host time. */
   get offset(): number {
     const best = this.fastest();
-    if (best.length === 0) return 0;
+    if (best.length === 0) return this.fallback;
     const v = best.map((s) => s.offset).sort((a, b) => a - b);
     const m = v.length >> 1;
     return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
