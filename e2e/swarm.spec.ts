@@ -131,6 +131,7 @@ test('the camera finds every phone, then the crowd shows a card stunt', async ({
 });
 
 test('a wave reaches the left of the room before the right', async ({ context }) => {
+  test.setTimeout(150_000);
   const errors: string[] = [];
   const room = await openRoom(context, errors, [
     [0.15, 0.5],
@@ -164,6 +165,15 @@ test('a wave reaches the left of the room before the right', async ({ context })
   }
   expect(seen.size).toBeGreaterThan(3);
   await room.host.screenshot({ path: 'test-results/host-live.png' });
+
+  // Run the show: one button walks the crowd through the cues on its own.
+  await room.host.getByRole('tab', { name: /Show/ }).click();
+  await room.host.getByRole('button', { name: 'Start the show' }).click();
+  await expect(room.host.locator('.score')).toContainText('Now: Title card');
+  await expect(room.phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 2500 });
+  await expect(room.host.locator('.score')).toContainText('Now: Amber sweep', { timeout: 9000 });
+  await room.host.screenshot({ path: 'test-results/host-show.png' });
+  await room.host.getByRole('button', { name: 'Stop' }).click();
   expect(errors).toEqual([]);
 });
 

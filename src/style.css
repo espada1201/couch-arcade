@@ -201,6 +201,11 @@ progress::-moz-progress-bar { background: var(--amber); }
 .live-preview { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; image-rendering: pixelated; background: #000; }
 .stunt-preview canvas { width: 100%; max-height: 180px; object-fit: contain; border-radius: 8px; display: block; background: #000; }
 
+.cues { margin: 0; padding: 0; list-style: none; counter-reset: cue; display: grid; gap: 2px; }
+.cues li { counter-increment: cue; display: flex; gap: 10px; padding: 7px 10px; border-radius: 6px; color: var(--muted); font-size: 14px; }
+.cues li::before { content: counter(cue, decimal-leading-zero); font: 500 11px var(--mono); padding-top: 3px; }
+.cues li span { margin-left: auto; font-variant-numeric: tabular-nums; }
+.cues li[aria-current] { background: var(--ink-3); color: var(--text); box-shadow: inset 3px 0 0 var(--amber); }
 .sound-list { display: grid; gap: 6px; }
 .sound { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .sound:has(input:checked) { border-color: var(--amber); background: var(--ink-3); }

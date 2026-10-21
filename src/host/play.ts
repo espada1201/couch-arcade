@@ -1,7 +1,7 @@
 // Step two: the experiences. Each panel turns the located crowd into something:
 // a picture, a wave of light, sound moving through the room, or a game.
 import { AMBER, EMBER, TEAL, WHITE, type Voice, type WaveProgram, type WaveShape } from '../core/effects';
-import { sampleCover, type Point, type RGB } from '../core/layout';
+import { sampleCover, type Image, type Point, type RGB } from '../core/layout';
 import { startPotato, potatoTap, potatoTick, type PotatoState } from '../core/potato';
 import { startTerritory, teamSizes, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
 import { css, h, segmented, slider } from '../ui/dom';
@@ -16,6 +16,17 @@ export interface Director {
 
 function needPlaced(session: HostSession): string | null {
   return session.layout.positions.size > 0 ? null : 'Place some phones on the map first (Locate tab).';
+}
+
+/** Show `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
+export function flipCards(session: HostSession, image: Image, leadMs = 3200): void {
+  const { positions, aspect } = session.layout;
+  // Each phone averages the patch of picture it stands in for.
+  const patch = Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, positions.size)));
+  const colors = new Map<number, RGB>();
+  for (const [seat, p] of positions) colors.set(seat, sampleCover(image, p, aspect, patch));
+  const at = session.now() + leadMs;
+  session.setProgram((seat) => ({ kind: 'card', rgb: colors.get(seat) ?? [0, 0, 0], at }));
 }
 
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
@@ -56,14 +67,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const err = needPlaced(session);
     if (err) return void (msg.textContent = err);
     director.take();
-    const { positions, aspect } = session.layout;
-    // Each phone averages the patch of picture it stands in for.
-    const patch = Math.min(0.25, 0.6 / Math.sqrt(positions.size));
-    const colors = new Map<number, RGB>();
-    for (const [seat, p] of positions) colors.set(seat, sampleCover(chosen.image, p, aspect, patch));
-    const at = session.now() + 3200;
-    session.setProgram((seat) => ({ kind: 'card', rgb: colors.get(seat) ?? [0, 0, 0], at }));
-    msg.textContent = `3, 2, 1… ${positions.size} phones flip together.`;
+    flipCards(session, chosen.image);
+    msg.textContent = `3, 2, 1… ${session.layout.positions.size} phones flip together.`;
   });
   show();
   return h(

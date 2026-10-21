@@ -6,6 +6,7 @@ import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel, type Director } from './play';
 import { HostSession } from './session';
+import { showPanel } from './show';
 import { Stage } from './stage';
 
 function qrSvg(text: string): SVGSVGElement {
@@ -103,6 +104,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
 
   const tabs: [string, string, () => HTMLElement][] = [
     ['locate', 'Locate', () => locatePanel(session, params, () => director.take())],
+    ['show', 'Show', () => showPanel(session, director)],
     ['card', 'Card stunt', () => cardPanel(session, director)],
     ['live', 'Live screen', () => livePanel(session, director)],
     ['wave', 'Wave', () => wavePanel(session, stage, director)],

@@ -8,10 +8,10 @@ import type { HostSession } from './session';
 
 type SourceKind = 'aurora' | 'fire' | 'camera' | 'video';
 
-const W = 96;
-const H = 72;
+export const W = 96;
+export const H = 72;
 
-function aurora(ctx: CanvasRenderingContext2D, t: number) {
+export function aurora(ctx: CanvasRenderingContext2D, t: number) {
   const img = ctx.createImageData(W, H);
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
@@ -29,7 +29,7 @@ function aurora(ctx: CanvasRenderingContext2D, t: number) {
 }
 
 const heat = new Float32Array(W * (H + 2));
-function fire(ctx: CanvasRenderingContext2D) {
+export function fire(ctx: CanvasRenderingContext2D) {
   for (let x = 0; x < W; x++) heat[(H + 1) * W + x] = Math.random() > 0.45 ? 1 : 0.2;
   for (let y = 0; y <= H; y++)
     for (let x = 0; x < W; x++) {
@@ -43,6 +43,19 @@ function fire(ctx: CanvasRenderingContext2D) {
     img.data.set([255 * Math.min(1, k * 1.6), 200 * k * k, 60 * k * k * k, 255], i * 4);
   }
   ctx.putImageData(img, 0, 0);
+}
+
+/** Sample the picture on `ctx` for every placed phone and schedule the swap; returns the colours sent. */
+export function castFrame(session: HostSession, ctx: CanvasRenderingContext2D, prev: Map<number, RGB>): Map<number, RGB> {
+  const { positions, aspect } = session.layout;
+  const image = { w: W, h: H, data: ctx.getImageData(0, 0, W, H).data };
+  const patch = Math.min(0.2, 0.5 / Math.sqrt(Math.max(1, positions.size)));
+  const next = new Map<number, RGB>();
+  for (const [seat, p] of positions) next.set(seat, sampleCover(image, p, aspect, patch));
+  // Leave enough headroom for the slowest link before everyone flips.
+  const at = session.now() + 140;
+  session.setProgram((seat) => ({ kind: 'live', rgb: next.get(seat) ?? [0, 0, 0], prev: prev.get(seat) ?? [0, 0, 0], at }));
+  return next;
 }
 
 export function livePanel(session: HostSession, director: Director): HTMLElement {
@@ -102,16 +115,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     if (kind === 'aurora') aurora(ctx, t);
     else if (kind === 'fire') fire(ctx);
     else if (video && video.readyState >= 2) ctx.drawImage(video, 0, 0, W, H);
-    const { positions, aspect } = session.layout;
-    const image = { w: W, h: H, data: ctx.getImageData(0, 0, W, H).data };
-    const patch = Math.min(0.2, 0.5 / Math.sqrt(Math.max(1, positions.size)));
-    const next = new Map<number, RGB>();
-    for (const [seat, p] of positions) next.set(seat, sampleCover(image, p, aspect, patch));
-    const prev = last;
-    last = next;
-    // Leave enough headroom for the slowest link before everyone flips.
-    const at = session.now() + 140;
-    session.setProgram((seat) => ({ kind: 'live', rgb: next.get(seat) ?? [0, 0, 0], prev: prev.get(seat) ?? [0, 0, 0], at }));
+    last = castFrame(session, ctx, last);
   };
 
   const stop = () => {
