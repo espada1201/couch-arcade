@@ -9,17 +9,35 @@ const LOOKAHEAD_MS = 1200;
 export class Speaker {
   private ctx: AudioContext | null = null;
   private scheduledUntil = 0;
-  private lastProgram: Program | null = null;
+  private lastProgram = '';
+  /** Wave notes not yet finished, so a program change can silence them. */
+  private pending: { node: AudioScheduledSourceNode; end: number }[] = [];
 
   /** Must be called from a user gesture (the join tap) or browsers keep audio muted. */
   unlock(): void {
     if (this.ctx) return;
     try {
+      // Plays through the iPhone silent switch, like a media app rather than a ringtone.
+      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = 'playback';
+    } catch {
+      // Older engines expose a read-only or different shape; the default session still plays.
+    }
+    try {
       this.ctx = new AudioContext();
       void this.ctx.resume();
     } catch {
       this.ctx = null;
+      return;
     }
+    // iOS suspends or interrupts the context on lock, backgrounding and calls.
+    document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && this.resume());
+    document.addEventListener('pointerdown', () => this.resume());
+  }
+
+  private resume(): void {
+    const ctx = this.ctx;
+    if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   }
 
   get ready(): boolean {
@@ -29,16 +47,34 @@ export class Speaker {
   /** Call every ~200 ms with the current program; schedules notes inside the look-ahead window. */
   pump(prog: Program, pos: Point | null, aspect: number, hostNow: number): void {
     const ctx = this.ctx;
-    if (prog !== this.lastProgram) {
-      this.lastProgram = prog;
+    // By content, not identity: a reconnect resends the same program as a new object.
+    const key = JSON.stringify(prog);
+    if (key !== this.lastProgram) {
+      this.lastProgram = key;
       this.scheduledUntil = hostNow;
+      this.silence();
     }
-    if (!ctx || prog.kind !== 'wave' || prog.voice === 'off' || !pos) return;
+    if (!ctx || ctx.state !== 'running' || prog.kind !== 'wave' || prog.voice === 'off' || !pos) return;
+    this.pending = this.pending.filter((p) => p.end > ctx.currentTime);
+    // Schedule early by the output latency so the sound leaves the speaker at the host instant.
+    const latency = ctx.outputLatency || ctx.baseLatency || 0;
     const from = Math.max(this.scheduledUntil, hostNow);
     const to = hostNow + LOOKAHEAD_MS;
     const u = travel(prog, pos, aspect);
-    for (const t of arrivals(prog, u, from, to)) this.note(prog.voice, noteFor(pos), ctx.currentTime + (t - hostNow) / 1000);
+    for (const t of arrivals(prog, u, from, to))
+      this.pending.push(...this.note(prog.voice, noteFor(pos), ctx.currentTime + (t - hostNow) / 1000 - latency));
     this.scheduledUntil = to;
+  }
+
+  private silence(): void {
+    for (const { node } of this.pending) {
+      try {
+        node.stop();
+      } catch {
+        // Older Safari throws if the node already stopped.
+      }
+    }
+    this.pending = [];
   }
 
   /** Short feedback sound for game taps. */
@@ -51,9 +87,9 @@ export class Speaker {
     this.note(voice, kind === 'win' ? 81 : kind === 'catch' ? 74 : 45, t);
   }
 
-  private note(voice: Voice, midi: number, at: number): void {
+  private note(voice: Voice, midi: number, at: number): { node: AudioScheduledSourceNode; end: number }[] {
     const ctx = this.ctx!;
-    if (at < ctx.currentTime) return;
+    if (at < ctx.currentTime) return [];
     const f = 440 * 2 ** ((midi - 69) / 12);
     const out = ctx.createGain();
     out.connect(ctx.destination);
@@ -69,13 +105,13 @@ export class Speaker {
       o.connect(out);
       o.start(at);
       o.stop(at + 0.4);
-      return;
+      return [{ node: o, end: at + 0.4 }];
     }
     const partials = voice === 'bell' ? [1, 2.76, 5.4] : [1, 2];
     const decay = voice === 'bell' ? 1.6 : 0.45;
     env.exponentialRampToValueAtTime(0.5, at + 0.006);
     env.exponentialRampToValueAtTime(0.0001, at + decay);
-    partials.forEach((k, i) => {
+    return partials.map((k, i) => {
       const o = ctx.createOscillator();
       o.type = voice === 'pluck' ? 'triangle' : 'sine';
       o.frequency.value = f * k;
@@ -84,6 +120,7 @@ export class Speaker {
       o.connect(g).connect(out);
       o.start(at);
       o.stop(at + decay + 0.05);
+      return { node: o, end: at + decay + 0.05 };
     });
   }
 

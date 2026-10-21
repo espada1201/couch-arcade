@@ -91,7 +91,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const showStatus = () => {
     const seat = client.seat >= 0 ? `Seat ${client.seat + 1}` : 'Joining';
     const place = client.pos ? 'placed' : 'not placed yet';
-    const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', failed: 'disconnected' }[client.status];
+    const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', replaced: 'open in another tab', failed: 'disconnected' }[client.status];
     status.textContent = `${room} · ${seat} · ${state}`;
     status.dataset.state = client.status;
 
@@ -111,10 +111,11 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       wasOut = out;
     }
 
-    if (client.status === 'failed' || client.status === 'full') {
+    if (client.status === 'failed' || client.status === 'full' || client.status === 'replaced') {
       overlay.hidden = false;
+      const why = { full: 'This room is full.', replaced: 'This phone joined again in another tab, so this one has stepped aside.', failed: `Can’t reach the host. ${client.error}` }[client.status];
       overlay.replaceChildren(
-        h('p', {}, client.status === 'full' ? 'This room is full.' : `Lost the host. ${client.error}`),
+        h('p', {}, why),
         ...(client.status === 'failed' ? [h('button.btn.primary', { type: 'button', onclick: () => client.retry() }, 'Try again')] : []),
       );
     } else if (p.kind === 'grid' && client.status === 'live') {

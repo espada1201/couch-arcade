@@ -33,19 +33,36 @@ const TRANSPORT_NOTES: Record<string, string> = {
 export async function hostView(app: HTMLElement, params: URLSearchParams): Promise<void> {
   document.body.classList.add('host');
   const { transport, relay } = await pickTransport(params);
-  const session = HostSession.restore(transport, params.has('fresh'));
+  const fresh = params.has('fresh');
+  let session = HostSession.restore(transport, fresh);
 
   const status = h('p.boot', { role: 'status' }, 'Opening the room…');
   app.replaceChildren(status);
-  try {
-    await session.open();
-  } catch (e) {
-    status.replaceChildren(
-      `Couldn’t open a room: ${e instanceof Error ? e.message : String(e)}. `,
-      transport.name === 'internet' ? 'Check the internet connection, or run the app on your own computer with `npm start` to use Wi-Fi only. ' : '',
-      h('button.btn', { type: 'button', onclick: () => location.reload() }, 'Try again'),
-    );
-    return;
+  const newRoom = () => {
+    try {
+      localStorage.removeItem('swarm-host');
+    } catch {
+      /* nothing saved to clear */
+    }
+    location.search = carry(params, { host: '1', fresh: '1' });
+  };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await session.open();
+      break;
+    } catch (e) {
+      // A brand-new code that happens to be taken: quietly roll another.
+      if (fresh && attempt < 3 && (e as { code?: string }).code === 'room-taken') {
+        session = HostSession.restore(transport, true);
+        continue;
+      }
+      status.replaceChildren(
+        `Couldn’t open room ${session.room}: ${e instanceof Error ? e.message : String(e)}. `,
+        transport.name === 'internet' ? 'Check the internet connection, or run the app on your own computer with `npm start` to use Wi-Fi only. ' : '',
+        h('span.row', {}, h('button.btn', { type: 'button', onclick: () => location.reload() }, 'Try again'), h('button.btn.primary', { type: 'button', onclick: newRoom }, 'Start a new room')),
+      );
+      return;
+    }
   }
 
   const base = relay?.lanUrl ?? `${location.origin}${location.pathname}`;
@@ -67,7 +84,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   const updateCount = () => {
     const online = session.online.length;
     const placed = [...session.layout.positions.keys()].filter((s) => session.seats.get(s)?.link).length;
-    count.textContent = `${online} phone${online === 1 ? '' : 's'} · ${placed} placed`;
+    const sync = session.worstSync;
+    count.textContent = `${online} phone${online === 1 ? '' : 's'} · ${placed} placed` + (online && Number.isFinite(sync) ? ` · in sync to ±${sync} ms` : online ? ' · syncing…' : '');
   };
   session.subscribe(updateCount);
   updateCount();
@@ -143,16 +161,12 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
           'div.top-actions',
           {},
           h('button.btn.ghost.small', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' })) }, 'Lights off'),
-          h('button.btn.ghost.small', { type: 'button', onclick: () => session.forgetOffline() }, 'Forget offline'),
+          h('button.btn.ghost.small', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), session.forgetOffline()) }, 'Forget offline'),
           h(
             'button.btn.ghost.small',
             {
               type: 'button',
-              onclick: () => {
-                if (!confirm('Start a new room? Everyone will need to scan the new code.')) return;
-                localStorage.removeItem('swarm-host');
-                location.search = carry(params, { host: '1', fresh: '1' });
-              },
+              onclick: () => confirm('Start a new room? Everyone will need to scan the new code.') && newRoom(),
             },
             'New room',
           ),

@@ -13,7 +13,8 @@ export interface FrameSource {
   onFrame: ((f: GrayFrame) => void) | null;
 }
 
-const W = 160;
+// Enough resolution that a phone across a large room still covers a handful of pixels.
+const W = 320;
 
 function toGray(rgba: Uint8ClampedArray, n: number): Uint8Array {
   const g = new Uint8Array(n);
@@ -64,7 +65,8 @@ export class CameraSource implements FrameSource {
     this.running = true;
     const ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
     const grab = (t: number) => {
-      if (!this.running) return;
+      // Only pay for grayscale conversion while someone (a scan) is listening.
+      if (!this.running || !this.onFrame) return;
       const { width: w, height: h } = this.canvas;
       ctx.drawImage(this.preview, 0, 0, w, h);
       this.onFrame?.({ t, w, h, data: toGray(ctx.getImageData(0, 0, w, h).data, w * h) });
@@ -74,7 +76,9 @@ export class CameraSource implements FrameSource {
     };
     if (v.requestVideoFrameCallback) {
       const loop = (now: number, meta: { captureTime?: number }) => {
-        grab(meta.captureTime ?? now);
+        // captureTime shares performance.now()'s clock when present; distrust anything wild.
+        const cap = meta.captureTime;
+        grab(cap && Math.abs(cap - now) < 1000 ? cap : now);
         if (this.running) v.requestVideoFrameCallback!(loop);
       };
       v.requestVideoFrameCallback(loop);

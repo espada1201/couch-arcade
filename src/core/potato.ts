@@ -32,8 +32,9 @@ function alive(s: { out: number[] }, room: Room): number[] {
 }
 
 function throwTo(s: PotatoState, room: Room, next: number, now: number, fuse: number): PotatoState {
-  const from = room.positions.get(s.holder)!;
-  const to = room.positions.get(next)!;
+  const from = room.positions.get(s.holder) ?? s.to;
+  const to = room.positions.get(next);
+  if (!to) return { ...s, out: [...s.out, next] };
   const arrive = now + flightTime(from, to, room.aspect);
   return { ...s, prev: s.holder, holder: next, from, to, depart: now, arrive, deadline: arrive + fuse, fuse };
 }
@@ -76,7 +77,7 @@ export function potatoTick(s: PotatoState, room: Room, now: number): PotatoState
   const burnt: PotatoState = { ...s, out: [...s.out, s.holder] };
   const left = alive(burnt, room);
   if (left.length <= 1) return { ...burnt, phase: 'over', winner: left[0] ?? null };
-  const next = nearest(s.holder, room, 1, new Set(burnt.out))[0];
+  const next = nearest(s.holder, room, 1, new Set(burnt.out))[0] ?? left[0];
   return throwTo(burnt, room, next, now, Math.max(MIN_FUSE, s.fuse));
 }
 

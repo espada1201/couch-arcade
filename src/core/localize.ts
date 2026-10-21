@@ -45,11 +45,22 @@ interface Accum {
   weights: Float32Array;
 }
 
-function accumulate(frames: GrayFrame[], s: BlinkSchedule, lag: number, pix: Int32Array): Accum {
+/** Median brightness of a frame: tracks the camera's auto-exposure, but not the phones (a minority of pixels). */
+function frameLevel(d: Uint8Array): number {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i++) hist[d[i]]++;
+  let seen = 0;
+  for (let v = 0; v < 256; v++) if ((seen += hist[v]) * 2 >= d.length) return v;
+  return 0;
+}
+
+function accumulate(frames: GrayFrame[], levels: number[], s: BlinkSchedule, lag: number, pix: Int32Array): Accum {
   const H = HALVES_PER_CODE;
   const sums = new Float32Array(pix.length * H);
   const weights = new Float32Array(H);
-  for (const f of frames) {
+  for (let fi = 0; fi < frames.length; fi++) {
+    const f = frames[fi];
+    const level = levels[fi];
     const pos = (f.t - lag - s.t0) / s.halfMs;
     const k = Math.floor(pos);
     // Frames near a half-slot edge may straddle two symbols; trust the middle most.
@@ -58,7 +69,7 @@ function accumulate(frames: GrayFrame[], s: BlinkSchedule, lag: number, pix: Int
     const h = ((k % H) + H) % H;
     weights[h] += w;
     const d = f.data;
-    for (let i = 0; i < pix.length; i++) sums[i * H + h] += w * d[pix[i]];
+    for (let i = 0; i < pix.length; i++) sums[i * H + h] += w * (d[pix[i]] - level);
   }
   return { sums, weights };
 }
@@ -106,11 +117,10 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
       if (v > hi[p]) hi[p] = v;
     }
   }
-  let maxRange = 0;
-  for (let p = 0; p < n; p++) maxRange = Math.max(maxRange, hi[p] - lo[p]);
-  const threshold = Math.max(minRange, maxRange * 0.3);
+  // A fixed floor, not a fraction of the brightest phone, so distant dim phones still count.
+  // Noise that sneaks past it is rejected by the sync mark, the CRC and the contrast check.
   const active: number[] = [];
-  for (let p = 0; p < n; p++) if (hi[p] - lo[p] >= threshold) active.push(p);
+  for (let p = 0; p < n; p++) if (hi[p] - lo[p] >= minRange) active.push(p);
   if (active.length === 0) return { lagMs: 0, detections: [], activePixels: 0 };
 
   const pix = Int32Array.from(active);
@@ -118,22 +128,31 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
   const stride = Math.max(1, Math.floor(active.length / 1500));
   const sample = Int32Array.from(active.filter((_, i) => i % stride === 0));
   const bits = new Array<number>(BITS_PER_CODE);
-  let bestLag = lagMinMs;
-  let bestScore = -1;
-  for (let lag = lagMinMs; lag <= lagMaxMs; lag += lagStepMs) {
-    const acc = accumulate(window, s, lag, sample);
-    let score = 0;
+  const levels = window.map((f) => frameLevel(f.data));
+  const score = (lag: number) => {
+    const acc = accumulate(window, levels, s, lag, sample);
+    let total = 0;
     for (let i = 0; i < sample.length; i++) {
       const r = decodePixel(acc, i, hi[sample[i]] - lo[sample[i]], bits);
-      if (r.id >= 0 && r.conf >= minConfidence) score += r.conf;
+      if (r.id >= 0 && r.conf >= minConfidence) total += r.conf;
     }
-    if (score > bestScore) {
-      bestScore = score;
-      bestLag = lag;
-    }
+    return total;
+  };
+  // Coarse sweep over every possible delay, then refine around the winner.
+  let bestLag = lagMinMs;
+  let bestScore = -1;
+  const coarse = lagStepMs * 2;
+  for (let lag = lagMinMs; lag <= lagMaxMs; lag += coarse) {
+    const v = score(lag);
+    if (v > bestScore) [bestScore, bestLag] = [v, lag];
+  }
+  const centre = bestLag;
+  for (let lag = Math.max(lagMinMs, centre - coarse); lag <= Math.min(lagMaxMs, centre + coarse); lag += lagStepMs / 2) {
+    const v = score(lag);
+    if (v > bestScore) [bestScore, bestLag] = [v, lag];
   }
 
-  const acc = accumulate(window, s, bestLag, pix);
+  const acc = accumulate(window, levels, s, bestLag, pix);
   const groups = new Map<number, { xs: number[]; ys: number[]; conf: number }>();
   for (let i = 0; i < pix.length; i++) {
     const p = pix[i];

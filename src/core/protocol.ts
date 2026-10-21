@@ -3,13 +3,14 @@ import type { Point } from './layout';
 
 export type PhoneMsg =
   | { t: 'hello'; token: string; sim?: Point }
-  | { t: 'ping'; c0: number }
+  | { t: 'ping'; c0: number; u?: number }
   | { t: 'tap' }
   | { t: 'seat'; row: number; seat: number };
 
 export type HostMsg =
   | { t: 'welcome'; seat: number; room: string }
   | { t: 'full' }
+  | { t: 'replaced' }
   | { t: 'pong'; c0: number; h1: number; h2: number }
   | { t: 'program'; program: Program }
   | { t: 'pos'; pos: Point | null; aspect: number };
@@ -30,7 +31,7 @@ export function parsePhoneMsg(v: unknown): PhoneMsg | null {
       return { t: 'hello', token: v.token, sim };
     }
     case 'ping':
-      return num(v.c0) ? { t: 'ping', c0: v.c0 } : null;
+      return num(v.c0) ? { t: 'ping', c0: v.c0, u: num(v.u) ? v.u : undefined } : null;
     case 'tap':
       return { t: 'tap' };
     case 'seat':

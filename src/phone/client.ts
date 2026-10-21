@@ -7,7 +7,7 @@ import type { Point } from '../core/layout';
 import type { HostMsg, PhoneMsg } from '../core/protocol';
 import { randomId, type Link, type Transport } from '../net/transport';
 
-export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'failed';
+export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
 
 export class PhoneClient {
   seat = -1;
@@ -28,15 +28,24 @@ export class PhoneClient {
     readonly room: string,
     private readonly sim?: Point,
   ) {
-    const key = `swarm-phone-${room}`;
+    // Simulated phones are tabs of one browser, so each needs its own identity.
+    const key = `swarm-phone-${room}${sim ? `@${sim.x},${sim.y}` : ''}`;
     let token = '';
     try {
-      token = sessionStorage.getItem(key) ?? '';
-      if (!token) sessionStorage.setItem(key, (token = randomId(16)));
+      // localStorage so closing the tab and rescanning the QR code lands in the same seat.
+      token = localStorage.getItem(key) ?? '';
+      if (!token) localStorage.setItem(key, (token = randomId(16)));
     } catch {
       token = randomId(16);
     }
     this.token = token;
+    // A sleeping phone's clock may have stopped; relearn the offset when it wakes.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.link) {
+        this.clock.reset();
+        this.startPinging();
+      }
+    });
   }
 
   /** Host-clock time now. */
@@ -48,7 +57,8 @@ export class PhoneClient {
     try {
       const link = await this.transport.join(this.room);
       this.link = link;
-      this.retries = 0;
+      // The host's clock restarts if the host page reloads; never mix samples across links.
+      this.clock.reset();
       link.onMessage((m) => this.receive(m as HostMsg));
       link.onClose(() => this.lost());
       this.send({ t: 'hello', token: this.token, sim: this.sim });
@@ -75,7 +85,8 @@ export class PhoneClient {
     clearTimeout(this.pingTimer);
     let n = 0;
     const tick = () => {
-      this.send({ t: 'ping', c0: performance.now() });
+      const u = this.clock.uncertainty;
+      this.send({ t: 'ping', c0: performance.now(), u: Number.isFinite(u) ? Math.round(u) : undefined });
       // A quick burst to lock on, then a slow trickle to track drift.
       this.pingTimer = window.setTimeout(tick, n++ < 16 ? 150 : 2000);
     };
@@ -90,10 +101,14 @@ export class PhoneClient {
       case 'welcome':
         this.seat = m.seat;
         this.status = 'live';
+        this.retries = 0;
         this.error = '';
         break;
       case 'full':
         this.status = 'full';
+        break;
+      case 'replaced':
+        this.status = 'replaced';
         break;
       case 'pos':
         this.pos = m.pos;
@@ -109,7 +124,7 @@ export class PhoneClient {
   private lost(): void {
     clearTimeout(this.pingTimer);
     this.link = null;
-    if (this.status === 'full') return;
+    if (this.status === 'full' || this.status === 'replaced') return this.onChange();
     this.retries++;
     this.status = this.retries > 8 ? 'failed' : 'reconnecting';
     this.onChange();

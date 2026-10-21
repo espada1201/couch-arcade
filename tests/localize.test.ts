@@ -132,6 +132,30 @@ describe('localize', () => {
     expectFound(phones, res);
   });
 
+  it('auto-exposure pumping in time with the sync flash does not invent phones', () => {
+    const phones = grid(30, 6, { w: 7, h: 9 });
+    // Every phone lights up together during the sync mark; the camera dims the whole frame in response.
+    const frames = film(phones, S, { seed: 21, gain: (t) => (litAt(0, S, t) && ((t - S.t0) % 3360) < 360 ? 0.75 : 1) });
+    expectFound(phones, localize(frames, S));
+  });
+
+  it('a far-away, dim phone is found next to bright close ones', () => {
+    const near = grid(4, 4);
+    const frames = film(near, S, {
+      seed: 17,
+      extra: (t, data, W) => {
+        // A phone across the room: tiny, and only 30 levels of contrast.
+        const v = litAt(42, S, t) ? 70 : 40;
+        for (let y = 90; y < 93; y++) for (let x = 120; x < 122; x++) data[y * W + x] = v;
+      },
+    });
+    const res = localize(frames, S);
+    const far = res.detections.find((d) => d.id === 42);
+    expect(far).toBeDefined();
+    expect(Math.abs(far!.x * 160 - 121)).toBeLessThan(1.5);
+    expect(res.detections.map((d) => d.id)).toEqual([0, 1, 2, 3, 42]);
+  });
+
   it('returns nothing for an empty room', () => {
     const res = localize(film([], S, { seed: 2 }), S);
     expect(res.detections).toEqual([]);

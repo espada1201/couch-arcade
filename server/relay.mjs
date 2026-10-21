@@ -27,8 +27,22 @@ function lanAddress() {
 
 const lanUrl = `http://${lanAddress()}:${PORT}/`;
 
+function parseUrl(raw) {
+  try {
+    const url = new URL(raw ?? '/', 'http://x');
+    return { url, path: decodeURIComponent(url.pathname) };
+  } catch {
+    return null;
+  }
+}
+
 const server = createServer((req, res) => {
-  const path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
+  const parsed = parseUrl(req.url);
+  if (!parsed) {
+    res.writeHead(400);
+    return res.end();
+  }
+  const { path } = parsed;
   if (path === '/relay.json') {
     res.writeHead(200, { 'content-type': TYPES['.json'], 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ lanUrl }));
@@ -47,46 +61,80 @@ const server = createServer((req, res) => {
   createReadStream(file).pipe(res);
 });
 
-/** room -> { host: WebSocket | null, phones: Map<id, WebSocket> } */
+const MAX_ROOMS = 64;
+const MAX_PHONES = 200;
+const ROOM = /^[A-Z0-9]{3,12}$/;
+const KEY = /^[A-Za-z0-9_-]{8,64}$/;
+
+/** room -> { host: WebSocket, key: string, phones: Map<id, WebSocket> }; exists only while a host is attached. */
 const rooms = new Map();
 let nextId = 1;
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+
+// Refusing before the upgrade makes the browser's WebSocket fail to open, so join() rejects instead of retrying.
+function refuse(socket, status) {
+  socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  socket.destroy();
+}
 
 server.on('upgrade', (req, socket, head) => {
-  const url = new URL(req.url ?? '/', 'http://x');
-  if (url.pathname !== '/relay') return socket.destroy();
-  wss.handleUpgrade(req, socket, head, (ws) => attach(ws, url.searchParams.get('room') ?? '', url.searchParams.get('role')));
+  socket.on('error', () => socket.destroy());
+  const url = parseUrl(req.url)?.url;
+  if (url?.pathname !== '/relay') return refuse(socket, '404 Not Found');
+  const q = url.searchParams;
+  const room = q.get('room') ?? '';
+  const role = q.get('role') === 'host' ? 'host' : 'phone';
+  const key = q.get('key') ?? '';
+  const status = admit(room, role, key);
+  if (status) return refuse(socket, status);
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    ws.on('error', () => ws.terminate());
+    // Re-check: the room may have changed while the handshake completed.
+    if (admit(room, role, key)) return ws.close(1013, 'refused');
+    if (role === 'host') attachHost(ws, room, key);
+    else attachPhone(ws, rooms.get(room));
+  });
 });
 
-function attach(ws, room, role) {
-  if (!/^[A-Z0-9]{3,12}$/.test(room)) return ws.close(1008, 'bad room');
-  if (!rooms.has(room)) rooms.set(room, { host: null, phones: new Map() });
+/** Returns an HTTP status line if the connection must be refused. */
+function admit(room, role, key) {
+  if (!ROOM.test(room)) return '400 Bad Request';
   const r = rooms.get(room);
   if (role === 'host') {
-    r.host?.close(1000, 'replaced');
-    r.host = ws;
-    for (const id of r.phones.keys()) ws.send(JSON.stringify({ t: 'open', id }));
-    ws.on('message', (raw) => {
-      let m;
-      try {
-        m = JSON.parse(String(raw));
-      } catch {
-        return;
-      }
-      const phone = r.phones.get(m.id);
-      if (!phone) return;
-      if (m.t === 'msg') phone.send(JSON.stringify(m.data));
-      else if (m.t === 'close') phone.close(1000);
-    });
-    ws.on('close', () => {
-      if (r.host !== ws) return;
-      r.host = null;
-      for (const p of r.phones.values()) p.close(1001, 'host left');
-      rooms.delete(room);
-    });
-    return;
+    if (!KEY.test(key)) return '400 Bad Request';
+    if (r) return r.key === key ? null : '409 Conflict';
+    return rooms.size >= MAX_ROOMS ? '503 Service Unavailable' : null;
   }
-  if (!r.host) return ws.close(1013, 'no host in this room');
+  if (!r) return '404 Not Found';
+  return r.phones.size >= MAX_PHONES ? '503 Service Unavailable' : null;
+}
+
+function attachHost(ws, room, key) {
+  let r = rooms.get(room);
+  if (r) r.host.close(1000, 'replaced');
+  else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
+  r.host = ws;
+  for (const id of r.phones.keys()) ws.send(JSON.stringify({ t: 'open', id }));
+  ws.on('message', (raw) => {
+    let m;
+    try {
+      m = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    const phone = m && typeof m === 'object' ? r.phones.get(m.id) : undefined;
+    if (!phone) return;
+    if (m.t === 'msg') phone.send(JSON.stringify(m.data ?? null));
+    else if (m.t === 'close') phone.close(1000);
+  });
+  ws.on('close', () => {
+    if (r.host !== ws) return;
+    for (const p of r.phones.values()) p.close(1001, 'host left');
+    rooms.delete(room);
+  });
+}
+
+function attachPhone(ws, r) {
   const id = String(nextId++);
   r.phones.set(id, ws);
   r.host.send(JSON.stringify({ t: 'open', id }));
@@ -97,11 +145,11 @@ function attach(ws, room, role) {
     } catch {
       return;
     }
-    r.host?.send(JSON.stringify({ t: 'msg', id, data }));
+    r.host.send(JSON.stringify({ t: 'msg', id, data }));
   });
   ws.on('close', () => {
     r.phones.delete(id);
-    r.host?.send(JSON.stringify({ t: 'close', id }));
+    r.host.send(JSON.stringify({ t: 'close', id }));
   });
 }
 

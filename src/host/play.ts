@@ -14,9 +14,8 @@ export interface Director {
   take(stop?: () => void): void;
 }
 
-function needPlaced(session: HostSession, min = 1): string | null {
-  const n = session.layout.positions.size;
-  return n >= min ? null : n === 0 ? 'Place some phones on the map first (Locate tab).' : `This needs at least ${min} placed phones.`;
+function needPlaced(session: HostSession): string | null {
+  return session.layout.positions.size > 0 ? null : 'Place some phones on the map first (Locate tab).';
 }
 
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
@@ -212,12 +211,13 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Two halves of the room. Tap to push the front line.');
   const duration = h('select', { id: 'terr-dur' }, ...[30, 45, 60, 90].map((s) => h('option', { value: s, selected: s === 45 }, `${s} seconds`)));
   let state: TerritoryState | null = null;
+  let room = session.playRoom();
   let timer = 0;
   let last = 0;
   const draw = () => {
     if (!state) return;
     bar.style.setProperty('--b', String(state.boundary));
-    const [a, b] = teamSizes(state, session.layout);
+    const [a, b] = teamSizes(state, room);
     const left = Math.max(0, Math.ceil((state.endsAt - session.now()) / 1000));
     score.textContent =
       state.phase === 'over'
@@ -238,8 +238,8 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
     if (s.phase === 'over') clearInterval(timer);
   };
   const start = () => {
-    const err = needPlaced(session, 2);
-    if (err) return void (msg.textContent = err);
+    room = session.playRoom();
+    if (room.positions.size < 2) return void (msg.textContent = 'Territory needs at least 2 connected, placed phones.');
     director.take(() => {
       clearInterval(timer);
       session.onTap = () => {};
@@ -247,8 +247,8 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
     });
     msg.textContent = '';
     state = null;
-    push(startTerritory(session.layout, session.now(), Number(duration.value) * 1000));
-    session.onTap = (seat) => state && push(territoryTap(state, session.layout, seat, session.now()));
+    push(startTerritory(room, session.now(), Number(duration.value) * 1000));
+    session.onTap = (seat) => state && push(territoryTap(state, room, seat, session.now()));
     timer = window.setInterval(() => {
       if (!state) return;
       const next = territoryTick(state, session.now());
@@ -276,6 +276,7 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
   const msg = h('p.note', { role: 'status' });
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'A ball of fire jumps between neighbours. Tap when it lands on you.');
   let state: PotatoState | null = null;
+  let room = session.playRoom();
   let timer = 0;
   const push = (s: PotatoState) => {
     if (s === state) return;
@@ -286,25 +287,24 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
       clearInterval(timer);
       score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${s.passes} throws.`;
     } else if (!prev || prev.out.length !== s.out.length || prev.holder !== s.holder) {
-      const alive = session.layout.positions.size - s.out.length;
+      const alive = room.positions.size - s.out.length;
       score.textContent = `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${s.passes} throws`;
     }
   };
   const start = () => {
-    const err = needPlaced(session, 2);
-    if (err) return void (msg.textContent = err);
+    room = session.playRoom();
+    const s = startPotato(room, session.now() + 1500, Math.random);
+    if (!s) return void (msg.textContent = 'Hot Potato needs at least 2 connected, placed phones.');
     director.take(() => {
       clearInterval(timer);
       session.onTap = () => {};
       state = null;
     });
     msg.textContent = '';
-    const s = startPotato(session.layout, session.now() + 1500, Math.random);
-    if (!s) return;
     state = null;
     push(s);
-    session.onTap = (seat) => state && push(potatoTap(state, session.layout, seat, session.now(), Math.random));
-    timer = window.setInterval(() => state && push(potatoTick(state, session.layout, session.now())), 50);
+    session.onTap = (seat) => state && push(potatoTap(state, room, seat, session.now(), Math.random));
+    timer = window.setInterval(() => state && push(potatoTick(state, room, session.now())), 50);
   };
   return h(
     'div.panel-body',

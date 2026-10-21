@@ -27,12 +27,16 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
   const mirror = h('input', { type: 'checkbox', id: 'mirror', checked: session.mirror });
   const identify = h('button.btn.ghost', { type: 'button', 'aria-pressed': 'false' }, 'Show numbers on phones');
 
-  if (!synthetic)
-    void CameraSource.list().then((list) => {
-      devices.replaceChildren(...list.map((d, i) => h('option', { value: d.deviceId }, d.label || `Camera ${i + 1}`)));
-      devices.hidden = list.length < 2;
-    });
+  // Labels (and often the full list) only appear once camera permission is granted, so refresh after starting.
+  const listCameras = async () => {
+    if (synthetic) return;
+    const list = await CameraSource.list();
+    const keep = devices.value;
+    devices.replaceChildren(...list.map((d, i) => h('option', { value: d.deviceId, selected: d.deviceId === keep }, d.label || `Camera ${i + 1}`)));
+    devices.hidden = list.length < 2;
+  };
   devices.hidden = true;
+  void listCameras();
 
   const drawOverlay = () => {
     if (!source || !lastScan) return;
@@ -67,6 +71,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
         : 'Point the camera so every phone screen is in view. Dim the room lights if you can.';
       scanBtn.disabled = false;
       startBtn.textContent = 'Restart camera';
+      void listCameras();
     } catch (e) {
       source = null;
       const name = e instanceof Error ? e.name : '';
@@ -89,6 +94,11 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     scanning = true;
     scanBtn.disabled = true;
     takeOver();
+    // Phones flash on the shared clock, so give late joiners a moment to lock on first.
+    for (let i = 0; i < 30 && session.worstSync > 40; i++) {
+      result.textContent = 'Waiting for every phone’s clock to lock on…';
+      await sleep(100);
+    }
     const schedule: BlinkSchedule = { t0: session.now() + 1200, halfMs: DEFAULT_HALF_MS, repeats: DEFAULT_REPEATS };
     const frames: GrayFrame[] = [];
     source.onFrame = (f) => {
@@ -163,6 +173,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     const r = Number(rows.value) || 1;
     const s = Number(seats.value) || 1;
     const updates = new Map<number, Point | null>();
+    // Only typed-in seats share this coordinate space; everyone else becomes unplaced.
+    for (const seat of session.seats.keys()) updates.set(seat, null);
     for (const [seat, e] of session.gridEntries) updates.set(seat, seatGridPoint(e.row, e.seat, r, s));
     session.sourceAspect = r > 1 && s > 1 ? (s - 1) / (r - 1) : 1;
     session.mirror = false;

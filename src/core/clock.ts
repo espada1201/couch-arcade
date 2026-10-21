@@ -23,6 +23,11 @@ export class ClockEstimator {
     if (this.samples.length > this.keep) this.samples.shift();
   }
 
+  /** Forget everything: the host's clock may have restarted, or this device slept. */
+  reset(): void {
+    this.samples = [];
+  }
+
   get count(): number {
     return this.samples.length;
   }
