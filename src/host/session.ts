@@ -1,0 +1,215 @@
+// The host's view of the room: who is connected, which seat (and blink id) each phone
+// holds, where it physically is, and what program it should be running.
+import { MAX_IDS } from '../core/blinkcode';
+import type { Program } from '../core/effects';
+import { normalize, type Point, type Room } from '../core/layout';
+import { parsePhoneMsg, type HostMsg } from '../core/protocol';
+import type { HostEnd, Link, Transport } from '../net/transport';
+
+export type Source = 'camera' | 'grid' | 'manual';
+
+export interface Seat {
+  seat: number;
+  token: string;
+  link: Link | null;
+  raw: Point | null;
+  source: Source | null;
+  sim?: Point;
+}
+
+interface Saved {
+  room: string;
+  mirror: boolean;
+  seats: { seat: number; token: string; raw: Point | null; source: Source | null }[];
+}
+
+const STORE = 'swarm-host';
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+export function newRoomCode(): string {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => abc[b % abc.length]).join('');
+}
+
+export class HostSession {
+  readonly seats = new Map<number, Seat>();
+  /** Row/seat numbers typed in on phones while the no-camera seat grid is up. */
+  readonly gridEntries = new Map<number, { row: number; seat: number }>();
+  layout: Room = { positions: new Map(), aspect: 1 };
+  mirror = false;
+  /** Aspect ratio of the source the raw positions came from (camera frame). */
+  sourceAspect = 4 / 3;
+  onTap: (seat: number) => void = () => {};
+  private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
+  private listeners = new Set<() => void>();
+  private end: HostEnd | null = null;
+
+  constructor(
+    readonly transport: Transport,
+    readonly room: string,
+    readonly now: () => number = () => performance.now(),
+  ) {}
+
+  static restore(transport: Transport, fresh: boolean): HostSession {
+    let saved: Saved | null = null;
+    try {
+      saved = fresh ? null : (JSON.parse(localStorage.getItem(STORE) ?? 'null') as Saved | null);
+    } catch {
+      saved = null;
+    }
+    const s = new HostSession(transport, saved?.room ?? newRoomCode());
+    if (saved) {
+      s.mirror = saved.mirror;
+      for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null });
+      s.relayout(false);
+    }
+    return s;
+  }
+
+  async open(): Promise<void> {
+    this.end = await this.transport.host(this.room);
+    this.end.onLink((link) => this.accept(link));
+  }
+
+  close(): void {
+    this.end?.close();
+  }
+
+  subscribe(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
+
+  get online(): Seat[] {
+    return [...this.seats.values()].filter((s) => s.link);
+  }
+
+  setProgram(p: Program | ((seat: number) => Program)): void {
+    this.programFor = typeof p === 'function' ? p : () => p;
+    for (const s of this.online) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
+    this.changed();
+  }
+
+  /** The program a seat is running (for the host's live mirror of the crowd). */
+  programOf(seat: number): Program {
+    return this.programFor(seat);
+  }
+
+  setRaw(updates: Map<number, Point | null>, source: Source): void {
+    for (const [seat, p] of updates) {
+      const s = this.seats.get(seat);
+      if (!s) continue;
+      s.raw = p;
+      s.source = p ? source : null;
+    }
+    this.relayout(true);
+  }
+
+  /**
+   * Drop a phone at a point in room space by hand. Everyone's raw position is first
+   * rebased onto the current room layout so nobody else jumps.
+   */
+  placeManually(seat: number, p: Point): void {
+    for (const s of this.seats.values()) {
+      const at = this.layout.positions.get(s.seat);
+      if (at) s.raw = { ...at };
+    }
+    this.sourceAspect = this.layout.positions.size > 1 ? this.layout.aspect : this.sourceAspect;
+    this.mirror = false;
+    this.setRaw(new Map([[seat, { x: clamp01(p.x), y: clamp01(p.y) }]]), 'manual');
+  }
+
+  setMirror(on: boolean): void {
+    this.mirror = on;
+    this.relayout(true);
+  }
+
+  forgetOffline(): void {
+    for (const [seat, s] of this.seats) if (!s.link) this.seats.delete(seat);
+    this.relayout(true);
+  }
+
+  private relayout(broadcast: boolean): void {
+    const raw = new Map<number, Point>();
+    for (const s of this.seats.values()) if (s.raw) raw.set(s.seat, s.raw);
+    this.layout = normalize(raw, { mirror: this.mirror, sourceAspect: this.sourceAspect });
+    if (broadcast) for (const s of this.online) this.sendPos(s);
+    this.changed();
+  }
+
+  private sendPos(s: Seat): void {
+    this.sendTo(s, { t: 'pos', pos: this.layout.positions.get(s.seat) ?? null, aspect: this.layout.aspect });
+  }
+
+  private sendTo(s: Seat, m: HostMsg): void {
+    s.link?.send(m);
+  }
+
+  private accept(link: Link): void {
+    let me: Seat | null = null;
+    link.onMessage((raw) => {
+      const m = parsePhoneMsg(raw);
+      if (!m) return;
+      if (m.t === 'ping') {
+        const h1 = this.now();
+        link.send({ t: 'pong', c0: m.c0, h1, h2: this.now() } satisfies HostMsg);
+        return;
+      }
+      if (m.t === 'hello') {
+        me = this.claim(m.token, link);
+        if (!me) {
+          link.send({ t: 'full' } satisfies HostMsg);
+          return;
+        }
+        if (m.sim) me.sim = m.sim;
+        this.sendTo(me, { t: 'welcome', seat: me.seat, room: this.room });
+        this.sendPos(me);
+        this.sendTo(me, { t: 'program', program: this.programFor(me.seat) });
+        this.changed();
+        return;
+      }
+      if (!me) return;
+      if (m.t === 'tap') this.onTap(me.seat);
+      else {
+        this.gridEntries.set(me.seat, { row: m.row, seat: m.seat });
+        this.changed();
+      }
+    });
+    link.onClose(() => {
+      if (me && me.link === link) {
+        me.link = null;
+        this.changed();
+      }
+    });
+  }
+
+  private claim(token: string, link: Link): Seat | null {
+    for (const s of this.seats.values())
+      if (s.token === token) {
+        if (s.link && s.link !== link) s.link.close();
+        s.link = link;
+        return s;
+      }
+    for (let seat = 0; seat < MAX_IDS; seat++)
+      if (!this.seats.has(seat)) {
+        const s: Seat = { seat, token, link, raw: null, source: null };
+        this.seats.set(seat, s);
+        return s;
+      }
+    return null;
+  }
+
+  private changed(): void {
+    try {
+      const saved: Saved = {
+        room: this.room,
+        mirror: this.mirror,
+        seats: [...this.seats.values()].map(({ seat, token, raw, source }) => ({ seat, token, raw, source })),
+      };
+      localStorage.setItem(STORE, JSON.stringify(saved));
+    } catch {
+      /* storage unavailable: the room still works, it just won't survive a refresh */
+    }
+    for (const cb of this.listeners) cb();
+  }
+}
