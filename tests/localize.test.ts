@@ -24,7 +24,7 @@ function film(phones: Phone[], s: BlinkSchedule, o: SceneOpts = {}): GrayFrame[]
   const { fps = 30, latencyMs = 120, noise = 6, drop = 0, dup = 0, jitterMs = 4, W = 160, H = 120, seed = 1 } = o;
   const r = rng(seed);
   const frames: GrayFrame[] = [];
-  const end = s.t0 + scheduleDuration(s) + 500;
+  const end = s.t0 + scheduleDuration(s) + 3000;
   let last: GrayFrame | null = null;
   for (let tc = s.t0 - 300; tc < end; tc += 1000 / fps) {
     const capture = tc + gaussian(r) * jitterMs;
@@ -110,6 +110,20 @@ describe('localize', () => {
     });
     const res = localize(frames, S);
     expectFound(phones, res);
+  });
+
+  it('needs no calibration: recovers 2.1 s of camera delay (capture card / phone-as-webcam)', () => {
+    const phones = grid(10, 5);
+    const res = localize(film(phones, S, { latencyMs: 2100, noise: 8, drop: 0.1, seed: 13 }), S);
+    expectFound(phones, res);
+    expect(Math.abs(res.lagMs - 2100)).toBeLessThanOrEqual(20);
+  });
+
+  it('a single phone is identified correctly whatever the delay', () => {
+    for (const latencyMs of [40, 900, 2600]) {
+      const phones = [{ id: 93, x: 0.4, y: 0.6, w: 10, h: 14 }];
+      expectFound(phones, localize(film(phones, S, { latencyMs, seed: latencyMs }), S));
+    }
   });
 
   it('copes with a slow 15 fps camera', () => {

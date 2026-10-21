@@ -2,7 +2,10 @@
 // captured while every phone flashes its blink code at once. Every changing pixel
 // is decoded on its own, then pixels are grouped by the id they spell out, so two
 // phones touching edge to edge still separate cleanly.
-import { BITS_PER_CODE, HALVES_PER_CODE, decodeBits, scheduleDuration, type BlinkSchedule } from './blinkcode';
+// The code loops, so the decoder skips the first loop and searches every possible
+// camera delay up to a whole loop: webcams, phones used as webcams and capture cards
+// with seconds of lag all work without calibration.
+import { BITS_PER_CODE, HALVES_PER_CODE, SYNC, cycleMs, decodeBits, isSync, type BlinkSchedule } from './blinkcode';
 
 export interface GrayFrame {
   /** Host-clock time the frame was delivered (ms). Includes unknown camera latency. */
@@ -44,17 +47,15 @@ interface Accum {
 
 function accumulate(frames: GrayFrame[], s: BlinkSchedule, lag: number, pix: Int32Array): Accum {
   const H = HALVES_PER_CODE;
-  const total = H * s.repeats;
   const sums = new Float32Array(pix.length * H);
   const weights = new Float32Array(H);
   for (const f of frames) {
     const pos = (f.t - lag - s.t0) / s.halfMs;
     const k = Math.floor(pos);
-    if (k < 0 || k >= total) continue;
     // Frames near a half-slot edge may straddle two symbols; trust the middle most.
     const phase = pos - k;
     const w = Math.max(0.1, 1 - Math.abs(phase - 0.5) * 1.8);
-    const h = k % H;
+    const h = ((k % H) + H) % H;
     weights[h] += w;
     const d = f.data;
     for (let i = 0; i < pix.length; i++) sums[i * H + h] += w * d[pix[i]];
@@ -65,12 +66,14 @@ function accumulate(frames: GrayFrame[], s: BlinkSchedule, lag: number, pix: Int
 function decodePixel(acc: Accum, i: number, range: number, bits: number[]): { id: number; conf: number } {
   const H = HALVES_PER_CODE;
   const { sums, weights } = acc;
-  let conf = Infinity;
+  for (let k = 0; k < H; k++) if (weights[k] === 0) return { id: -1, conf: 0 };
+  const sync = SYNC.map((_, k) => sums[i * H + k] / weights[k]);
+  if (!isSync(sync)) return { id: -1, conf: 0 };
+  let conf = (Math.min(sync[0], sync[1], sync[2]) - Math.max(sync[3], sync[4], sync[5])) / range;
+  const off = SYNC.length;
   for (let j = 0; j < BITS_PER_CODE; j++) {
-    const wa = weights[2 * j];
-    const wb = weights[2 * j + 1];
-    if (wa === 0 || wb === 0) return { id: -1, conf: 0 };
-    const diff = sums[i * H + 2 * j] / wa - sums[i * H + 2 * j + 1] / wb;
+    const a = off + 2 * j;
+    const diff = sums[i * H + a] / weights[a] - sums[i * H + a + 1] / weights[a + 1];
     bits[j] = diff > 0 ? 1 : 0;
     conf = Math.min(conf, Math.abs(diff) / range);
   }
@@ -84,11 +87,12 @@ function median(values: number[]): number {
 }
 
 export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOptions = {}): LocalizeResult {
-  const { lagMinMs = 0, lagMaxMs = 400, lagStepMs = 10, minRange = 24, minPixels = 3, minConfidence = 0.3 } = opts;
-  if (frames.length === 0) return { lagMs: 0, detections: [], activePixels: 0 };
+  const cycle = cycleMs(s);
+  const { lagMinMs = 0, lagMaxMs = cycle - 1, lagStepMs = 10, minRange = 24, minPixels = 3, minConfidence = 0.3 } = opts;
+  if (frames.length === 0 || s.repeats < 2) return { lagMs: 0, detections: [], activePixels: 0 };
   const { w, h } = frames[0];
-  const end = s.t0 + scheduleDuration(s) + lagMaxMs;
-  const window = frames.filter((f) => f.t >= s.t0 + lagMinMs && f.t <= end && f.w === w && f.h === h);
+  // Skip the first loop: with up to a loop of camera delay, everything after it is mid-code.
+  const window = frames.filter((f) => f.t >= s.t0 + cycle && f.t <= s.t0 + cycle * s.repeats && f.w === w && f.h === h);
   if (window.length === 0) return { lagMs: 0, detections: [], activePixels: 0 };
 
   const n = w * h;

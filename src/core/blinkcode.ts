@@ -1,15 +1,19 @@
-// Temporal blink code that every phone flashes at the same moment.
-// Each bit is Manchester-coded as two half-slots (1 = on,off; 0 = off,on) so the
+// Temporal blink code that every phone flashes at the same moment, on a loop.
+// Each data bit is Manchester-coded as two half-slots (1 = on,off; 0 = off,on) so the
 // decoder only ever compares a pixel against itself a moment later: no absolute
 // brightness threshold, immune to auto-exposure drift and screen brightness.
+// Every loop starts with a sync mark of three lit then three dark half-slots. Valid
+// Manchester never holds a level for more than two half-slots, so the mark can only
+// line up in one place: the decoder can find where the loop starts without knowing
+// the camera's delay at all.
 
 export const ID_BITS = 7; // up to 128 phones
 export const MAX_IDS = 1 << ID_BITS;
-const PREAMBLE = [1, 1, 0, 1];
 const CRC_BITS = 4;
+export const SYNC = [1, 1, 1, 0, 0, 0];
 
-export const BITS_PER_CODE = PREAMBLE.length + ID_BITS + CRC_BITS;
-export const HALVES_PER_CODE = BITS_PER_CODE * 2;
+export const BITS_PER_CODE = ID_BITS + CRC_BITS;
+export const HALVES_PER_CODE = SYNC.length + BITS_PER_CODE * 2;
 
 export interface BlinkSchedule {
   /** Host-clock time (ms) at which half-slot 0 starts. */
@@ -37,30 +41,37 @@ export function idBits(id: number): number[] {
   return Array.from({ length: ID_BITS }, (_, i) => (id >> (ID_BITS - 1 - i)) & 1);
 }
 
-/** Full bit sequence: preamble, id, crc. */
+/** Data bits: id then crc. */
 export function encodeBits(id: number): number[] {
   const bits = idBits(id);
-  return [...PREAMBLE, ...bits, ...crc4(bits)];
+  return [...bits, ...crc4(bits)];
 }
 
-/** Half-slot on/off pattern (1 = screen lit) for one code repetition. */
+/** Half-slot on/off pattern (1 = screen lit) for one loop of the code. */
 export function encodeHalves(id: number): number[] {
-  return encodeBits(id).flatMap((b) => (b ? [1, 0] : [0, 1]));
+  return [...SYNC, ...encodeBits(id).flatMap((b) => (b ? [1, 0] : [0, 1]))];
 }
 
-/** Validate a decoded bit sequence; returns the id or -1. */
+/** Validate decoded data bits; returns the id or -1. */
 export function decodeBits(bits: number[]): number {
   if (bits.length !== BITS_PER_CODE) return -1;
-  for (let i = 0; i < PREAMBLE.length; i++) if (bits[i] !== PREAMBLE[i]) return -1;
-  const data = bits.slice(PREAMBLE.length, PREAMBLE.length + ID_BITS);
-  const crc = bits.slice(PREAMBLE.length + ID_BITS);
+  const data = bits.slice(0, ID_BITS);
   const want = crc4(data);
-  for (let i = 0; i < CRC_BITS; i++) if (crc[i] !== want[i]) return -1;
+  for (let i = 0; i < CRC_BITS; i++) if (bits[ID_BITS + i] !== want[i]) return -1;
   return data.reduce((v, b) => (v << 1) | b, 0);
 }
 
+/** True when the first six half-slots of `halves` are exactly the sync mark. */
+export function isSync(halves: ArrayLike<number>): boolean {
+  return Math.min(halves[0], halves[1], halves[2]) > Math.max(halves[3], halves[4], halves[5]);
+}
+
+export function cycleMs(s: Pick<BlinkSchedule, 'halfMs'>): number {
+  return s.halfMs * HALVES_PER_CODE;
+}
+
 export function scheduleDuration(s: BlinkSchedule): number {
-  return s.halfMs * HALVES_PER_CODE * s.repeats;
+  return cycleMs(s) * s.repeats;
 }
 
 /** Whether a phone with this id should be lit at host time t (dark outside the schedule). */
