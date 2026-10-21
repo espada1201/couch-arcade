@@ -38,16 +38,40 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
   devices.hidden = true;
   void listCameras();
 
+  // The preview is letterboxed (object-fit: contain); work out where the picture actually is.
+  const picture = () => {
+    const w = view.clientWidth;
+    const hh = view.clientHeight;
+    const a = source?.aspect ?? 4 / 3;
+    const pw = Math.min(w, hh * a);
+    const ph = pw / a;
+    return { x: (w - pw) / 2, y: (hh - ph) / 2, w: pw, h: ph };
+  };
+  let corners: Point[] = [];
+  let marking = false;
+  const CORNER_NAMES = ['back-left', 'back-right', 'front-right', 'front-left'];
   const drawOverlay = () => {
-    if (!source || !lastScan) return;
-    const w = (overlay.width = view.clientWidth);
-    const hh = (overlay.height = view.clientHeight);
+    if (!source) return;
+    overlay.width = view.clientWidth;
+    overlay.height = view.clientHeight;
+    const r = picture();
     const ctx = overlay.getContext('2d')!;
-    ctx.clearRect(0, 0, w, hh);
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const pts = marking ? corners : (session.perspective?.corners ?? []);
+    if (pts.length) {
+      ctx.strokeStyle = '#00c4b4';
+      ctx.fillStyle = 'rgba(0, 196, 180, 0.12)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, r.x + p.x * r.w, r.y + p.y * r.h));
+      if (pts.length === 4) ctx.closePath();
+      ctx.stroke();
+      if (pts.length === 4) ctx.fill();
+    }
     ctx.font = '600 12px "Archivo Variable", sans-serif';
-    for (const d of lastScan.detections) {
-      const x = d.x * w;
-      const y = d.y * hh;
+    for (const d of lastScan?.detections ?? []) {
+      const x = r.x + d.x * r.w;
+      const y = r.y + d.y * r.h;
       ctx.strokeStyle = '#ffb000';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -66,6 +90,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
       await source.start();
       view.replaceChildren(source.preview, overlay);
       view.hidden = false;
+      perspectiveBtn.disabled = false;
+      requestAnimationFrame(drawOverlay);
       camMsg.textContent = synthetic
         ? 'Simulated camera: it films phone tabs open on this computer.'
         : 'Point the camera so every phone screen is in view. Dim the room lights if you can.';
@@ -142,6 +168,46 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
 
   mirror.addEventListener('change', () => session.setMirror(mirror.checked));
 
+  // Perspective: click the seating area's corners on the camera picture.
+  const perspectiveMsg = h('p.note', { role: 'status' });
+  const areaW = h('input', { type: 'number', min: 1, max: 200, step: 0.5, value: session.perspective?.width ?? 6, id: 'area-w' });
+  const areaD = h('input', { type: 'number', min: 1, max: 200, step: 0.5, value: session.perspective?.depth ?? 6, id: 'area-d' });
+  const perspectiveBtn = h('button.btn', { type: 'button', disabled: true }, 'Correct perspective');
+  const clearBtn = h('button.btn.ghost', { type: 'button', hidden: !session.perspective }, 'Remove correction');
+  const commit = () => {
+    if (corners.length !== 4) return;
+    session.setPerspective({ corners, width: Number(areaW.value) || 6, depth: Number(areaD.value) || 6 });
+    clearBtn.hidden = false;
+  };
+  perspectiveBtn.addEventListener('click', () => {
+    marking = true;
+    corners = [];
+    view.classList.add('marking');
+    perspectiveMsg.textContent = `Click the ${CORNER_NAMES[0]} corner of the seating area on the camera picture.`;
+    drawOverlay();
+  });
+  overlay.addEventListener('click', (e) => {
+    if (!marking) return;
+    const r = picture();
+    const b = overlay.getBoundingClientRect();
+    corners.push({ x: (e.clientX - b.left - r.x) / r.w, y: (e.clientY - b.top - r.y) / r.h });
+    if (corners.length < 4) perspectiveMsg.textContent = `Now the ${CORNER_NAMES[corners.length]} corner.`;
+    else {
+      marking = false;
+      view.classList.remove('marking');
+      perspectiveMsg.textContent = 'Perspective corrected: the map is now a true floor plan.';
+      commit();
+    }
+    drawOverlay();
+  });
+  for (const input of [areaW, areaD]) input.addEventListener('change', () => session.perspective && ((corners = session.perspective.corners), commit()));
+  clearBtn.addEventListener('click', () => {
+    session.setPerspective(null);
+    clearBtn.hidden = true;
+    perspectiveMsg.textContent = '';
+    drawOverlay();
+  });
+
   identify.addEventListener('click', () => {
     const on = identify.getAttribute('aria-pressed') !== 'true';
     identify.setAttribute('aria-pressed', String(on));
@@ -195,6 +261,15 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     camMsg,
     view,
     h('label.check', { for: 'mirror' }, mirror, h('span', {}, 'Camera faces the crowd (flip left and right)')),
+    h(
+      'details.fallback',
+      { open: !!session.perspective },
+      h('summary', {}, 'Camera at an angle? Correct perspective'),
+      h('p.note', {}, 'Far rows look squashed together from a low camera. Click the four corners of any rectangle on the floor (the seating area, or four phones at its corners) and the map becomes a true floor plan.'),
+      h('div.row', {}, h('label.num', { for: 'area-w' }, 'Area width (m)', areaW), h('label.num', { for: 'area-d' }, 'Area depth (m)', areaD)),
+      h('div.row', {}, perspectiveBtn, clearBtn),
+      perspectiveMsg,
+    ),
     h('div.row', {}, scanBtn, identify),
     progress,
     result,

@@ -2,6 +2,7 @@
 // holds, where it physically is, and what program it should be running.
 import { MAX_IDS } from '../core/blinkcode';
 import type { Program } from '../core/effects';
+import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { parsePhoneMsg, type HostMsg } from '../core/protocol';
 import type { HostEnd, Link, Transport } from '../net/transport';
@@ -26,7 +27,15 @@ export interface Seat {
  */
 type Frame = 'source' | 'room';
 
+/** Four corners of the seating area in the camera image, and its real size, to undo perspective. */
+export interface Perspective {
+  corners: Point[];
+  width: number;
+  depth: number;
+}
+
 interface Saved {
+  perspective?: Perspective | null;
   room: string;
   mirror: boolean;
   frame?: Frame;
@@ -51,6 +60,7 @@ export class HostSession {
   mirror = false;
   /** Aspect ratio of the source the raw positions came from (camera frame). */
   sourceAspect = 4 / 3;
+  perspective: Perspective | null = null;
   private frame: Frame = 'source';
   private roomAspect = 1;
   onTap: (seat: number) => void = () => {};
@@ -77,6 +87,7 @@ export class HostSession {
       s.frame = saved.frame ?? 'source';
       s.sourceAspect = saved.sourceAspect ?? s.sourceAspect;
       s.roomAspect = saved.roomAspect ?? 1;
+      s.perspective = saved.perspective ?? null;
       for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null, sync: Infinity, lastTap: 0 });
       s.relayout(false);
     }
@@ -158,6 +169,11 @@ export class HostSession {
     this.applyRaw(new Map([[seat, { x: clamp01(p.x), y: clamp01(p.y) }]]), 'manual');
   }
 
+  setPerspective(p: Perspective | null): void {
+    this.perspective = p;
+    this.relayout(true);
+  }
+
   setMirror(on: boolean): void {
     this.mirror = on;
     this.relayout(true);
@@ -171,7 +187,13 @@ export class HostSession {
   private relayout(broadcast: boolean): void {
     const raw = new Map<number, Point>();
     for (const s of this.seats.values()) if (s.raw) raw.set(s.seat, s.raw);
-    this.layout = this.frame === 'room' ? { positions: raw, aspect: this.roomAspect } : normalize(raw, { mirror: this.mirror, sourceAspect: this.sourceAspect });
+    const H = this.perspective && floorPlan(this.perspective.corners);
+    const fromCamera = [...this.seats.values()].every((s) => !s.raw || s.source === 'camera');
+    if (this.frame === 'room') this.layout = { positions: raw, aspect: this.roomAspect };
+    else if (H && fromCamera && this.perspective) {
+      const floor = new Map([...raw].map(([seat, p]) => [seat, applyHomography(H, p)]));
+      this.layout = normalize(floor, { mirror: this.mirror, sourceAspect: this.perspective.width / this.perspective.depth });
+    } else this.layout = normalize(raw, { mirror: this.mirror, sourceAspect: this.sourceAspect });
     if (broadcast) for (const s of this.online) this.sendPos(s);
     this.changed();
   }
@@ -258,6 +280,7 @@ export class HostSession {
         frame: this.frame,
         sourceAspect: this.sourceAspect,
         roomAspect: this.roomAspect,
+        perspective: this.perspective,
         seats: [...this.seats.values()].map(({ seat, token, raw, source }) => ({ seat, token, raw, source })),
       };
       localStorage.setItem(STORE, JSON.stringify(saved));

@@ -78,7 +78,7 @@ export class Stage {
         const raw = x.raw;
         return h(
           'tr',
-          { 'data-seat': x.seat, 'data-raw-x': raw?.x ?? '', 'data-raw-y': raw?.y ?? '', 'data-source': x.source ?? '' },
+          { 'data-seat': x.seat, 'data-raw-x': raw?.x ?? '', 'data-raw-y': raw?.y ?? '', 'data-x': p?.x ?? '', 'data-y': p?.y ?? '', 'data-source': x.source ?? '' },
           h('td', {}, String(x.seat + 1)),
           h('td', {}, x.link ? 'yes' : 'no'),
           h('td', {}, p ? `${Math.round(p.x * 100)}%` : 'unplaced'),
