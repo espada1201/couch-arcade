@@ -102,12 +102,12 @@ test('the web app manifest starts at the app and carries 192 and 512 pixel icons
   for (const icon of manifest.icons) expect((await request.get(new URL(icon.src, new URL(href!, page.url())).href)).status()).toBe(200);
 });
 
-test('a keyboard-only host reaches the experience tabs in two Tabs, and Tab from a tab lands on the first control', async ({ context }) => {
+test('a keyboard-only host reaches the experience tabs with Tab and Enter, and Tab from a tab lands on the first control', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
   await host.setViewportSize({ width: 1280, height: 800 });
-  await host.locator('body').click({ position: { x: 1, y: 1 } });
-  await host.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  // A page that has just opened: nothing has focus yet.
+  expect(await host.evaluate(() => document.activeElement === document.body)).toBe(true);
 
   // Tab 1 is the skip link, and it can be seen while it has focus.
   await host.keyboard.press('Tab');
@@ -116,14 +116,10 @@ test('a keyboard-only host reaches the experience tabs in two Tabs, and Tab from
   expect(await inViewport(host, 'a.skip-link')).toBe(true);
   await host.screenshot({ path: 'test-results/host-skip-link.png' });
 
-  // Tab 2 is the tab strip. Without the skip link it would be the 11th stop.
-  await host.keyboard.press('Tab');
-  await expect(host.getByRole('tab', { name: /Locate/ })).toBeFocused();
-
-  // Enter on the skip link also lands on the selected tab.
-  await host.keyboard.press('Shift+Tab');
+  // Enter on it lands on the selected tab: two key presses in all. Without it the strip is the 11th Tab stop.
   await host.keyboard.press('Enter');
   await expect(host.getByRole('tab', { name: /Locate/ })).toBeFocused();
+  expect(new URL(host.url()).hash).toBe('');
 
   // From the selected tab, the next Tab goes into the panel's first control, not onto the panel box itself.
   await host.keyboard.press('Tab');
