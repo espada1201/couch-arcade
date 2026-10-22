@@ -10,7 +10,7 @@ import { errorText, h, plural, segmented, setText, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import type { Director, Hold } from './director';
 import { dropVideo, openCamera, secureOnlyAdvice, stopStream } from './media';
-import { panel, stopButton } from './panel';
+import { cardStuntPointer, panel, stopButton } from './panel';
 import type { HostSession } from './session';
 import { captureFrames } from './capture';
 import type { Broadcast } from './ticker';
@@ -308,7 +308,8 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const boxes: Record<FollowSource, HTMLElement> = { cards: cardsBox, screen: mediaBox, camera: mediaBox, captions: captionsBox };
 
   const { el, say, fail } = panel(
-    'Every phone shows the whole picture. Share your screen to put your slides on every phone, type song lyrics or an agenda as big text cards, show live captions of what you say, or show the camera. For rooms where not everyone can see the screen, or there is no screen at all.',
+    'Every phone shows the same thing, all of it. Share your screen to put your slides on every phone, type song lyrics or an agenda as big text cards, show live captions of what you say, or show the camera. For rooms where not everyone can see the screen, or there is no screen at all.',
+    cardStuntPointer('Here every phone shows the whole picture, so a photo would appear in full on each phone.'),
     segmented<FollowSource>('Show', sources, source, (v) => {
       source = v;
       for (const box of new Set(Object.values(boxes))) box.hidden = box !== boxes[v];

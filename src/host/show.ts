@@ -9,7 +9,7 @@ import { keepScreenOn } from '../ui/wakelock';
 import type { Director } from './director';
 import { comingYear, presets, textStunt } from './images';
 import { H, W, aurora, broadcast, fire } from './live';
-import { panel, requirePlaced, stopButton } from './panel';
+import { cardStuntPointer, panel, requirePlaced, stopButton } from './panel';
 import { flipCards } from './play';
 import { recorder } from './record';
 import type { HostSession } from './session';
@@ -237,7 +237,8 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   };
 
   const { el, say, fail } = panel(
-    'Press one button and walk away. The show loops through your title, waves of light and sound, live animation and pictures on every phone, until you press Stop. Or play one event moment on its own.',
+    'Press one button and walk away. The show loops through your title, waves of light and sound, live animation, a bullseye and a heart, until you press Stop. It cannot show your own photo. Or play one event moment on its own.',
+    cardStuntPointer(''),
     h('div.row', {}, h('label.grow', { for: 'show-title' }, 'Title on the crowd', title)),
     h('label.check', { for: 'show-sound' }, sound, h('span', {}, 'With sound')),
     list,

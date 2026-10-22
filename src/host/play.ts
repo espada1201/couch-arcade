@@ -92,7 +92,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   });
   show();
   const { el, say, fail } = panel(
-    'A stadium card stunt from any picture. Every phone shows its own patch of the image, then the whole crowd flips at the same instant.',
+    'Spread your photo, or your words, across the phones. Each phone shows one piece of it, then every phone flips together on a 3, 2, 1 countdown.',
     thumbs,
     moments,
     h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),

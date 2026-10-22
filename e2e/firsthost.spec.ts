@@ -151,6 +151,27 @@ test('typed seats can also be used before everyone has answered, from a button t
   expect(errors).toEqual([]);
 });
 
+test('Big screen, Show and Live screen each point to Card stunt, and Card stunt says it spreads your photo', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  for (const tab of [/Big screen/, /Show/, /Live screen/]) {
+    await host.getByRole('tab', { name: tab }).click();
+    const go = host.getByRole('tabpanel').getByRole('button', { name: 'Go to Card stunt' });
+    await expect(go).toBeVisible();
+    expect(await inViewport(host, '[role=tabpanel] .pointer button')).toBe(true);
+    await expect(host.getByRole('tabpanel').locator('.pointer')).toContainText(/one photo.*each.*its own piece/i);
+    await go.click();
+    await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(host.locator('.panel-intro').first()).toContainText(/your photo/i);
+  }
+  // Show no longer promises pictures it cannot do.
+  await host.getByRole('tab', { name: /Show/ }).click();
+  await expect(host.locator('.panel-intro').first()).not.toContainText(/pictures on every phone/i);
+  await expect(host.locator('.panel-intro').first()).toContainText(/cannot show your own photo/i);
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

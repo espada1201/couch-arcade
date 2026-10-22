@@ -55,6 +55,19 @@ export function requirePlaced(session: HostSession, fail: Notice['fail']): boole
   return false;
 }
 
+/**
+ * A boxed pointer for panels where people look for a photo spread across the phones.
+ * `lead` says what this tab does instead, so the host knows why they are being sent away.
+ */
+export function cardStuntPointer(lead: string): HTMLElement {
+  return h(
+    'div.pointer',
+    {},
+    h('p', {}, lead ? `${lead} ` : '', 'For one photo spread across the phones, each showing its own piece, use ', h('strong', {}, 'Card stunt'), '.'),
+    h('button.btn.small', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'card') }, 'Go to Card stunt'),
+  );
+}
+
 export function stopButton(director: Director, after?: () => void): HTMLButtonElement {
   return h('button.btn.ghost', { type: 'button', onclick: () => (director.idle(), after?.()) }, 'Stop');
 }
