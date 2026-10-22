@@ -30,6 +30,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       h('p.eyebrow', {}, 'Room'),
       h('p.room-code', {}, room),
       h('p.gate-copy', {}, 'This phone becomes part of the room’s screen and speaker. Turn the brightness all the way up, turn the sound on, and keep this page open.'),
+      h('p.gate-copy.gate-tip', {}, 'On an iPhone, switch Silent mode off first (the switch on the side) or you will hear nothing.'),
       joinBtn,
     ),
   );
