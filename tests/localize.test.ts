@@ -73,7 +73,10 @@ function expectFound(phones: Phone[], res: ReturnType<typeof localize>, tolPx = 
 
 const S: BlinkSchedule = { t0: 10_000, halfMs: 120, repeats: 3 };
 
-describe('localize', () => {
+// Each test films and decodes a whole burst: pure CPU. On a shared CI runner, with the other
+// test files busy alongside, one can take past the 5 s default (it flaked twice), so this suite
+// gets more time; the assertions are unchanged.
+describe('localize', { timeout: 20_000 }, () => {
   it('finds 12 phones under noise, latency, dropped and duplicated frames', () => {
     const phones = grid(12, 4);
     const frames = film(phones, S, { latencyMs: 140, noise: 10, drop: 0.15, dup: 0.08 });
