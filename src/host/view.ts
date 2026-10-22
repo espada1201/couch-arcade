@@ -105,6 +105,12 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   // Sync quality arrives with every ping, which is not a roster change; refresh it on a clock.
   setInterval(updateCount, 1000);
 
+  const skip = h('a.skip-link', { href: '#controls' }, 'Skip to controls');
+  skip.addEventListener('click', (e) => {
+    e.preventDefault();
+    tablist.querySelector<HTMLElement>('[aria-selected=true]')?.focus();
+  });
+
   const copy = h('button.btn.ghost.small', { type: 'button' }, 'Copy link');
   copy.addEventListener('click', async () => {
     try {
@@ -131,7 +137,15 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   ];
   const panels = new Map<string, HTMLElement>();
   const tablist = h('div.tabs', { role: 'tablist', 'aria-label': 'Experiences' });
-  const panelHost = h('div.panel', { role: 'tabpanel', tabindex: 0 });
+  const panelHost = h('div.panel', { role: 'tabpanel' });
+  // A panel with something to operate sends Tab straight to it. Only a panel with nothing to operate becomes a stop of its own, so it can still be scrolled with the keys.
+  const FOCUSABLE = 'a[href], button, input, select, textarea, summary, [tabindex]';
+  const syncPanelStop = () => {
+    const inside = [...panelHost.querySelectorAll<HTMLElement>(FOCUSABLE)].some((el) => !el.matches(':disabled') && el.tabIndex >= 0 && !el.closest('[hidden]'));
+    if (inside) panelHost.removeAttribute('tabindex');
+    else panelHost.tabIndex = 0;
+  };
+  new MutationObserver(syncPanelStop).observe(panelHost, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'tabindex'] });
   const select = (id: string, focus = false) => {
     for (const b of tablist.querySelectorAll<HTMLButtonElement>('button')) {
       const on = b.dataset.tab === id;
@@ -142,6 +156,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     }
     if (!panels.has(id)) panels.set(id, tabs.find((t) => t[0] === id)![2]());
     panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), panels.get(id)!);
+    syncPanelStop();
   };
   // A panel can send the host to another tab ("Go to Locate"); the tab strip lives here.
   panelHost.addEventListener(GOTO_TAB, (e) => select((e as CustomEvent<string>).detail, true));
@@ -170,6 +185,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   );
 
   app.replaceChildren(
+    skip,
     h(
       'div.console',
       {},
@@ -208,7 +224,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
         h('p.note', {}, mode.note),
       ),
       stage.el,
-      h('section.controls', { 'aria-label': 'Controls' }, tablist, panelHost),
+      h('section.controls', { id: 'controls', 'aria-label': 'Controls' }, tablist, panelHost),
     ),
   );
   // A poll that was running when this page reloaded carries on in its tab.
