@@ -119,11 +119,11 @@ describe('localize', () => {
     expect(Math.abs(res.lagMs - 2100)).toBeLessThanOrEqual(20);
   });
 
-  it('a single phone is identified correctly whatever the delay', () => {
-    for (const latencyMs of [40, 900, 2600]) {
-      const phones = [{ id: 93, x: 0.4, y: 0.6, w: 10, h: 14 }];
-      expectFound(phones, localize(film(phones, S, { latencyMs, seed: latencyMs }), S));
-    }
+  // One test per delay: each scenario films and decodes a whole burst, so bundling all three
+  // into one test spent three tests' worth of CPU against a single test's time budget.
+  it.each([40, 900, 2600])('a single phone is identified correctly at %i ms of camera delay', (latencyMs) => {
+    const phones = [{ id: 93, x: 0.4, y: 0.6, w: 10, h: 14 }];
+    expectFound(phones, localize(film(phones, S, { latencyMs, seed: latencyMs }), S));
   });
 
   it('copes with a slow 15 fps camera', () => {
