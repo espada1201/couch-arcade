@@ -21,7 +21,7 @@ H1 and one paragraph, then four H2s: `Sub-features`, `How to get to it (user POV
 - [LAN relay](./lan-relay.md): `lan`, `host-moved`, `room-taken`, `squat`, `doctor`
 - [Internet mode](./internet.md): `internet-guard`, any check with `--transport internet`
 - [Locate](./locate.md): `scan`, `real-camera`, `seat-grid`, `drag`
-- [Music](./music.md): `play-song [file]`, `slow-song`, `tones`
+- [Music](./music.md): `play-song [file]`, `ready-count`, `slow-song`, `tones`
 - [Big screen](./big-screen.md): `cards`, `camera`, `big-room`, `slow-follow`, `lost-acks`, `screen-share`, `captions`
 - [Poll](./poll.md): `poll`
 - [Show](./show.md): `show`, `countdown`, `first-dance`

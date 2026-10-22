@@ -97,4 +97,34 @@ describe('sharing a file with the room', () => {
     const late = r.join('late');
     expect(late.inbox).toContainEqual({ t: 'offer', track });
   });
+
+  it('a phone that said ready stays ready on that link, whatever ack comes after', async () => {
+    const r = await room([0.5]);
+    const share = new FileShare(r.session, 'song', new Uint8Array(10));
+    share.start();
+    r.session.input({ have: (seat, m) => share.have(seat, m) });
+    const [p] = r.phones;
+    p.say({ t: 'have', id: 'song', next: 1, got: 1, state: 'ready' });
+    p.say({ t: 'have', id: 'song', next: 1, got: 1 });
+    expect(share.progress()).toEqual([{ seat: 0, progress: 1, state: 'ready' }]);
+    // Back on a new link it must say so again.
+    p.drop();
+    const again = r.join('p0');
+    again.say({ t: 'have', id: 'song', next: 1, got: 1 });
+    expect(share.progress()).toEqual([{ seat: 0, progress: 1, state: undefined }]);
+    share.stop();
+  });
+
+  it('a link whose seat a newer link took is not heard: its late acks are not taken for the new one', async () => {
+    const r = await room([0.5]);
+    const share = new FileShare(r.session, 'song', new Uint8Array(10));
+    share.start();
+    r.session.input({ have: (seat, m) => share.have(seat, m) });
+    const [old] = r.phones;
+    const now = r.join('p0');
+    now.say({ t: 'have', id: 'song', next: 1, got: 1, state: 'ready' });
+    old.say({ t: 'have', id: 'song', next: 0, got: 0, state: 'error' });
+    expect(share.progress()).toEqual([{ seat: 0, progress: 1, state: 'ready' }]);
+    share.stop();
+  });
 });

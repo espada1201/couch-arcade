@@ -157,4 +157,24 @@ describe('phone client', () => {
     expect(count('ack')).toBeGreaterThan(50);
     expect(sent.filter((m) => m.t === 'ack').at(-1)!.at).toBeGreaterThan(19_000);
   });
+
+  it('sends a song’s ready ack at once, never left to a timer a hidden tab may hold back, and nothing stale after it', async () => {
+    const sent: { t: string; next?: number; state?: string }[] = [];
+    const transport: Transport = {
+      name: 'test',
+      host: async () => {
+        throw new Error('unused');
+      },
+      join: async () => new BasicLink((m) => sent.push(m as { t: string })),
+    };
+    const client = new PhoneClient(transport, 'ABCD');
+    await client.connect();
+    client.have({ t: 'have', id: 'song', next: 9, got: 9 });
+    client.have({ t: 'have', id: 'song', next: 10, got: 10 });
+    // Decoded a few ms later: no timer runs in between.
+    client.have({ t: 'have', id: 'song', next: 10, got: 10, state: 'ready' });
+    expect(sent.filter((m) => m.t === 'have').at(-1)).toMatchObject({ state: 'ready' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sent.filter((m) => m.t === 'have').at(-1)).toMatchObject({ state: 'ready' });
+  });
 });

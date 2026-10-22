@@ -60,7 +60,8 @@ export class FileShare {
     // A new link means a reconnect: whatever was in flight on the old one is gone.
     if (!peer || peer.link !== link) this.peers.set(seat, (peer = { link, sender: new ChunkSender(this.n) }));
     peer.sender.ack(m.next, m.got, performance.now());
-    peer.state = m.state;
+    // A phone's state for a song only ever moves on to ready or error, so a stale ack can't take it back.
+    peer.state = m.state ?? peer.state;
     this.pump(seat, peer);
     this.keepPumping();
   }

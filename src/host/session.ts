@@ -387,7 +387,9 @@ export class HostSession {
         return;
       }
       // Pongs only to a seated phone: one the host doesn't know goes quiet, times out and says hello again.
-      if (!me) return;
+      // A link whose seat a newer link took (the same phone in a new tab, or back before the old one
+      // closed) speaks for nobody: its late acks would be taken for the new link's.
+      if (!me || me.link !== link) return;
       if (m.t === 'ping') {
         const h1 = this.now();
         this.deliver(link, { t: 'pong', c0: m.c0, h1, h2: this.now() });

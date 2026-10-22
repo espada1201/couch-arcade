@@ -652,6 +652,30 @@ const CHECKS = {
     await run.shot(host, 'host-paused');
   },
 
+  async 'ready-count'(run) {
+    // Six phones fetch four songs in a row, the host picking the next as soon as all are ready: each
+    // time the host must count every phone ready once every phone shows it.
+    const room = await openRoom(run, { sims: Array.from({ length: 6 }, (_, i) => [0.1 + i * 0.15, 0.5]) });
+    const { host, phones } = room;
+    await tab(room, 'Music');
+    const lag = [];
+    for (let k = 0; k < 4; k++) {
+      await host.locator('#speaker-file').setInputFiles({ name: `Song ${k}.wav`, mimeType: 'audio/wav', buffer: wav(20 + k, 44100) });
+      for (const p of phones) await expect(p.locator('.np-title')).toHaveText(`Song ${k}`, { timeout: 15_000 });
+      for (const p of phones) await expect(p.locator('.nowplaying')).toHaveAttribute('data-state', /ready|muted/, { timeout: 60_000 });
+      const t = Date.now();
+      try {
+        await expect(host.getByText('6 of 6 phones ready')).toBeVisible({ timeout: 5000 });
+        lag.push(Date.now() - t);
+      } catch {
+        lag.push(null);
+        run.issue(`song ${k}: every phone ready, host says ${await host.getByText(/phones ready/).textContent()}`);
+      }
+    }
+    run.note('host count caught up after ms, per song', lag);
+    await run.shot(host, 'host-ready');
+  },
+
   async 'slow-song'(run) {
     // One phone on slow Wi-Fi (200 kbps): it must fetch the song on one link, without dropping it
     // or being sent the same chunks over and over.

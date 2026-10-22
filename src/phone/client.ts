@@ -118,11 +118,18 @@ export class PhoneClient {
   /**
    * Tell the host how much of a file this phone holds. Each ack sums up all before it, so a quick
    * run of them goes as the newest, at most every HAVE_MS: on fast Wi-Fi chunks land faster than
-   * the relay lets a phone send.
+   * the relay lets a phone send. One that says ready or can't play goes at once.
    */
   have(m: Extract<PhoneMsg, { t: 'have' }>): void {
     this.pendingHave = m;
-    this.sendHave();
+    if (!m.state) return this.sendHave();
+    // Ready (or can't play) goes now, with nothing older left to follow it: a hidden tab may hold a
+    // timer back for a minute, and the host would wait that long to count this phone ready.
+    this.sendHave.cancel();
+    this.pendingHave = null;
+    this.waiting.delete('have');
+    this.sendHave.sent();
+    this.send(m);
   }
 
   private send(m: PhoneMsg): void {
