@@ -47,6 +47,8 @@ test('three phones vote, the host counts them, and Reveal turns the room into th
   await expect.poll(() => bg(phones[2])).toEqual(B);
   await expect(phones[0].locator('.label')).toHaveText('A 67%');
   await expect(phones[2].locator('.label')).toHaveText('B 33%');
+  // That phone stands in the Tacos zone but voted Pizza, and is told so.
+  await expect(phones[2].locator('.you-voted')).toHaveText('You voted A');
   await host.screenshot({ path: 'test-results/host-poll.png' });
   await phones[1].screenshot({ path: 'test-results/phone-poll.png' });
 
@@ -55,5 +57,8 @@ test('three phones vote, the host counts them, and Reveal turns the room into th
   await host.getByRole('button', { name: 'Reopen voting' }).click();
   await expect(bar('Pizza')).toHaveText('hidden');
   await expect(phones[1].getByRole('button', { name: /Pizza/ })).toHaveAttribute('aria-pressed', 'true');
+  // Neighbours can't read a pick off the screen: a Tacos phone and a Pizza phone glow alike.
+  await expect.poll(async () => JSON.stringify(await bg(phones[0])) === JSON.stringify(await bg(phones[1]))).toBe(true);
+  expect(await bg(phones[0])).not.toEqual(A);
   expect(errors).toEqual([]);
 });

@@ -7,7 +7,7 @@ import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { Director } from './director';
 import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel } from './play';
-import { pollPanel } from './poll';
+import { pollPanel, savedPoll } from './poll';
 import { HostSession } from './session';
 import { showPanel } from './show';
 import { Stage } from './stage';
@@ -165,7 +165,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
           'div.top-actions',
           {},
           h('button.btn.ghost.small', { type: 'button', onclick: () => director.idle() }, 'Lights off'),
-          h('button.btn.ghost.small', { type: 'button', onclick: () => (director.idle(), session.forgetOffline()) }, 'Forget offline'),
+          // Whatever runs keeps running; a poll drops the forgotten phones' votes.
+          h('button.btn.ghost.small', { type: 'button', onclick: () => session.forgetOffline() }, 'Forget offline'),
           h(
             'button.btn.ghost.small',
             {
@@ -189,5 +190,6 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       h('section.controls', { 'aria-label': 'Controls' }, tablist, panelHost),
     ),
   );
-  select('locate');
+  // A poll that was running when this page reloaded carries on in its tab.
+  select(savedPoll(session.room) ? 'poll' : 'locate');
 }

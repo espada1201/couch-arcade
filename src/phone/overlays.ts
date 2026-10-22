@@ -1,5 +1,7 @@
-// The phone's overlay layers, in priority order: a connection problem, the seat form, the ballot.
+// The phone's overlay layers, in priority order: a connection problem, the seat form, the ballot;
+// and the line that tells a phone what it voted once the result is in.
 import type { Program } from '../core/effects';
+import { LETTERS } from '../core/poll';
 import { h } from '../ui/dom';
 import type { PhoneClient } from './client';
 import { layer, type ClientView, type Layer } from './layers';
@@ -17,6 +19,16 @@ export function gridKey(p: Program, c: ClientView): string | null {
 /** The ballot until Reveal; its key changes with the question, the phase and this phone's pick. */
 export function ballotKey(p: Program, c: ClientView): string | null {
   return p.kind === 'poll' && !p.result && c.status === 'live' ? JSON.stringify([p.question, p.options, p.phase, p.mine]) : null;
+}
+
+/** After Reveal the phone wears its zone's answer, which may not be its own; this says which it picked. */
+export function youVotedKey(p: Program, _c: ClientView): string | null {
+  return p.kind === 'poll' && p.result && p.mine !== null ? `You voted ${LETTERS[p.mine]}` : null;
+}
+
+/** A small line under the result, beside the overlays rather than one of them. */
+export function youVoted(): Layer {
+  return layer('p.you-voted', youVotedKey, (p, c) => document.createTextNode(youVotedKey(p, c)!));
 }
 
 export function overlays(client: PhoneClient, vote: (choice: number) => void): Layer[] {

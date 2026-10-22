@@ -3,8 +3,9 @@
 // don't need to be placed to vote; placement only decides who forms the chart.
 import { MAX_IDS } from '../core/blinkcode';
 import type { PollProgram } from '../core/effects';
-import { LETTERS, MAX_OPTIONS, MIN_OPTIONS, POLL_COLORS, apportion, leaders, pollReduce, startPoll, tally, zones, type PollAction, type PollState } from '../core/poll';
-import { css, h, plural } from '../ui/dom';
+import { LETTERS, MAX_OPTIONS, MIN_OPTIONS, POLL_COLORS, apportion, leaders, liveTally, pollReduce, startPoll, zones, type PollAction, type PollState } from '../core/poll';
+import { forget, loadJson, saveJson } from '../storage';
+import { css, h, plural, setText } from '../ui/dom';
 import type { Director } from './director';
 import { runCrowd } from './crowd';
 import { panel, stopButton } from './panel';
@@ -12,14 +13,33 @@ import type { HostSession } from './session';
 
 export interface PollRun {
   dispatch(a: PollAction): void;
+  /** The count the host sees: phones here now, or every vote once revealed. */
   counts(): number[];
 }
 
-/** Run a poll on the crowd until the director moves on. `show` hears every new state. */
-export function runPoll(session: HostSession, director: Pick<Director, 'run'>, question: string, options: string[], show: (s: PollState) => void): PollRun {
-  const crowd = runCrowd<PollState>(session, director, startPoll(question, options), {
+const STORE = 'swarm-poll';
+
+interface Saved {
+  room: string;
+  question: string;
+  options: string[];
+  phase: PollState['phase'];
+  anon: boolean;
+  votes: [number, number][];
+}
+
+/** The poll that was running in `room` when the host page went away, if any. */
+export function savedPoll(room: string): PollState | null {
+  const s = loadJson<Saved>(STORE);
+  return s?.room === room ? { question: s.question, options: s.options, phase: s.phase, anon: s.anon, votes: new Map(s.votes) } : null;
+}
+
+/** Run a poll on the crowd until the director moves on (or resume one from `from`). `show` hears every new state. */
+export function runPoll(session: HostSession, director: Pick<Director, 'run'>, question: string, options: string[], show: (s: PollState) => void, anon = false, from?: PollState): PollRun {
+  const online = () => new Set(session.online.map((x) => x.seat));
+  const crowd = runCrowd<PollState>(session, director, from ?? startPoll(question, options, anon), {
     program: (s) => {
-      const counts = tally(s);
+      const counts = liveTally(s, online());
       const result = s.phase === 'revealed' ? { pct: apportion(counts, 100), zones: zones(session.playRoom(), counts) } : null;
       return (seat): PollProgram => ({
         kind: 'poll',
@@ -28,22 +48,26 @@ export function runPoll(session: HostSession, director: Pick<Director, 'run'>, q
         phase: s.phase,
         mine: s.votes.get(seat) ?? null,
         result: result && { pct: result.pct, zone: result.zones.get(seat) ?? null },
+        anon: s.anon,
       });
     },
     input: { vote: (s, seat, m) => pollReduce(s, { type: 'vote', seat, choice: m.choice }) },
-    // Phones that leave take their vote with them; joins and moves reshape the chart.
+    // A vote outlives a dropped connection; only a phone the host forgets loses it. Joins, leaves and moves reshape the count and the chart.
     roster: (s) => {
-      const here = new Set(session.online.map((x) => x.seat));
-      for (const seat of s.votes.keys()) if (!here.has(seat)) s = pollReduce(s, { type: 'leave', seat });
+      for (const seat of s.votes.keys()) if (!session.seats.has(seat)) s = pollReduce(s, { type: 'leave', seat });
       return s;
     },
-    show: (s) => show(s),
+    show: (s) => {
+      saveJson(STORE, { room: session.room, question: s.question, options: s.options, phase: s.phase, anon: s.anon, votes: [...s.votes] } satisfies Saved);
+      show(s);
+    },
+    stop: () => forget(STORE),
   });
   return {
     dispatch: (a) => crowd.dispatch((s) => pollReduce(s, a)),
     counts: () => {
       const s = crowd.state();
-      return s ? tally(s) : options.map(() => 0);
+      return s ? liveTally(s, online()) : options.map(() => 0);
     },
   };
 }
@@ -62,6 +86,9 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
   const fields = Array.from({ length: MAX_OPTIONS }, (_, i) =>
     h('input', { type: 'text', id: `poll-opt-${i}`, maxlength: 24, placeholder: ['Yes', 'No', 'Optional', 'Optional'][i], autocomplete: 'off', required: i < MIN_OPTIONS }),
   );
+  // Answers fill in order: an optional answer opens once the one before it has text.
+  const fillInOrder = () => fields.forEach((f, i) => (f.disabled = i >= MIN_OPTIONS && !f.value.trim() && !fields[i - 1].value.trim()));
+  for (const f of fields) f.addEventListener('input', fillInOrder);
   const anon = h('input', { type: 'checkbox', id: 'poll-anon', checked: true });
   const summary = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Phones vote without being placed. Place them to turn the room into the chart on Reveal.');
   const chart = h('ul.poll-chart', { 'aria-label': 'Results' });
@@ -77,13 +104,14 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
     closeBtn.textContent = s && s.phase !== 'open' ? 'Reopen voting' : 'Close voting';
     revealBtn.disabled = !s || s.phase === 'revealed';
     if (!s) {
-      summary.textContent = 'No poll running.';
+      setText(summary, 'No poll running.');
       return chart.replaceChildren();
     }
-    const counts = tally(s);
+    const online = new Set(session.online.map((x) => x.seat));
+    const counts = liveTally(s, online);
     const pct = apportion(counts, 100);
-    const voted = s.votes.size;
-    const hidden = anon.checked && s.phase !== 'revealed';
+    const voted = counts.reduce((a, b) => a + b, 0);
+    const hidden = s.anon && s.phase !== 'revealed';
     chart.replaceChildren(
       ...s.options.map((name, i) =>
         h(
@@ -96,25 +124,36 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
         ),
       ),
     );
-    const of = `${voted} of ${plural(session.online.length, 'phone')} voted`;
+    const away = [...s.votes.keys()].filter((seat) => !online.has(seat)).length;
+    const of =
+      s.phase === 'revealed'
+        ? `${plural(voted, 'vote')}${away ? `, ${away} from ${away === 1 ? 'a phone' : 'phones'} now offline` : ''}`
+        : `${voted} of ${plural(online.size, 'phone')} voted${away ? ` (${away} more offline, counted at Reveal)` : ''}`;
     const state = { open: 'Voting is open', closed: 'Voting is closed', revealed: 'Revealed' }[s.phase];
-    summary.textContent = `${state} · ${of}. ${hidden ? 'Counts stay hidden until Reveal.' : verdict(s, counts, pct)}`;
+    setText(summary, `${state} · ${of}. ${hidden ? 'Counts stay hidden until Reveal.' : verdict(s, counts, pct)}`);
+  };
+
+  const begin = (q: string, options: string[], from?: PollState) => {
+    run = runPoll(session, { run: (r = {}) => director.run({ ...r, stop: () => (r.stop?.(), (run = null), draw(null)) }) }, q, options, draw, anon.checked, from);
+    startBtn.textContent = 'Restart with these answers';
   };
 
   const start = () => {
     const q = question.value.trim();
-    const options = fields.map((f) => f.value.trim()).filter(Boolean);
+    const typed = fields.map((f) => f.value.trim());
+    const options = typed.filter(Boolean);
     if (!q) return say('Type a question first.'), question.focus();
-    if (options.length < MIN_OPTIONS) return say(`Give at least ${MIN_OPTIONS} answers.`), fields[options.length].focus();
+    if (options.length < MIN_OPTIONS) return say(`Give at least ${MIN_OPTIONS} answers.`), fields[typed.findIndex((t) => !t)].focus();
+    const gap = typed.findIndex((t, i) => !t && typed.slice(i + 1).some(Boolean));
+    if (gap >= 0) return say(`Fill the answers in order: answer ${LETTERS[gap]} is empty.`), fields[gap].focus();
     if (session.online.length === 0) return say('No phones yet. Scan the QR code with a phone to join.');
     say('');
-    run = runPoll(session, { run: (r = {}) => director.run({ ...r, stop: () => (r.stop?.(), (run = null), draw(null)) }) }, q, options, draw);
-    startBtn.textContent = 'Restart with these answers';
+    begin(q, options);
   };
   startBtn.addEventListener('click', start);
   closeBtn.addEventListener('click', () => run?.dispatch({ type: last?.phase === 'open' ? 'close' : 'reopen' }));
   revealBtn.addEventListener('click', () => run?.dispatch({ type: 'reveal' }));
-  anon.addEventListener('change', () => last && draw(last));
+  anon.addEventListener('change', () => run?.dispatch({ type: 'anon', on: anon.checked }));
 
   const { el, say } = panel(
     `Ask the room a question. Every phone gets big answer buttons: no sign-up, no TV, up to ${MAX_IDS} phones. On Reveal the room becomes the chart, each answer a block of the crowd sized by its share.`,
@@ -124,10 +163,21 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
       {},
       ...fields.map((f, i) => h('label.grow.poll-option', { for: f.id, style: `--c:${css(POLL_COLORS[i])}` }, `Answer ${LETTERS[i]}${i < MIN_OPTIONS ? '' : ' (optional)'}`, f)),
     ),
-    h('label.check', { for: 'poll-anon' }, anon, h('span', {}, 'Anonymous: hide the counts until Reveal')),
+    h('label.check', { for: 'poll-anon' }, anon, h('span', {}, 'Anonymous: hide the counts and everyone’s pick until Reveal')),
     h('div.row', {}, startBtn, closeBtn, revealBtn, stopButton(director)),
     summary,
     chart,
   );
+
+  // A poll that was running when the host page reloaded picks up where it was.
+  const saved = savedPoll(session.room);
+  if (saved) {
+    question.value = saved.question;
+    saved.options.forEach((o, i) => (fields[i].value = o));
+    anon.checked = saved.anon;
+    begin(saved.question, saved.options, saved);
+    say('The poll that was running before the reload carries on, votes and all.');
+  }
+  fillInOrder();
   return el;
 }

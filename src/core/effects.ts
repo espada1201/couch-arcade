@@ -53,6 +53,8 @@ export interface PollProgram {
   mine: number | null;
   /** After Reveal: each option's share (whole percent) and the option whose zone this phone stands in. */
   result: { pct: number[]; zone: number | null } | null;
+  /** Anonymous: until Reveal a phone that voted glows neutral, so neighbours can't read its pick. */
+  anon: boolean;
 }
 
 export interface Me {
@@ -76,6 +78,8 @@ export const WHITE: RGB = [255, 255, 255];
 export const AMBER: RGB = [255, 176, 0];
 export const TEAL: RGB = [0, 196, 180];
 export const EMBER: RGB = [120, 18, 8];
+/** "Voted", in no answer's colour. */
+export const VOTED: RGB = [96, 90, 78];
 
 /** Everything about a wave except when it starts. */
 export type WaveParams = Omit<WaveProgram, 'kind' | 't0'>;
@@ -227,8 +231,8 @@ export function render(prog: Program, me: Me, t: number): Frame {
     }
     case 'poll': {
       const r = prog.result;
-      // Before Reveal the phone shows its ballot on top; the glow behind it confirms the pick.
-      if (!r) return { rgb: prog.mine === null ? DIM : scale(POLL_COLORS[prog.mine], 0.3) };
+      // Before Reveal the phone shows its ballot on top; the glow behind it confirms the pick (or, anonymous, just that it voted).
+      if (!r) return { rgb: prog.mine === null ? DIM : prog.anon ? VOTED : scale(POLL_COLORS[prog.mine], 0.3) };
       // Placed phones form the chart; a phone off the map shows its own answer instead.
       const option = me.pos ? r.zone : prog.mine;
       if (option === null) return { rgb: DIM, label: r.pct.some((p) => p > 0) ? '' : 'No votes' };

@@ -1,4 +1,4 @@
-import { h, type Child } from '../ui/dom';
+import { h, setText, type Child } from '../ui/dom';
 import type { Director } from './director';
 import type { HostSession } from './session';
 
@@ -6,7 +6,7 @@ import type { HostSession } from './session';
 export function panel(intro: string, ...body: Child[]): { el: HTMLElement; say: (text: string) => void } {
   const msg = h('p.note', { role: 'status' });
   const el = h('div.panel-body', {}, h('p.panel-intro', {}, intro), ...body, msg);
-  return { el, say: (text) => (msg.textContent = text) };
+  return { el, say: (text) => setText(msg, text) };
 }
 
 /** True when there are phones on the map; otherwise says so and returns false. */

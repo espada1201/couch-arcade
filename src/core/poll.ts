@@ -22,19 +22,23 @@ export interface PollState {
   question: string;
   options: string[];
   phase: PollPhase;
-  /** Seat -> option index. One vote per phone. */
+  /** Seat -> option index. One vote per phone, kept while the phone is offline; only forgetting the phone drops it. */
   votes: ReadonlyMap<number, number>;
+  /** Anonymous: until Reveal nobody, host included, sees counts or who picked what. */
+  anon: boolean;
 }
 
 export type PollAction =
   | { type: 'vote'; seat: number; choice: number }
+  /** The phone was forgotten (Forget offline). */
   | { type: 'leave'; seat: number }
+  | { type: 'anon'; on: boolean }
   | { type: 'close' }
   | { type: 'reopen' }
   | { type: 'reveal' };
 
-export function startPoll(question: string, options: string[]): PollState {
-  return { question, options, phase: 'open', votes: new Map() };
+export function startPoll(question: string, options: string[], anon = false): PollState {
+  return { question, options, phase: 'open', votes: new Map(), anon };
 }
 
 /** Pure: returns the same object when nothing changed. */
@@ -51,6 +55,8 @@ export function pollReduce(s: PollState, a: PollAction): PollState {
       votes.delete(a.seat);
       return { ...s, votes };
     }
+    case 'anon':
+      return s.anon === a.on ? s : { ...s, anon: a.on };
     case 'close':
       return s.phase === 'open' ? { ...s, phase: 'closed' } : s;
     case 'reopen':
@@ -60,10 +66,16 @@ export function pollReduce(s: PollState, a: PollAction): PollState {
   }
 }
 
-export function tally(s: PollState): number[] {
+/** Votes per option, from the seats `counted` accepts (all of them by default). */
+export function tally(s: PollState, counted: (seat: number) => boolean = () => true): number[] {
   const counts = s.options.map(() => 0);
-  for (const c of s.votes.values()) counts[c]++;
+  for (const [seat, c] of s.votes) if (counted(seat)) counts[c]++;
   return counts;
+}
+
+/** The count to show: before Reveal only phones that are here, so the bars follow the room; at Reveal every vote cast. */
+export function liveTally(s: PollState, online: ReadonlySet<number>): number[] {
+  return s.phase === 'revealed' ? tally(s) : tally(s, (seat) => online.has(seat));
 }
 
 /**

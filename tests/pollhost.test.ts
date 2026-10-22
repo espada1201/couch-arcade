@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POLL_COLORS } from '../src/core/poll';
-import { runPoll } from '../src/host/poll';
+import { runPoll, savedPoll } from '../src/host/poll';
 import { lastProgram, room } from './harness';
 
 afterEach(() => vi.restoreAllMocks());
@@ -23,17 +23,46 @@ describe('room poll on the host', () => {
     expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ phase: 'open' }));
   });
 
-  it('a phone that leaves loses its vote, and a phone that joins late can still vote', async () => {
+  it('an offline phone’s vote is hidden from the live count and comes back with the phone; a late joiner can still vote', async () => {
     const r = await room([0, 1]);
     const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {});
     r.phones[0].say({ t: 'vote', choice: 0 });
     r.phones[1].say({ t: 'vote', choice: 1 });
     r.phones[1].drop();
     expect(poll.counts()).toEqual([1, 0]);
+    // The same phone reconnects (a reload, a dead spot in the Wi-Fi) and sees its pick again.
+    const back = r.join('p1');
+    expect(poll.counts()).toEqual([1, 1]);
+    expect(ballot(back.inbox).mine).toBe(1);
     const late = r.join('late');
     expect(ballot(late.inbox).phase).toBe('open');
     late.say({ t: 'vote', choice: 1 });
+    expect(poll.counts()).toEqual([1, 2]);
+  });
+
+  it('Reveal counts every phone that voted, offline ones included; only Forget offline drops a vote', async () => {
+    const r = await room([0, 0.5, 1]);
+    const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {});
+    r.phones[0].say({ t: 'vote', choice: 0 });
+    r.phones[1].say({ t: 'vote', choice: 1 });
+    r.phones[2].say({ t: 'vote', choice: 1 });
+    r.phones[2].drop();
+    poll.dispatch({ type: 'reveal' });
+    expect(poll.counts()).toEqual([1, 2]);
+    expect(ballot(r.phones[0].inbox).result?.pct).toEqual([33, 67]);
+    poll.dispatch({ type: 'reopen' });
+    r.session.forgetOffline();
+    poll.dispatch({ type: 'reveal' });
     expect(poll.counts()).toEqual([1, 1]);
+  });
+
+  it('anonymous: phones still learn their own pick, and the setting reaches every phone', async () => {
+    const r = await room([0, 1]);
+    const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {}, true);
+    r.phones[0].say({ t: 'vote', choice: 1 });
+    expect(ballot(r.phones[0].inbox)).toMatchObject({ anon: true, mine: 1 });
+    poll.dispatch({ type: 'anon', on: false });
+    expect(ballot(r.phones[1].inbox).anon).toBe(false);
   });
 
   it('Reveal turns the placed room into zones sized by share; Close and Reopen gate voting', async () => {
@@ -61,5 +90,28 @@ describe('room poll on the host', () => {
     expect(r.phones[0].inbox.at(-1)).toEqual({ t: 'program', program: { kind: 'lobby' } });
     r.phones[0].say({ t: 'vote', choice: 0 });
     expect(poll.counts()).toEqual([0, 0]);
+  });
+
+  it('a running poll survives a host reload, votes and all, and is forgotten once stopped', async () => {
+    const m = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) });
+    try {
+      const r = await room([0, 1]);
+      const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {}, true);
+      r.phones[0].say({ t: 'vote', choice: 1 });
+      poll.dispatch({ type: 'close' });
+      const saved = savedPoll('TEST')!;
+      expect(saved).toMatchObject({ question: 'Q', options: ['A', 'B'], phase: 'closed', anon: true });
+      expect([...saved.votes]).toEqual([[0, 1]]);
+      expect(savedPoll('OTHER')).toBeNull();
+      // The reloaded host picks it up again.
+      const again = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {}, true, saved);
+      expect(again.counts()).toEqual([0, 1]);
+      expect(ballot(r.phones[0].inbox)).toMatchObject({ phase: 'closed', mine: 1 });
+      r.director.idle();
+      expect(savedPoll('TEST')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

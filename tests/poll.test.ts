@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalize, type Point } from '../src/core/layout';
 import { DIM, render, type Program } from '../src/core/effects';
-import { POLL_COLORS, apportion, leaders, pollReduce, startPoll, tally, zones } from '../src/core/poll';
+import { POLL_COLORS, apportion, leaders, liveTally, pollReduce, startPoll, tally, zones } from '../src/core/poll';
 import { parsePhoneMsg } from '../src/core/protocol';
 
 function roomOf(points: [number, number][]) {
@@ -34,13 +34,30 @@ describe('room poll', () => {
     expect(pollReduce(s, { type: 'vote', seat: 0, choice: -1 })).toBe(s);
   });
 
-  it('a phone that leaves takes its vote with it', () => {
+  it('a forgotten phone’s vote is dropped', () => {
     let s = poll();
     s = pollReduce(s, { type: 'vote', seat: 0, choice: 0 });
     s = pollReduce(s, { type: 'vote', seat: 1, choice: 0 });
     s = pollReduce(s, { type: 'leave', seat: 1 });
     expect(tally(s)).toEqual([1, 0, 0]);
     expect(pollReduce(s, { type: 'leave', seat: 7 })).toBe(s);
+  });
+
+  it('live tallies hide votes from offline phones until they come back; Reveal counts every vote', () => {
+    let s = poll();
+    s = pollReduce(s, { type: 'vote', seat: 0, choice: 0 });
+    s = pollReduce(s, { type: 'vote', seat: 1, choice: 1 });
+    expect(liveTally(s, new Set([0]))).toEqual([1, 0, 0]);
+    expect(liveTally(s, new Set([0, 1]))).toEqual([1, 1, 0]);
+    expect(liveTally(pollReduce(s, { type: 'reveal' }), new Set([0]))).toEqual([1, 1, 0]);
+  });
+
+  it('anonymous mode is part of the poll and can be switched while it runs', () => {
+    const s = startPoll('Q', ['A', 'B'], true);
+    expect(s.anon).toBe(true);
+    expect(pollReduce(s, { type: 'anon', on: true })).toBe(s);
+    expect(pollReduce(s, { type: 'anon', on: false }).anon).toBe(false);
+    expect(poll().anon).toBe(false);
   });
 
   it('a closed poll takes no votes until it reopens, and reopening keeps the votes', () => {
@@ -127,6 +144,7 @@ describe('poll on the wire and on the phone', () => {
     phase: 'revealed',
     mine: null,
     result: { pct: [67, 33], zone: null },
+    anon: false,
     ...over,
   });
 
@@ -141,6 +159,16 @@ describe('poll on the wire and on the phone', () => {
     expect(f.rgb).toEqual(POLL_COLORS[1]);
     expect(f.label).toBe('B 33%');
     expect(render(prog(), { seat: 0, pos: null, aspect: 1 }, 0).rgb).toEqual(DIM);
+  });
+
+  it('anonymous: before Reveal every phone that voted shows the same neutral glow, whatever it picked', () => {
+    const me = { seat: 0, pos: { x: 0.5, y: 0.5 }, aspect: 1 };
+    const a = render(prog({ phase: 'open', result: null, mine: 0, anon: true }), me, 0);
+    const b = render(prog({ phase: 'open', result: null, mine: 1, anon: true }), me, 0);
+    expect(a).toEqual(b);
+    expect(a.rgb).not.toEqual(DIM);
+    expect(render(prog({ phase: 'open', result: null, anon: true }), me, 0).rgb).toEqual(DIM);
+    for (const c of POLL_COLORS) expect(a.rgb).not.toEqual(c);
   });
 
   it('while voting, a phone glows faintly in the colour it picked', () => {

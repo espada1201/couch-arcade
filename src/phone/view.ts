@@ -7,7 +7,7 @@ import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
 import { showFirst } from './layers';
-import { overlays } from './overlays';
+import { overlays, youVoted } from './overlays';
 import { PartySpeaker } from './music';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
@@ -44,10 +44,11 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const label = h('div.label', { 'aria-live': 'polite' });
   const status = h('div.status', { role: 'status' });
   const layers = overlays(client, (choice) => (navigator.vibrate?.(12), client.vote(choice)));
+  const mine = youVoted();
   const follow = new FollowScreen();
   const party = new PartySpeaker(client, speaker);
   client.onChunk = (m) => party.chunk(m);
-  const screen = h('div.screen', {}, label, follow.el, party.el, status, ...layers.map((l) => l.el));
+  const screen = h('div.screen', {}, label, follow.el, party.el, status, mine.el, ...layers.map((l) => l.el));
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
@@ -129,6 +130,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     }
 
     showFirst(layers, p, client);
+    mine.update(p, client);
   };
   client.onChange = showStatus;
   showStatus();

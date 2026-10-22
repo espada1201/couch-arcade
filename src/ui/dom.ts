@@ -61,6 +61,11 @@ export function slider(label: string, min: number, max: number, step: number, va
   return h('label.slider', {}, h('span', {}, label), input, out);
 }
 
+/** Write `text` only when it changed, so a live region doesn't re-announce the same words. */
+export function setText(el: Element, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
+}
+
 /** "1 phone", "3 phones". */
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
