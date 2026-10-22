@@ -116,6 +116,23 @@ function admit(room, role, key) {
   return r.phones.size >= MAX_PHONES ? '503 Service Unavailable' : null;
 }
 
+const MSG = /^\{"t":"(msg|all)","(?:id|ids)":("[0-9]+"|\["[0-9]+"(?:,"[0-9]+")*\]),"data":/;
+
+/**
+ * A host message: the phones it names, and for `msg` and `all` the data as the raw JSON text the
+ * host wrote, so a 60 KB song chunk or frame is passed on without being parsed and re-encoded.
+ * `close` has no data. Anything else is dropped.
+ */
+function envelope(raw) {
+  const m = MSG.exec(raw);
+  if (m && raw.endsWith('}')) {
+    const ids = JSON.parse(m[2]);
+    return { ids: Array.isArray(ids) ? ids : [ids], data: raw.slice(m[0].length, -1) };
+  }
+  const c = parse(raw);
+  return c?.t === 'close' && typeof c.id === 'string' ? { ids: [c.id] } : null;
+}
+
 /** Chars written to a phone between two `drain` reports to its host. */
 const REPORT_CHARS = 4096;
 
@@ -123,10 +140,10 @@ const REPORT_CHARS = 4096;
  * Write `s` to a phone and, once enough has gone out, tell the host how many messages the phone's
  * socket has taken: that is how the host sees each phone's own backlog through its one socket.
  */
-function forward(r, id, p, s) {
-  p.ws.send(s, () => {
+function forward(r, id, p, data) {
+  p.ws.send(data, { binary: false }, () => {
     p.written++;
-    p.since += s.length;
+    p.since += data.length;
     if (p.since < REPORT_CHARS) return;
     p.since = 0;
     r.host.send(JSON.stringify({ t: 'drain', id, n: p.written }));
@@ -153,22 +170,16 @@ function attachHost(ws, room, key) {
   } else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
   r.host = ws;
   ws.on('message', (raw) => {
-    const m = parse(raw);
-    if (!m || typeof m !== 'object') return;
-    // One copy from the host, the same string to every phone it names.
-    if (m.t === 'all') {
-      if (!Array.isArray(m.ids)) return;
-      const s = JSON.stringify(m.data ?? null);
-      for (const id of m.ids) {
-        const p = r.phones.get(id);
-        if (p) forward(r, id, p, s);
-      }
-      return;
+    const env = envelope(String(raw));
+    if (!env) return;
+    // One copy from the host, the same bytes to every phone it names.
+    const data = env.data === undefined ? null : Buffer.from(env.data);
+    for (const id of env.ids) {
+      const p = r.phones.get(id);
+      if (!p) continue;
+      if (data) forward(r, id, p, data);
+      else p.ws.close(1000);
     }
-    const p = r.phones.get(m.id);
-    if (!p) return;
-    if (m.t === 'msg') forward(r, m.id, p, JSON.stringify(m.data ?? null));
-    else if (m.t === 'close') p.ws.close(1000);
   });
   ws.on('close', () => {
     if (r.host !== ws) return;

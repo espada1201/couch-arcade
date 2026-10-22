@@ -63,6 +63,27 @@ describe('relay host end', () => {
     end.close();
   }, 30_000);
 
+  it('passes messages through to the phone untouched, and closes a phone when the host closes its link', async () => {
+    const t = new RelayTransport();
+    const end = await t.host('PASS');
+    const links: Link[] = [];
+    end.onLink((l) => links.push(l));
+    const phone = await t.join('PASS');
+    await until(() => links.length === 1);
+    const got: unknown[] = [];
+    phone.onMessage((m) => got.push(m));
+    const odd = { t: 'x', s: 'quote " brace } unicode é \u2028', n: [1.5, -0, 1e21], nested: { a: null } };
+    links[0].send(odd);
+    end.broadcast(links, { t: 'y' });
+    await until(() => got.length === 2);
+    expect(got).toEqual([JSON.parse(JSON.stringify(odd)), { t: 'y' }]);
+    let closed = false;
+    phone.onClose(() => (closed = true));
+    links[0].close();
+    await until(() => closed);
+    end.close();
+  });
+
   it('stops reconnecting once closed', async () => {
     const t = new RelayTransport();
     const end = await t.host('GONE');
