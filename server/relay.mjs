@@ -1,26 +1,15 @@
 // `npm start`: serves the built app and a tiny WebSocket relay so phones on the same
 // Wi-Fi can join with no internet connection. One host per room; phones talk only to it.
-import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
-import { pipeline } from 'node:stream';
-import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { deviceLedger } from './devices.mjs';
+import { serveStatic } from './static.mjs';
 import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../src/net/limits.js';
 
 const PORT = Number(process.env.PORT) || 4321;
 const ROOT = fileURLToPath(new URL('../dist/', import.meta.url));
-const TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.svg': 'image/svg+xml',
-  '.woff2': 'font/woff2',
-  '.json': 'application/json',
-  '.png': 'image/png',
-};
 
 // Prefer the Wi-Fi/Ethernet adapter (en0/en1 on a Mac) over VPN tunnels and bridges.
 function lanAddress() {
@@ -58,22 +47,10 @@ const server = createServer((req, res) => {
     return res.end();
   }
   if (path === '/relay.json') {
-    res.writeHead(200, { 'content-type': TYPES['.json'], 'cache-control': 'no-store' });
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ lanUrl }));
   }
-  let file = normalize(join(ROOT, path));
-  if (!file.startsWith(ROOT)) {
-    res.writeHead(403);
-    return res.end();
-  }
-  if (!existsSync(file) || statSync(file).isDirectory()) file = join(ROOT, 'index.html');
-  if (!existsSync(file)) {
-    res.writeHead(500, { 'content-type': 'text/plain' });
-    return res.end('Build missing: run `npm start` (it builds first).');
-  }
-  res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-  // A file that fails to read (gone mid-request, not a plain file) ends this response, not the relay.
-  pipeline(createReadStream(file), res, () => {});
+  serveStatic(res, ROOT, path);
 });
 
 const MAX_ROOMS = 64;
