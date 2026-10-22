@@ -48,7 +48,7 @@ export function overlays(client: PhoneClient, vote: (choice: number) => void): L
       const { rows, seats } = p as Extract<Program, { kind: 'grid' }>;
       const row = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: rows, required: true, id: 'row' });
       const seat = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: seats, required: true, id: 'seatno' });
-      const done = h('p.done', { hidden: true }, 'Got it. Hold tight.');
+      const done = h('p.done', { hidden: true }, 'Got it. The host will put you on the map as soon as every phone has answered. Keep this page open.');
       return h(
         'form.seat-form',
         {

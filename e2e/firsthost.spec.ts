@@ -103,6 +103,54 @@ test('plain words: not on the map yet, put phones on the map, and the phone says
   expect(errors).toEqual([]);
 });
 
+test('typed seats take effect by themselves once every phone has answered, and the phone says what happens next', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  const phones = [await joinPhone(context, code, 0, errors), await joinPhone(context, code, 1, errors)];
+  await host.getByText('No camera? Use seat numbers').click();
+  await host.locator('#grid-rows').fill('2');
+  await host.locator('#grid-seats').fill('3');
+  await host.getByRole('button', { name: 'Ask phones for their seat' }).click();
+  // The count and the control stay in view.
+  expect(await inViewport(host, '#grid-answers')).toBe(true);
+  await expect(host.locator('#grid-answers')).toContainText('0 of 2 phones have answered.');
+  await phones[0].locator('#row').fill('1');
+  await phones[0].locator('#seatno').fill('1');
+  await phones[0].getByRole('button', { name: 'Done' }).click();
+  await expect(phones[0].locator('.done')).toContainText(/host.*every phone has answered/i);
+  await expect(host.locator('#grid-answers')).toContainText('1 of 2 phones has answered.');
+  // Not applied yet: one answer on its own would wipe the others.
+  await expect(host.locator('tr[data-seat="0"]')).toHaveAttribute('data-source', '');
+  await phones[1].locator('#row').fill('2');
+  await phones[1].locator('#seatno').fill('3');
+  await phones[1].getByRole('button', { name: 'Done' }).click();
+  for (const seat of [0, 1]) await expect(host.locator(`tr[data-seat="${seat}"]`)).toHaveAttribute('data-source', 'grid');
+  await expect(host.locator('#grid-answers')).toContainText('Seats are on the map');
+  for (const p of phones) await expect(p.locator('.status')).toContainText(/· on the map$/);
+  expect(errors).toEqual([]);
+});
+
+test('typed seats can also be used before everyone has answered, from a button that is in view', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  const phones = [await joinPhone(context, code, 0, errors), await joinPhone(context, code, 1, errors)];
+  await host.getByText('No camera? Use seat numbers').click();
+  const use = host.getByRole('button', { name: 'Use typed seats' });
+  await expect(use).toBeDisabled();
+  await host.getByRole('button', { name: 'Ask phones for their seat' }).click();
+  await expect(use).toBeDisabled();
+  await phones[0].locator('#row').fill('1');
+  await phones[0].locator('#seatno').fill('2');
+  await phones[0].getByRole('button', { name: 'Done' }).click();
+  await expect(use).toBeEnabled();
+  expect(await inViewport(host, 'button:has-text("Use typed seats")')).toBe(true);
+  await use.click();
+  await expect(host.locator('tr[data-seat="0"]')).toHaveAttribute('data-source', 'grid');
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

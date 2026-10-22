@@ -253,42 +253,70 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
 
   const rows = h('input', { type: 'number', min: 1, max: 60, value: 3, id: 'grid-rows' });
   const seats = h('input', { type: 'number', min: 1, max: 60, value: 6, id: 'grid-seats' });
-  const answered = h('p.note', { role: 'status' });
+  const answered = h('p.note', { id: 'grid-answers', role: 'status' });
   const useBtn = h('button.btn.primary', { type: 'button', disabled: true }, 'Use typed seats');
+  const fallback = h('details.fallback', {}, h('summary', {}, 'No camera? Use seat numbers'));
   let asking: Hold | null = null;
+  /** The grid the phones were asked about: the seats typed fit this one, whatever the boxes say later. */
+  let asked = { rows: 1, seats: 1 };
+  const answers = () => {
+    if (asking) setText(answered, `${session.gridEntries.size} of ${plural(session.online.length, 'phone')} ${session.gridEntries.size === 1 ? 'has' : 'have'} answered.`);
+    useBtn.disabled = !asking || session.gridEntries.size === 0;
+  };
+  /**
+   * Seats typed so far go on the map. This replaces every other position (typed seats live in their own
+   * coordinate space), which is why it waits for all connected phones: applying one answer at a time would
+   * wipe the map each time. Phones that never answer can be left out with the button.
+   */
+  const useSeats = () => {
+    const hold = asking;
+    if (!hold) return;
+    asking = null;
+    const updates = new Map<number, Point | null>();
+    for (const seat of session.seats.keys()) updates.set(seat, null);
+    for (const [seat, e] of session.gridEntries) updates.set(seat, seatGridPoint(e.row, e.seat, asked.rows, asked.seats));
+    const n = session.gridEntries.size;
+    session.sourceAspect = asked.rows > 1 && asked.seats > 1 ? (asked.seats - 1) / (asked.rows - 1) : 1;
+    session.mirror = false;
+    session.setRaw(updates, 'grid');
+    hold.end();
+    setText(answered, `Seats are on the map (${plural(n, 'phone')}). Phones that did not answer are not on the map yet.`);
+  };
   const askBtn = h(
     'button.btn',
     {
       type: 'button',
       onclick: () => {
         session.gridEntries.clear();
+        asked = { rows: Number(rows.value) || 1, seats: Number(seats.value) || 1 };
         asking = director.run({
           stop: () => {
             asking = null;
             useBtn.disabled = true;
           },
-          program: { kind: 'grid', rows: Number(rows.value) || 1, seats: Number(seats.value) || 1 },
+          program: { kind: 'grid', rows: asked.rows, seats: asked.seats },
         });
-        useBtn.disabled = false;
+        answers();
+        // The count and the button must not hide below the fold: they are the host's only feedback.
+        answered.scrollIntoView({ block: 'nearest' });
       },
     },
     'Ask phones for their seat',
   );
-  useBtn.addEventListener('click', () => {
-    const r = Number(rows.value) || 1;
-    const s = Number(seats.value) || 1;
-    const updates = new Map<number, Point | null>();
-    // Only typed-in seats share this coordinate space; everyone else becomes unplaced.
-    for (const seat of session.seats.keys()) updates.set(seat, null);
-    for (const [seat, e] of session.gridEntries) updates.set(seat, seatGridPoint(e.row, e.seat, r, s));
-    session.sourceAspect = r > 1 && s > 1 ? (s - 1) / (r - 1) : 1;
-    session.mirror = false;
-    session.setRaw(updates, 'grid');
-    asking?.end();
-  });
+  useBtn.addEventListener('click', useSeats);
   session.subscribe(() => {
-    if (asking) setText(answered, `${session.gridEntries.size} of ${plural(session.online.length, 'phone')} ${session.gridEntries.size === 1 ? 'has' : 'have'} answered.`);
+    if (!asking) return;
+    answers();
+    // Everyone who is here has answered: nothing more to wait for.
+    if (session.online.length > 0 && session.online.every((s) => session.gridEntries.has(s.seat))) useSeats();
   });
+  fallback.append(
+    h('p.note', {}, 'Each phone asks its owner for their row and seat. Good for theatres and classrooms. When every phone has answered, the seats go on the map by themselves.'),
+    h('div.row', {}, h('label.num', { for: 'grid-rows' }, 'Rows', rows), h('label.num', { for: 'grid-seats' }, 'Seats per row', seats)),
+    h('div.row', {}, askBtn, useBtn),
+    answered,
+    h('p.note', {}, 'A phone that cannot answer? Press “Use typed seats” to go on without it.'),
+  );
 
   return h(
     'div.panel-body',
@@ -312,14 +340,6 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     scanHint,
     progress,
     result,
-    h(
-      'details.fallback',
-      {},
-      h('summary', {}, 'No camera? Use seat numbers'),
-      h('p.note', {}, 'Each phone asks its owner for their row and seat. Good for theatres and classrooms.'),
-      h('div.row', {}, h('label.num', { for: 'grid-rows' }, 'Rows', rows), h('label.num', { for: 'grid-seats' }, 'Seats per row', seats)),
-      h('div.row', {}, askBtn, useBtn),
-      answered,
-    ),
+    fallback,
   );
 }

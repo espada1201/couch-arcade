@@ -541,8 +541,8 @@ const CHECKS = {
       await p.locator('#seatno').fill(String(typed[i][1]));
       await p.getByRole('button', { name: 'Done' }).click();
     }
-    await expect(host.getByText('4 of 4 phones have answered.')).toBeVisible();
-    await host.getByRole('button', { name: 'Use typed seats' }).click();
+    // Applied by itself once all four have answered: no second tap.
+    await expect(host.getByText('Seats are on the map (4 phones)')).toBeVisible();
     const got = [];
     for (const [i, s] of room.seats.entries()) {
       const row = host.locator(`tr[data-seat="${s}"]`);
@@ -729,8 +729,7 @@ const CHECKS = {
         await p.locator('#seatno').fill(String(i + 1));
         await p.getByRole('button', { name: 'Done' }).click();
       }
-      await expect(host.getByText('3 of 3 phones have answered.')).toBeVisible({ timeout: 15_000 });
-      await host.getByRole('button', { name: 'Use typed seats' }).click();
+      await expect(host.getByText('Seats are on the map (3 phones)')).toBeVisible({ timeout: 15_000 });
       await tab(room, 'Music');
       await host.locator('#speaker-file').setInputFiles({ name: 'Background.wav', mimeType: 'audio/wav', buffer: wav(Math.round((5 * 1024 * 1024) / 44100)) });
       await expect(host.getByText(/of 3 phones ready/)).toBeVisible({ timeout: 15_000 });
