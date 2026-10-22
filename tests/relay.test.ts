@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { freePort, rawPhone, startRelay } from './relayserver';
 
@@ -165,6 +166,64 @@ describe('a room whose host dropped', () => {
       // After the hold runs out the code is free again.
       await new Promise((r) => setTimeout(r, 1700));
       expect(await probe('room=TOMB&role=host&key=thiefkey123')).toBe(204);
+    } finally {
+      relay.kill();
+    }
+  });
+});
+
+/** This machine's own non-loopback address: connections from it count as another device on the Wi-Fi. */
+const lanAddress = Object.values(networkInterfaces())
+  .flat()
+  .find((a) => a && a.family === 'IPv4' && !a.internal)?.address;
+
+describe('one guest cannot crowd out the rest', () => {
+  const open = (url: string) =>
+    new Promise<number | 'open'>((resolve) => {
+      const ws = new WebSocket(url);
+      ws.onopen = () => resolve('open');
+      ws.onerror = () => resolve(0);
+    });
+  const status = async (host: string, q: string) => (await fetch(`http://${host}:${port}/relay?${q}`)).status;
+
+  it.skipIf(!lanAddress)('lets one device open at most 4 phone sockets and host at most 4 rooms; the computer itself is not capped', async () => {
+    const host = new WebSocket(`ws://127.0.0.1:${port}/relay?room=CROWD&role=host&key=crowdkey123`);
+    await new Promise((r) => (host.onopen = r));
+    const phones = await Promise.all(Array.from({ length: 4 }, () => open(`ws://${lanAddress}:${port}/relay?room=CROWD&role=phone`)));
+    expect(phones).toEqual(Array(4).fill('open'));
+    expect(await status(lanAddress!, 'room=CROWD&role=phone')).toBe(429);
+    expect(await open(`ws://${lanAddress}:${port}/relay?room=CROWD&role=phone`)).toBe(0);
+    // Tabs on the host computer (and anything behind a proxy on it) are not one guest.
+    const local = await Promise.all(Array.from({ length: 6 }, () => open(`ws://127.0.0.1:${port}/relay?room=CROWD&role=phone`)));
+    expect(local).toEqual(Array(6).fill('open'));
+    const rooms = await Promise.all(Array.from({ length: 4 }, (_, i) => open(`ws://${lanAddress}:${port}/relay?room=CROWD${i}&role=host&key=crowdkey12${i}`)));
+    expect(rooms).toEqual(Array(4).fill('open'));
+    expect(await status(lanAddress!, 'room=CROWD9&role=host&key=crowdkey129')).toBe(429);
+    host.close();
+  });
+});
+
+describe('a full relay', () => {
+  it('still takes back a host returning to the room it holds', async () => {
+    const tPort = await freePort();
+    const relay = await startRelay(tPort);
+    const ws = (q: string) => new WebSocket(`ws://127.0.0.1:${tPort}/relay?${q}`);
+    const opened = (w: WebSocket) => new Promise((r) => (w.onopen = r));
+    const probe = async (q: string) => (await fetch(`http://127.0.0.1:${tPort}/relay?${q}`)).status;
+    try {
+      const owner = ws('room=OWNED&role=host&key=ownerkey123');
+      await opened(owner);
+      const others = Array.from({ length: 63 }, (_, i) => ws(`room=FILL${i}&role=host&key=fillkey12${i}`));
+      await Promise.all(others.map(opened));
+      owner.close();
+      await new Promise((r) => (owner.onclose = r));
+      const late = ws('room=LATE&role=host&key=latekey1234');
+      await opened(late);
+      expect(await probe('room=NEW&role=host&key=newkey12345')).toBe(503);
+      expect(await probe('room=OWNED&role=host&key=ownerkey123')).toBe(204);
+      const back = ws('room=OWNED&role=host&key=ownerkey123');
+      await opened(back);
+      for (const w of [...others, late, back]) w.close();
     } finally {
       relay.kill();
     }

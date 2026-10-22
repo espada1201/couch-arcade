@@ -411,6 +411,14 @@ const CHECKS = {
     expect(run.readings['phone sends 200 taps at once: close code']).toBe(1008);
     await expect(host.locator('.count')).toHaveText(/^1 phone /);
     await expect(phone.locator('.status')).toContainText('Seat');
+    // One guest device can't crowd out the rest: the lan phone above holds one of its four sockets.
+    const lan = `${info.lanUrl.replace('http', 'ws')}relay?room=${room.code}&role=phone`;
+    const crowd = [];
+    for (let i = 0; i < 3; i++) crowd.push(new WebSocket(lan));
+    await Promise.all(crowd.map((ws) => new Promise((res) => ws.on('open', res))));
+    run.note('fifth phone socket from one device', await wsStatus(lan));
+    for (const ws of crowd) ws.close();
+    expect(run.readings['fifth phone socket from one device']).toBe(429);
     // Host leaves: the relay drops the room and the phone says it is reconnecting.
     run.allowErrors = /WebSocket|relay/;
     await host.close();
@@ -1359,7 +1367,7 @@ const CHECKS = {
     const { host, phones, code } = room;
     const url = host.url();
     const ws = (key) => `${base().replace('http', 'ws')}relay?room=${code}&role=host&key=${key}`;
-    // The host tab closes: for a minute its room code is held for it, and comes back with its phones.
+    // The host tab closes: for ten minutes its room code is held for it, and comes back with its phones.
     await host.close();
     await expect(phones[0].locator('.status')).toContainText(/reconnecting/, { timeout: 10_000 });
     run.note('another host, host just left', await wsStatus(ws('squatterkey1')));

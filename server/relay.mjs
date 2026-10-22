@@ -51,7 +51,7 @@ const server = createServer((req, res) => {
   // The browser hides why a WebSocket was refused, so a host asks here: 204 means it would be let in.
   if (path === '/relay') {
     const q = parsed.url.searchParams;
-    const status = admit(q.get('room') ?? '', q.get('role') === 'host' ? 'host' : 'phone', q.get('key') ?? '');
+    const status = admit(q.get('room') ?? '', q.get('role') === 'host' ? 'host' : 'phone', q.get('key') ?? '', req.socket.remoteAddress);
     res.writeHead(status ? Number(status.slice(0, 3)) : 204, { 'cache-control': 'no-store' });
     return res.end();
   }
@@ -75,14 +75,33 @@ const server = createServer((req, res) => {
 
 const MAX_ROOMS = 64;
 const MAX_PHONES = 200;
+/**
+ * Phone sockets and hosted rooms one device on the Wi-Fi may hold, so one guest can't fill the
+ * relay. The computer running it is not capped: its own tabs, or a proxy in front of the relay.
+ */
+const PER_DEVICE = 4;
+const LOOPBACK = /^(::ffff:)?127\.|^::1$/;
+/** address -> { phones, hosts } open from it now. */
+const devices = new Map();
+const held = (addr) => devices.get(addr) ?? { phones: 0, hosts: 0 };
+/** Count a socket from `addr` while it stays open. */
+function track(ws, addr, role) {
+  const k = `${role}s`;
+  devices.set(addr, { ...held(addr), [k]: held(addr)[k] + 1 });
+  ws.on('close', () => {
+    const d = { ...held(addr), [k]: held(addr)[k] - 1 };
+    if (d.phones || d.hosts) devices.set(addr, d);
+    else devices.delete(addr);
+  });
+}
 const ROOM = /^[A-Z0-9]{3,12}$/;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
- * A host that dropped (a reload, a Wi-Fi blip) gets this long to come back for its room before
- * another host may take the code: room -> { key, until }.
+ * A host that dropped (a reload, a laptop asleep, a Wi-Fi blip) gets this long to come back for its
+ * room before another host may take the code: room -> { key, until }.
  */
-const TOMB_MS = Number(process.env.RELAY_TOMB_MS) || 60_000;
+const TOMB_MS = Number(process.env.RELAY_TOMB_MS) || 10 * 60_000;
 const tombs = new Map();
 
 /**
@@ -108,30 +127,37 @@ server.on('upgrade', (req, socket, head) => {
   const room = q.get('room') ?? '';
   const role = q.get('role') === 'host' ? 'host' : 'phone';
   const key = q.get('key') ?? '';
-  const status = admit(room, role, key);
+  const addr = req.socket.remoteAddress;
+  const status = admit(room, role, key, addr);
   if (status) return refuse(socket, status);
   servers[role].handleUpgrade(req, socket, head, (ws) => {
     ws.on('error', () => ws.terminate());
     ws.on('pong', () => (ws.missed = false));
     // Re-check: the room may have changed while the handshake completed.
-    if (admit(room, role, key)) return ws.close(1013, 'refused');
+    if (admit(room, role, key, addr)) return ws.close(1013, 'refused');
+    if (!LOOPBACK.test(addr)) track(ws, addr, role);
     if (role === 'host') attachHost(ws, room, key);
     else attachPhone(ws, rooms.get(room));
   });
 });
 
-/** Returns an HTTP status line if the connection must be refused. */
-function admit(room, role, key) {
+/** Returns an HTTP status line if the connection from `addr` must be refused. */
+function admit(room, role, key, addr) {
   if (!ROOM.test(room)) return '400 Bad Request';
   const r = rooms.get(room);
+  const crowded = !LOOPBACK.test(addr) && held(addr)[`${role}s`] >= PER_DEVICE;
   if (role === 'host') {
     if (!KEY.test(key)) return '400 Bad Request';
     if (r) return r.key === key ? null : '409 Conflict';
     const tomb = tombs.get(room);
-    if (tomb && tomb.until > Date.now() && tomb.key !== key) return '409 Conflict';
-    return rooms.size >= MAX_ROOMS ? '503 Service Unavailable' : null;
+    const live = tomb && tomb.until > Date.now();
+    if (live && tomb.key !== key) return '409 Conflict';
+    if (crowded) return '429 Too Many Requests';
+    // A host back for the code held for it gets in even when the relay is full: the code was its own.
+    return rooms.size >= MAX_ROOMS && !live ? '503 Service Unavailable' : null;
   }
   if (!r) return '404 Not Found';
+  if (crowded) return '429 Too Many Requests';
   return r.phones.size >= MAX_PHONES ? '503 Service Unavailable' : null;
 }
 
