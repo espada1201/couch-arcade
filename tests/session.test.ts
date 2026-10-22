@@ -423,3 +423,25 @@ describe('room server outage', () => {
   });
 });
 
+
+describe('closing the room', () => {
+  it('stops the sweep and closes every link', async () => {
+    vi.useFakeTimers();
+    try {
+      const { session, phone } = harness();
+      const sweep = vi.spyOn(session, 'sweep');
+      await session.open();
+      const p = phone();
+      let closed = false;
+      p.onClose(() => (closed = true));
+      vi.advanceTimersByTime(3000);
+      expect(sweep).toHaveBeenCalledTimes(3);
+      session.close();
+      expect(closed).toBe(true);
+      vi.advanceTimersByTime(5000);
+      expect(sweep).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -109,6 +109,7 @@ export class HostSession {
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
+  private sweeper: ReturnType<typeof setInterval> | undefined;
   /** Every open link, seated or not, with when the host last heard from it. */
   private conns = new Set<Conn>();
   /** Numbers frames for their acks. */
@@ -144,7 +145,7 @@ export class HostSession {
 
   async open(): Promise<void> {
     this.end = await this.transport.host(this.room);
-    setInterval(() => this.sweep(), 1000);
+    this.sweeper = setInterval(() => this.sweep(), 1000);
     this.end.onLink((link) => this.accept(link));
     this.end.onServer((state) => {
       this.server = state;
@@ -152,6 +153,15 @@ export class HostSession {
     });
     // Saved now, not at the first join, so reloading an empty new room keeps its code.
     this.save();
+  }
+
+  /** Stop sweeping and give the room up: its links close and the room server is let go. */
+  close(): void {
+    clearInterval(this.sweeper);
+    this.sweeper = undefined;
+    for (const c of [...this.conns]) c.link.close();
+    this.end?.close();
+    this.end = null;
   }
 
   subscribe(cb: () => void): () => void {
