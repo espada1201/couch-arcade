@@ -3,6 +3,7 @@
 // pause and seek all land on every phone at the same instant, and a phone that joins
 // late (or whose audio clock drifts) can always work out where it ought to be.
 import type { Point } from './layout';
+import { clamp } from './math';
 
 export interface Track {
   id: string;
@@ -36,7 +37,6 @@ export interface SpeakerProgram {
 
 export const PAUSED: Timeline = [{ at: 0, pos: 0, playing: false }];
 
-const clampPos = (p: number, duration: number) => Math.min(duration, Math.max(0, p));
 
 function keyframeAt(tl: Timeline, t: number): Keyframe {
   let k = tl[0];
@@ -47,7 +47,7 @@ function keyframeAt(tl: Timeline, t: number): Keyframe {
 /** Track position (s) at host time t. */
 export function positionAt(tl: Timeline, t: number, duration: number): number {
   const k = keyframeAt(tl, t);
-  return clampPos(k.playing && t > k.at ? k.pos + (t - k.at) / 1000 : k.pos, duration);
+  return clamp(k.playing && t > k.at ? k.pos + (t - k.at) / 1000 : k.pos, 0, duration);
 }
 
 /** Whether sound is coming out at host time t. */
@@ -70,7 +70,7 @@ export function schedule(tl: Timeline, now: number, lead: number, duration: numb
       ? { at, pos: pos >= duration ? 0 : pos, playing: true }
       : cmd === 'pause'
         ? { at, pos, playing: false }
-        : { at, pos: clampPos(cmd.seek, duration), playing };
+        : { at, pos: clamp(cmd.seek, 0, duration), playing };
   const out = [...tl, next];
   // Drop keyframes already superseded by now: the program stays a few dozen bytes.
   while (out.length > 1 && out[1].at <= now) out.shift();

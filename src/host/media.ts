@@ -1,13 +1,15 @@
 // The one way the host opens its camera (Locate, Live screen, Big screen, the keepsake
 // recorder): the same error copy everywhere, and the same teardown.
 
+import { errorText } from '../ui/dom';
+
 /** Why the camera didn't open, in words for the host. */
 export function cameraProblem(e: unknown): string {
   const name = e instanceof Error ? e.name : '';
   if (name === 'NotAllowedError' || name === 'SecurityError') return 'Camera permission was refused. Allow it in the browser’s address bar.';
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No camera found.';
   if (name === 'NotReadableError' || name === 'AbortError') return 'The camera is busy in another app. Close it and try again.';
-  return `Could not start the camera: ${e instanceof Error ? e.message : String(e)}`;
+  return `Could not start the camera: ${errorText(e)}`;
 }
 
 /**

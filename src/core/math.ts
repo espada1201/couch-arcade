@@ -1,4 +1,5 @@
-export const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+export const clamp01 = (v: number) => clamp(v, 0, 1);
 
 export function median(values: ArrayLike<number>): number {
   const v = Array.from(values).sort((a, b) => a - b);

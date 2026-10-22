@@ -112,7 +112,7 @@ export function cssFloor(c: RGB, min: number): string {
 }
 
 export function mix(a: RGB, b: RGB, k: number): RGB {
-  return [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * k)) as RGB;
+  return [Math.round(a[0] + (b[0] - a[0]) * k), Math.round(a[1] + (b[1] - a[1]) * k), Math.round(a[2] + (b[2] - a[2]) * k)];
 }
 
 /** How far along the wave's path (0..1) a phone sits. */

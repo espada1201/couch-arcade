@@ -5,7 +5,7 @@ import { NO_CAPTIONS, captionLines, deckFrom, heard, step, type Deck, type Follo
 import { FRAME_BUDGET, FrameGate, dataUrlBytes, encodeWithin, lumaOf } from '../core/frames';
 import { MAX_MESSAGE_BYTES, messageBytes, type HostMsg } from '../core/protocol';
 import { canvas2d } from '../ui/canvas';
-import { h, plural, segmented, setText, slider } from '../ui/dom';
+import { errorText, h, plural, segmented, setText, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import type { Director, Hold } from './director';
 import { openCamera, stopStream } from './media';
@@ -198,7 +198,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     } catch (e) {
       if (mine === gen) {
         hold?.end();
-        say(kind === 'screen' ? 'Screen sharing was cancelled or is not allowed in this browser.' : e instanceof Error ? e.message : String(e));
+        say(kind === 'screen' ? 'Screen sharing was cancelled or is not allowed in this browser.' : errorText(e));
       }
       return;
     }
@@ -216,7 +216,10 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     try {
       await video.play();
     } catch {
-      if (mine === gen) hold?.end(), say('The picture could not be played.');
+      if (mine === gen) {
+        hold?.end();
+        say('The picture could not be played.');
+      }
       return;
     }
     if (mine !== gen) return;

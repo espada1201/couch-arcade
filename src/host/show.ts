@@ -2,6 +2,7 @@
 // pictures, waves, sound and live animation, so the host can put the laptop down.
 import { AMBER, TEAL, WHITE, makeWave, type WaveParams } from '../core/effects';
 import type { RGB } from '../core/layout';
+import { clockTime } from '../core/speaker';
 import { canvas2d } from '../ui/canvas';
 import { h, setText } from '../ui/dom';
 import { keepScreenOn } from '../ui/wakelock';
@@ -36,9 +37,7 @@ export function msToMidnight(d: Date): number {
 function hms(ms: number): string {
   const t = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const s = String(t % 60).padStart(2, '0');
-  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+  return h ? `${h}:${clockTime(t % 3600).padStart(5, '0')}` : clockTime(t);
 }
 
 function wave(w: Partial<WaveParams> & { rgb: RGB }): Cue['run'] {

@@ -114,6 +114,15 @@ function admit(room, role, key) {
   return r.phones.size >= MAX_PHONES ? '503 Service Unavailable' : null;
 }
 
+/** JSON from a socket, or undefined when it does not parse (JSON itself has no undefined). */
+function parse(raw) {
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return undefined;
+  }
+}
+
 function attachHost(ws, room, key) {
   let r = rooms.get(room);
   if (r) r.host.close(1000, 'replaced');
@@ -121,18 +130,13 @@ function attachHost(ws, room, key) {
   r.host = ws;
   for (const id of r.phones.keys()) ws.send(JSON.stringify({ t: 'open', id }));
   ws.on('message', (raw) => {
-    let m;
-    try {
-      m = JSON.parse(String(raw));
-    } catch {
-      return;
-    }
+    const m = parse(raw);
+    if (m === undefined) return;
     const phone = m && typeof m === 'object' ? r.phones.get(m.id) : undefined;
     if (!phone) return;
     if (m.t === 'msg') {
       if (!skipForSlowPhone(m.data, phone.bufferedAmount)) phone.send(JSON.stringify(m.data ?? null));
-    }
-    else if (m.t === 'close') phone.close(1000);
+    } else if (m.t === 'close') phone.close(1000);
   });
   ws.on('close', () => {
     if (r.host !== ws) return;
@@ -146,12 +150,8 @@ function attachPhone(ws, r) {
   r.phones.set(id, ws);
   r.host.send(JSON.stringify({ t: 'open', id }));
   ws.on('message', (raw) => {
-    let data;
-    try {
-      data = JSON.parse(String(raw));
-    } catch {
-      return;
-    }
+    const data = parse(raw);
+    if (data === undefined) return;
     r.host.send(JSON.stringify({ t: 'msg', id, data }));
   });
   ws.on('close', () => {

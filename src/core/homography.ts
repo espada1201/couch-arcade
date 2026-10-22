@@ -3,6 +3,7 @@
 // points. Click the four corners of the seating area once and every phone the camera
 // finds lands on a true floor plan.
 import type { Point } from './layout';
+import { clamp } from './math';
 
 /** 3x3 matrix, row-major. */
 export type Homography = number[];
@@ -49,8 +50,7 @@ export function fitHomography(from: Point[], to: Point[]): Homography | null {
 export function applyHomography(H: Homography, p: Point): Point | null {
   const w = H[6] * p.x + H[7] * p.y + H[8];
   if (w <= 1e-6) return null;
-  const clamp = (v: number) => Math.min(1.5, Math.max(-0.5, v));
-  return { x: clamp((H[0] * p.x + H[1] * p.y + H[2]) / w), y: clamp((H[3] * p.x + H[4] * p.y + H[5]) / w) };
+  return { x: clamp((H[0] * p.x + H[1] * p.y + H[2]) / w, -0.5, 1.5), y: clamp((H[3] * p.x + H[4] * p.y + H[5]) / w, -0.5, 1.5) };
 }
 
 /** Corners must form a convex quad clicked clockwise on screen (top-left, top-right, bottom-right, bottom-left). */

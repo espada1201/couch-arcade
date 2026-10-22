@@ -2,7 +2,7 @@ import qrcode from 'qrcode-generator';
 import { carry } from '../landing';
 import { RoomTakenError } from '../net/peer';
 import { pickTransport } from '../net/pick';
-import { h, plural, setText } from '../ui/dom';
+import { errorText, h, plural, setText } from '../ui/dom';
 import { followPanel } from './follow';
 import { livePanel } from './live';
 import { locatePanel } from './locate';
@@ -29,15 +29,16 @@ function qrSvg(text: string): SVGSVGElement {
   return svg;
 }
 
-const TRANSPORT_NOTES: Record<string, string> = {
-  local: 'Test mode: open the link in other tabs of this browser.',
-  lan: 'Wi-Fi mode: phones must be on the same network as this computer.',
-  internet: 'Internet mode: phones on any network can join.',
+const TRANSPORTS: Record<string, { badge: string; note: string }> = {
+  local: { badge: 'This browser', note: 'Test mode: open the link in other tabs of this browser.' },
+  lan: { badge: 'Wi-Fi', note: 'Wi-Fi mode: phones must be on the same network as this computer.' },
+  internet: { badge: 'Internet', note: 'Internet mode: phones on any network can join.' },
 };
 
 export async function hostView(app: HTMLElement, params: URLSearchParams): Promise<void> {
   document.body.classList.add('host');
   const { transport, relay } = await pickTransport(params);
+  const mode = TRANSPORTS[transport.name] ?? TRANSPORTS.internet;
   const fresh = params.has('fresh');
   let session = HostSession.restore(transport, fresh);
 
@@ -58,7 +59,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
         continue;
       }
       status.replaceChildren(
-        `Couldn’t open room ${session.room}: ${e instanceof Error ? e.message : String(e)}. `,
+        `Couldn’t open room ${session.room}: ${errorText(e)}. `,
         transport.name === 'internet' ? 'Check the internet connection, or run the app on your own computer with `npm start` to use Wi-Fi only. ' : '',
         h('span.row', {}, h('button.btn', { type: 'button', onclick: () => location.reload() }, 'Try again'), h('button.btn.primary', { type: 'button', onclick: newRoom }, 'Start a new room')),
       );
@@ -164,7 +165,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
         h('a.mark', { href: './', 'aria-label': 'Swarm Screen home' }, 'Swarm Screen'),
         h('span.room', {}, h('span.room-label', {}, 'Room'), h('span.room-code', { 'data-room': session.room }, session.room)),
         count,
-        h('span.badge', { 'data-transport': transport.name }, transport.name === 'lan' ? 'Wi-Fi' : transport.name === 'local' ? 'This browser' : 'Internet'),
+        h('span.badge', { 'data-transport': transport.name }, mode.badge),
         h(
           'div.top-actions',
           {},
@@ -188,7 +189,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
         h('p.join-step', {}, 'Point a phone camera here, open the link and tap ', h('strong', {}, 'Join the swarm'), '.'),
         h('a.join-url', { href: joinUrl, target: '_blank', rel: 'noopener' }, joinUrl.replace(/^https?:\/\//, '')),
         copy,
-        h('p.note', {}, TRANSPORT_NOTES[transport.name] ?? ''),
+        h('p.note', {}, mode.note),
       ),
       stage.el,
       h('section.controls', { 'aria-label': 'Controls' }, tablist, panelHost),

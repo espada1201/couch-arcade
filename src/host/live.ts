@@ -3,7 +3,7 @@
 // its own pixel, all switching on the same synced instant so the picture never tears.
 import { BLACK } from '../core/effects';
 import { sampleCrowd, type RGB } from '../core/layout';
-import { h, plural, segmented, slider } from '../ui/dom';
+import { errorText, h, plural, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
 import { openCamera, stopStream } from './media';
 import { panel, requirePlaced, stopButton } from './panel';
@@ -129,7 +129,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
       try {
         s = await openCamera({ width: { ideal: 640 } });
       } catch (e) {
-        return fail(`${e instanceof Error ? e.message : String(e)} Or pick another source.`);
+        return fail(`${errorText(e)} Or pick another source.`);
       }
       v = h('video', { muted: true, playsinline: true });
       v.srcObject = s;

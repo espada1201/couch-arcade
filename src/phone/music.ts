@@ -6,7 +6,7 @@
 import { channelFor, clockTime, PAUSED, playingAt, positionAt, reconcile, type Channel, type Segment, type SpeakerProgram, type Track } from '../core/speaker';
 import { Reassembler, type ChunkMsg } from '../net/chunks';
 import { h, setText } from '../ui/dom';
-import type { Speaker } from './audio';
+import { stop, type Speaker } from './audio';
 import type { PhoneClient } from './client';
 
 /** Audio changes are scheduled at least this far ahead of now (plus output latency). */
@@ -254,14 +254,5 @@ export class PartySpeaker {
       delete this.el.dataset.anchor;
       delete this.el.dataset.pos;
     }
-  }
-}
-
-/** Stop a source at `when`; re-stopping replaces the earlier time. Older Safari throws instead. */
-function stop(node: AudioScheduledSourceNode, when: number): void {
-  try {
-    node.stop(Math.max(0, when));
-  } catch {
-    // Already stopped: nothing more to do.
   }
 }

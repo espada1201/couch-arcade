@@ -46,7 +46,7 @@ export function parsePhoneMsg(v: unknown): PhoneMsg | null {
     case 'seat':
       return num(v.row) && num(v.seat) ? { t: 'seat', row: v.row, seat: v.seat } : null;
     case 'vote':
-      return Number.isInteger(v.choice) && (v.choice as number) >= 0 && (v.choice as number) < MAX_OPTIONS ? { t: 'vote', choice: v.choice as number } : null;
+      return count(v.choice) && v.choice < MAX_OPTIONS ? { t: 'vote', choice: v.choice } : null;
     case 'have': {
       if (typeof v.id !== 'string' || v.id.length > 32 || !count(v.next) || !count(v.got)) return null;
       const state = v.state === 'ready' || v.state === 'error' ? v.state : undefined;

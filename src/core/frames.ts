@@ -1,6 +1,8 @@
 // The host side of streaming a picture to phones as JPEG stills: skip frames that
 // haven't changed (judged on a tiny thumbnail), resend now and then for late joiners,
 // and keep every frame under a byte budget that fits one transport message.
+import { luma } from './effects';
+import { clamp } from './math';
 import { payloadBytes } from './protocol';
 
 /** Most bytes one JPEG frame may take: as a base64 data URL it still fits one message, with 1 KB for the rest. */
@@ -11,7 +13,7 @@ const MAX_QUALITY = 0.85;
 /** RGBA pixels to one luma byte each. */
 export function lumaOf(rgba: ArrayLike<number>): Uint8Array {
   const out = new Uint8Array(rgba.length >> 2);
-  for (let i = 0, j = 0; j < out.length; i += 4, j++) out[j] = Math.round(rgba[i] * 0.3 + rgba[i + 1] * 0.59 + rgba[i + 2] * 0.11);
+  for (let i = 0, j = 0; j < out.length; i += 4, j++) out[j] = Math.round(luma([rgba[i], rgba[i + 1], rgba[i + 2]]));
   return out;
 }
 
@@ -71,7 +73,7 @@ export interface Encoded {
  * quality first, then shrink the picture. Null if it never fits.
  */
 export function encodeWithin(encode: (quality: number, scale: number) => string, budget: number, quality: number): Encoded | null {
-  let q = Math.min(MAX_QUALITY, Math.max(MIN_QUALITY, quality));
+  let q = clamp(quality, MIN_QUALITY, MAX_QUALITY);
   let scale = 1;
   for (let attempt = 0; attempt < 8; attempt++) {
     const data = encode(q, scale);

@@ -1,6 +1,7 @@
 // Turns raw positions (camera coordinates or seat-grid entries) into "room space":
 // the crowd's bounding box stretched to 0..1 on both axes, plus the box's true aspect
 // ratio so effects that care about real distances (ripples, image framing) stay round.
+import { clamp } from './math';
 
 export interface Point {
   x: number;
@@ -29,13 +30,13 @@ export function normalize(raw: Map<number, Point>, opts: { mirror?: boolean; sou
   }
   const w = (x1 - x0) * sourceAspect;
   const h = y1 - y0;
-  const aspect = w < 1e-6 || h < 1e-6 ? 1 : Math.min(8, Math.max(1 / 8, w / h));
+  const aspect = w < 1e-6 || h < 1e-6 ? 1 : clamp(w / h, 1 / 8, 8);
   return { positions, aspect };
 }
 
 /** Position for someone who typed their row and seat number instead of using the camera. */
 export function seatGridPoint(row: number, seat: number, rows: number, seats: number): Point {
-  const f = (v: number, n: number) => (n <= 1 ? 0.5 : (Math.min(Math.max(v, 1), n) - 1) / (n - 1));
+  const f = (v: number, n: number) => (n <= 1 ? 0.5 : (clamp(v, 1, n) - 1) / (n - 1));
   return { x: f(seat, seats), y: f(row, rows) };
 }
 

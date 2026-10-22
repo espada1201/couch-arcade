@@ -5,7 +5,7 @@ import { DEFAULT_HALF_MS, DEFAULT_REPEATS, scheduleDuration, type BlinkSchedule 
 import { seatGridPoint, type Point } from '../core/layout';
 import { validCorners } from '../core/homography';
 import { localize, type GrayFrame, type LocalizeResult } from '../core/localize';
-import { h, plural, setText } from '../ui/dom';
+import { errorText, h, plural, setText } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
 import type { Director, Hold } from './director';
 import type { HostSession } from './session';
@@ -104,7 +104,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     } catch (e) {
       source?.stop();
       source = null;
-      setText(camMsg, `${e instanceof Error ? e.message : String(e)} You can also use typed seat numbers below, or place phones by hand on the map.`);
+      setText(camMsg, `${errorText(e)} You can also use typed seat numbers below, or place phones by hand on the map.`);
     }
   });
 

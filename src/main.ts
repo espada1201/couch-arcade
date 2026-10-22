@@ -1,6 +1,7 @@
 import '@fontsource-variable/archivo/wdth.css';
 import './style.css';
 import { landing } from './landing';
+import { errorText } from './ui/dom';
 
 const params = new URLSearchParams(location.search);
 const app = document.getElementById('app')!;
@@ -20,6 +21,6 @@ boot().catch((e: unknown) => {
   app.replaceChildren();
   const p = document.createElement('p');
   p.className = 'fatal';
-  p.textContent = `Something went wrong starting Swarm Screen: ${e instanceof Error ? e.message : String(e)}`;
+  p.textContent = `Something went wrong starting Swarm Screen: ${errorText(e)}`;
   app.append(p);
 });

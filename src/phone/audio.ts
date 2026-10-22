@@ -74,13 +74,7 @@ export class Speaker {
   }
 
   private silence(): void {
-    for (const { node } of this.pending) {
-      try {
-        node.stop();
-      } catch {
-        // Older Safari throws if the node already stopped.
-      }
-    }
+    for (const { node } of this.pending) stop(node, 0);
     this.pending = [];
   }
 
@@ -143,4 +137,11 @@ export class Speaker {
     src.connect(g).connect(ctx.destination);
     src.start(at);
   }
+}
+
+/** Stop a source at `when`; re-stopping replaces the earlier time. Older Safari throws instead. */
+export function stop(node: AudioScheduledSourceNode, when: number): void {
+  try {
+    node.stop(Math.max(0, when));
+  } catch {}
 }

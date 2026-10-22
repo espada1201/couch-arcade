@@ -17,6 +17,8 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K | `${K}.${string
   return el;
 }
 
+export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
 export function css(rgb: readonly number[]): string {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }

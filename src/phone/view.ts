@@ -116,11 +116,11 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     follow.show(p.kind === 'follow' ? p.view : null);
     if (p.kind === 'potato') {
       const s = p.state;
-      if (s.holder === client.seat && lastHolder !== client.seat && !s.out.includes(client.seat)) {
+      const out = s.out.includes(client.seat);
+      if (s.holder === client.seat && lastHolder !== client.seat && !out) {
         navigator.vibrate?.([30, 40, 30]);
         speaker.blip('catch');
       }
-      const out = s.out.includes(client.seat);
       if (out && !wasOut) {
         navigator.vibrate?.(400);
         speaker.blip('burn');

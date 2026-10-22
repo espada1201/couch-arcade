@@ -5,6 +5,10 @@ import { canvas2d } from '../ui/canvas';
 
 export const STUNT_SIZE = 240;
 
+const INK = '#0e0d0b';
+const GOLD = '#ffb000';
+const ROSE = '#ff3b4f';
+
 function toImage(c: HTMLCanvasElement): Image {
   const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
   return { w: c.width, h: c.height, data };
@@ -40,7 +44,7 @@ export function presets(): Stunt[] {
       ctx.fill();
     }),
     make('Bullseye', (ctx, s) => {
-      ['#ffb000', '#0e0d0b', '#ffb000', '#0e0d0b', '#f2ead8'].forEach((c, i) => {
+      [GOLD, INK, GOLD, INK, '#f2ead8'].forEach((c, i) => {
         ctx.fillStyle = c;
         ctx.beginPath();
         ctx.arc(s / 2, s / 2, s * 0.75 - i * s * 0.15, 0, Math.PI * 2);
@@ -60,10 +64,6 @@ export function presets(): Stunt[] {
     }),
   ]);
 }
-
-const INK = '#0e0d0b';
-const GOLD = '#ffb000';
-const ROSE = '#ff3b4f';
 
 /** A heart filling the s-by-s square at (x, y). */
 function heart(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {

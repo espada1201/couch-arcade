@@ -9,6 +9,7 @@ import type { HostMsg, PhoneMsg } from '../core/protocol';
 import type { ChunkMsg } from '../net/chunks';
 import { backoff, type Link, type Transport } from '../net/transport';
 import { stableId } from '../storage';
+import { errorText } from '../ui/dom';
 
 export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
 
@@ -69,7 +70,7 @@ export class PhoneClient {
       this.send({ t: 'hello', token: this.token });
       this.startPinging();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = errorText(e);
       this.lost();
     }
   }

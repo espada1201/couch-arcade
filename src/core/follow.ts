@@ -1,6 +1,7 @@
 // Follow mode: every phone shows the whole picture (a shared screen, the camera, a
 // text card or live captions) instead of one pixel of it. This module holds what the
 // phones are told to show and the small state machines behind cards and captions.
+import { clamp } from './math';
 
 export type FollowView =
   /** A JPEG frame as a data URL; seq rises with every new picture. */
@@ -28,16 +29,15 @@ export interface Deck {
   at: number;
 }
 
-const clampAt = (cards: string[], at: number) => Math.max(0, Math.min(cards.length - 1, at));
 
 /** A deck from the host's text, keeping the current place where it still exists. */
 export function deckFrom(text: string, at = 0): Deck {
   const cards = parseCards(text);
-  return { cards, at: cards.length ? clampAt(cards, at) : 0 };
+  return { cards, at: cards.length ? clamp(at, 0, cards.length - 1) : 0 };
 }
 
 export function step(d: Deck, delta: number): Deck {
-  return d.cards.length ? { ...d, at: clampAt(d.cards, d.at + delta) } : d;
+  return d.cards.length ? { ...d, at: clamp(d.at + delta, 0, d.cards.length - 1) } : d;
 }
 
 export interface Captions {

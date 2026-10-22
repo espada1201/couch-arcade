@@ -1,6 +1,6 @@
 // "Record the moment": the host's camera films the crowd while a cue or stunt runs,
 // and the host gets a video to keep. Only offered where the browser can record.
-import { h, setText } from '../ui/dom';
+import { errorText, h, setText } from '../ui/dom';
 import { openCamera, stopStream } from './media';
 
 /** A looping show could run all night; a keepsake stops here. */
@@ -38,6 +38,7 @@ export function recorder(): Recorder | null {
   const id = `record-${++ids}`;
   const on = h('input', { type: 'checkbox', id });
   const status = h('p.note', { role: 'status' });
+  const failed = (e: unknown) => setText(status, `Couldn’t record: ${errorText(e)}`);
   const link = h('a.btn.small', { hidden: true });
   let rec: MediaRecorder | null = null;
   /** Opened when the box is ticked, so the permission prompt never lands on the big moment; kept until it is unticked. */
@@ -76,7 +77,7 @@ export function recorder(): Recorder | null {
       if (on.checked) setText(status, 'Camera ready. It films the next moment you start.');
     } catch (e) {
       on.checked = false;
-      setText(status, `Couldn’t record: ${e instanceof Error ? e.message : String(e)}`);
+      failed(e);
     }
   });
 
@@ -88,7 +89,7 @@ export function recorder(): Recorder | null {
       s = await camera();
     } catch (e) {
       wanted = false;
-      setText(status, `Couldn’t record: ${e instanceof Error ? e.message : String(e)}`);
+      failed(e);
       return;
     }
     if (!wanted) return;

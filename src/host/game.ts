@@ -3,21 +3,17 @@ import type { Program } from '../core/effects';
 import type { RGB, Room } from '../core/layout';
 import { potatoTap, potatoTick, startPotato, type PotatoState } from '../core/potato';
 import { startTerritory, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
-import { runCrowd } from './crowd';
+import { runCrowd, type CrowdRules } from './crowd';
 import type { Director } from './director';
 import type { HostSession } from './session';
 
-export interface GameRules<S extends { phase: 'playing' | 'over' }> {
+export interface GameRules<S extends { phase: 'playing' | 'over' }> extends Pick<CrowdRules<S>, 'throttleMs' | 'resendMs'> {
   name: string;
   start(room: Room, now: number): S;
   tap(s: S, room: Room, seat: number, now: number): S;
   tick(s: S, room: Room, now: number): S;
   program(s: S): Program;
   tickMs: number;
-  /** Changes closer together than this (ms) are not broadcast; the final state always is. */
-  throttleMs?: number;
-  /** Re-broadcast an unchanged state this often (ms), so throttled changes still land. */
-  resendMs?: number;
   /** Update the host's scoreboard; `prev` is the state before this one. */
   show(s: S, prev: S | null, room: Room): void;
 }
