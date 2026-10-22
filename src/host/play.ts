@@ -7,7 +7,7 @@ import { teamSizes, type TerritoryState } from '../core/territory';
 import { css, h, plural, segmented, slider } from '../ui/dom';
 import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
-import { MOMENTS, fileStunt, presets, textStunt, type Moment, type Stunt } from './images';
+import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
 import { panel, requirePlaced, stopButton } from './panel';
 import { recorder } from './record';
 import { throttle } from './throttle';
@@ -45,8 +45,12 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     moments.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.name === m?.name)));
   };
   const names = [h('input', { type: 'text', id: 'stunt-name-1', maxlength: 12, placeholder: 'SAM', autocomplete: 'off' }), h('input', { type: 'text', id: 'stunt-name-2', maxlength: 12, placeholder: 'ALEX', autocomplete: 'off' })];
-  const typed = (): [string, string] => names.map((n) => (n.value.trim() || n.placeholder).toUpperCase()) as [string, string];
-  const useMoment = (m: Moment) => pick(m.make(typed(), session.layout.aspect), m);
+  // Only what the host typed: a placeholder never goes on the crowd.
+  const typed = (): [string, string] => names.map((n) => n.value.trim().toUpperCase()) as [string, string];
+  const useMoment = (m: Moment) => {
+    pick(m.make(typed(), session.layout.aspect), m);
+    say(missingNames(m, typed()) ?? '');
+  };
   for (const n of names) n.addEventListener('input', () => moment && moment.names > 0 && useMoment(moment));
   const moments = h(
     'div.moments',
@@ -78,6 +82,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   });
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', () => {
+    const missing = moment && missingNames(moment, typed());
+    if (missing) return say(missing), names[typed()[0] ? 1 : 0].focus();
     if (!requirePlaced(session, say)) return;
     director.run({ stop: rec?.end, program: cardProgram(session, chosen.image) });
     // Film the countdown, the flip, and a few seconds of the crowd holding it.

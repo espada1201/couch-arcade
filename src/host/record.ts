@@ -1,21 +1,24 @@
 // "Record the moment": the host's camera films the crowd while a cue or stunt runs,
-// and the host gets a .webm to keep. Only offered where the browser can record.
-import { h } from '../ui/dom';
+// and the host gets a video to keep. Only offered where the browser can record.
+import { h, setText } from '../ui/dom';
 import { openCamera, stopStream } from './media';
 
 /** A looping show could run all night; a keepsake stops here. */
 export const RECORD_MAX_MS = 5 * 60_000;
 
-const MIMES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+/** WebM where the browser writes it (Chrome, Firefox), MP4 where it doesn't (Safari). */
+const MIMES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
 
-/** The best webm the browser can write, or '' to let it choose. */
+/** The best format the browser can write, or '' to let it choose. */
 export function pickMime(supported: (type: string) => boolean): string {
   return MIMES.find(supported) ?? '';
 }
 
-export function keepsakeName(d: Date): string {
+/** A dated file name whose extension matches what the recorder actually wrote. */
+export function keepsakeName(d: Date, mimeType: string): string {
   const p = (n: number) => String(n).padStart(2, '0');
-  return `swarm-moment-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.webm`;
+  const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+  return `swarm-moment-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${ext}`;
 }
 
 export interface Recorder {
@@ -37,8 +40,8 @@ export function recorder(): Recorder | null {
   const status = h('p.note', { role: 'status' });
   const link = h('a.btn.small', { hidden: true });
   let rec: MediaRecorder | null = null;
-  let stream: MediaStream | null = null;
-  let starting = false;
+  /** Opened when the box is ticked, so the permission prompt never lands on the big moment; kept until it is unticked. */
+  let stream: Promise<MediaStream> | null = null;
   /** Cleared by end(), so a stop that lands while the camera is still opening wins. */
   let wanted = false;
   let timer = 0;
@@ -46,58 +49,77 @@ export function recorder(): Recorder | null {
   let began = 0;
 
   const release = () => {
-    stopStream(stream);
+    void stream?.then(stopStream, () => {});
     stream = null;
   };
 
-  // The room's sound (the cheer at midnight) belongs in the keepsake too.
-  const open = () => openCamera(true, { audio: true });
+  const live = (s: MediaStream) => s.getVideoTracks().some((t) => t.readyState === 'live');
+
+  /** The camera, opened once and reused; the room's sound (the cheer at midnight) belongs in the keepsake too. */
+  const camera = async (): Promise<MediaStream> => {
+    if (stream) {
+      const s = await stream;
+      if (live(s)) return s;
+      stopStream(s);
+    }
+    const opening = openCamera(true, { audio: true });
+    stream = opening;
+    opening.catch(() => stream === opening && (stream = null));
+    return opening;
+  };
+
+  on.addEventListener('change', async () => {
+    if (!on.checked) return release(), setText(status, '');
+    setText(status, 'Opening the camera…');
+    try {
+      await camera();
+      if (on.checked) setText(status, 'Camera ready. It films the next moment you start.');
+    } catch (e) {
+      on.checked = false;
+      setText(status, `Couldn’t record: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
 
   const begin = async (maxMs = RECORD_MAX_MS) => {
-    if (!on.checked || rec || starting) return;
-    starting = wanted = true;
-    status.textContent = 'Opening the camera…';
+    if (!on.checked || rec || wanted) return;
+    wanted = true;
+    let s: MediaStream;
     try {
-      stream = await open();
+      s = await camera();
     } catch (e) {
-      status.textContent = `Couldn’t record: ${e instanceof Error ? e.message : String(e)}`;
-      return;
-    } finally {
-      starting = false;
-    }
-    if (!wanted) {
-      release();
-      status.textContent = '';
+      wanted = false;
+      setText(status, `Couldn’t record: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    if (!wanted) return;
     const mimeType = pickMime((t) => MediaRecorder.isTypeSupported?.(t) ?? false);
-    const r = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    const r = new MediaRecorder(s, mimeType ? { mimeType } : {});
     const chunks: Blob[] = [];
     r.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     r.onstop = () => {
-      release();
+      if (!on.checked) release();
       if (url) URL.revokeObjectURL(url);
-      const blob = new Blob(chunks, { type: r.mimeType || 'video/webm' });
+      const type = r.mimeType || mimeType || 'video/webm';
+      const blob = new Blob(chunks, { type });
       url = URL.createObjectURL(blob);
       link.href = url;
-      link.download = keepsakeName(new Date());
+      link.download = keepsakeName(new Date(), type);
       const secs = Math.round((performance.now() - began) / 1000);
       link.textContent = `Download the keepsake (${secs} s, ${(blob.size / 1e6).toFixed(1)} MB)`;
       link.hidden = false;
-      status.textContent = 'Recorded. The video stays on this computer until you download it.';
+      setText(status, 'Recorded. The video stays on this computer until you download it.');
     };
     rec = r;
     began = performance.now();
     r.start(1000);
     timer = window.setTimeout(end, maxMs);
-    status.textContent = '● Recording the moment…';
+    setText(status, '● Recording the moment…');
   };
 
   const end = () => {
     wanted = false;
     clearTimeout(timer);
     if (rec?.state === 'recording') rec.stop();
-    else release();
     rec = null;
   };
 

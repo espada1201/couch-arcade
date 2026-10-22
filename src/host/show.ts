@@ -3,7 +3,7 @@
 import { AMBER, TEAL, WHITE, makeWave, type WaveParams } from '../core/effects';
 import type { RGB } from '../core/layout';
 import { canvas2d } from '../ui/canvas';
-import { h } from '../ui/dom';
+import { h, setText } from '../ui/dom';
 import { keepScreenOn } from '../ui/wakelock';
 import type { Director } from './director';
 import { comingYear, presets, textStunt } from './images';
@@ -18,8 +18,27 @@ interface Cue {
   ms: number;
   /** An event moment: played on its own from its button, never in the loop. */
   moment?: true;
-  /** Starts the cue; may return a function that stops it. */
-  run(session: HostSession, opts: { title: string; sound: boolean }): (() => void) | void;
+  /** Plays on every phone, placed or not. */
+  unplaced?: true;
+  /** Can be timed so its big moment lands at the next midnight. */
+  timed?: true;
+  /** Starts the cue; may return a function that stops it. `zeroAt` (host time) is when a timed cue's big moment lands. */
+  run(session: HostSession, opts: { title: string; sound: boolean; zeroAt?: number }): (() => void) | void;
+}
+
+/** Milliseconds from `d` to the next local midnight. */
+export function msToMidnight(d: Date): number {
+  const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  return next.getTime() - d.getTime();
+}
+
+/** "1:02:03", "4:05". */
+function hms(ms: number): string {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = String(t % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
 function wave(w: Partial<WaveParams> & { rgb: RGB }): Cue['run'] {
@@ -53,9 +72,10 @@ export function warmWash(ctx: CanvasRenderingContext2D, t: number): void {
   }
 }
 
-/** Seconds of countdown on the phones, and the lead before the first number. */
+/** Seconds of countdown on the phones, the lead before the first number, and how long the burst holds after zero. */
 const COUNT_FROM = 10;
 const COUNT_LEAD = 500;
+const COUNT_AFTER = 6000;
 
 export const CUES: Cue[] = [
   { name: 'Title card', ms: 6500, run: (session, { title }) => flipCards(session, textStunt(title, session.layout.aspect).image, 3000) },
@@ -68,9 +88,11 @@ export const CUES: Cue[] = [
   { name: 'Heart', ms: 5000, run: picture('Heart') },
   {
     name: 'New Year countdown',
-    ms: COUNT_LEAD + COUNT_FROM * 1000 + 6000,
+    ms: COUNT_LEAD + COUNT_FROM * 1000 + COUNT_AFTER,
     moment: true,
-    run: (session) => session.setProgram({ kind: 'countdown', at: session.now() + COUNT_LEAD + COUNT_FROM * 1000, from: COUNT_FROM, text: String(comingYear()) }),
+    unplaced: true,
+    timed: true,
+    run: (session, { zeroAt }) => session.setProgram({ kind: 'countdown', at: zeroAt ?? session.now() + COUNT_LEAD + COUNT_FROM * 1000, from: COUNT_FROM, text: String(comingYear()) }),
   },
   // About the length of a song; the wash keeps going until Stop.
   { name: 'First dance', ms: 240_000, moment: true, run: live(warmWash) },
@@ -81,12 +103,14 @@ const LOOP = CUES.filter((c) => !c.moment);
 export function showPanel(session: HostSession, director: Director): HTMLElement {
   const title = h('input', { type: 'text', id: 'show-title', maxlength: 16, value: 'HELLO', autocomplete: 'off' });
   const sound = h('input', { type: 'checkbox', id: 'show-sound', checked: true });
+  const midnight = h('input', { type: 'checkbox', id: 'show-midnight' });
   const now = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Ready when you are.');
   const bar = h('progress', { max: 1, value: 0, 'aria-label': 'Cue progress' });
   const list = h('ol.cues', {}, ...LOOP.map((c) => h('li', {}, c.name, h('span', {}, `${Math.round(c.ms / 1000)}s`))));
   const rec = recorder();
   let timer = 0;
   let ticker = 0;
+  let filming = 0;
   let stopCue: (() => void) | void;
   // The host walks away, and a sleeping display throttles the cue timers to a crawl.
   let release: (() => void) | undefined;
@@ -95,25 +119,33 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     release?.();
     release = undefined;
     clearTimeout(timer);
+    clearTimeout(filming);
     clearInterval(ticker);
     stopCue?.();
     stopCue = undefined;
     rec?.end();
     list.querySelectorAll('li').forEach((li) => li.removeAttribute('aria-current'));
-    now.textContent = 'Stopped.';
+    setText(now, 'Stopped.');
     bar.value = 0;
   };
 
-  /** Run one cue with its progress bar and status line; `done` runs when its time is up. */
-  const runCue = (cue: Cue, status: string, done: () => void) => {
+  /**
+   * Run one cue with its progress bar and status line; `done` runs when its time is up.
+   * A timed cue runs `ms` and lands its big moment at `zeroAt`; `status` can change as it goes.
+   */
+  const runCue = (cue: Cue, status: string | (() => string), done: () => void, { ms = cue.ms, zeroAt }: { ms?: number; zeroAt?: number } = {}) => {
     stopCue?.();
-    stopCue = cue.run(session, { title: title.value.trim().toUpperCase() || 'HELLO', sound: sound.checked });
-    now.textContent = status;
+    stopCue = cue.run(session, { title: title.value.trim().toUpperCase() || 'HELLO', sound: sound.checked, zeroAt });
+    const say = () => setText(now, typeof status === 'string' ? status : status());
+    say();
     const start = performance.now();
     clearInterval(ticker);
-    ticker = window.setInterval(() => (bar.value = Math.min(1, (performance.now() - start) / cue.ms)), 100);
+    ticker = window.setInterval(() => {
+      bar.value = Math.min(1, (performance.now() - start) / ms);
+      say();
+    }, 100);
     clearTimeout(timer);
-    timer = window.setTimeout(done, cue.ms);
+    timer = window.setTimeout(done, ms);
   };
 
   const play = (i: number) => {
@@ -122,9 +154,9 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     runCue(LOOP[k], `Now: ${LOOP[k].name} (${k + 1} of ${LOOP.length})`, () => play(i + 1));
   };
 
-  /** Take over the crowd for the show; false (and a hint) if no phone is placed. */
-  const takeOver = (): boolean => {
-    if (!requirePlaced(session, say)) return false;
+  /** Take over the crowd for the show; false (and a hint) if it needs placed phones and none are. */
+  const takeOver = (placed = true): boolean => {
+    if (placed && !requirePlaced(session, say)) return false;
     say('');
     director.run({ stop: halt });
     release = keepScreenOn();
@@ -138,14 +170,30 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   };
 
   const moment = (cue: Cue) => {
-    if (!takeOver()) return;
-    rec?.begin(cue.ms);
-    runCue(cue, `Now: ${cue.name}`, () => {
+    if (!takeOver(!cue.unplaced)) return;
+    const done = () => {
       clearInterval(ticker);
       bar.value = 1;
       rec?.end();
-      now.textContent = `${cue.name} done. The phones hold it until you press Stop.`;
-    });
+      setText(now, `${cue.name} done. The phones hold it until you press Stop.`);
+    };
+    if (!(cue.timed && midnight.checked)) {
+      rec?.begin(cue.ms);
+      return runCue(cue, `Now: ${cue.name}`, done);
+    }
+    const zeroAt = session.now() + msToMidnight(new Date());
+    // Film from just before the numbers start, not the whole wait.
+    const film = COUNT_FROM * 1000 + 2000;
+    filming = window.setTimeout(() => rec?.begin(zeroAt - session.now() + COUNT_AFTER), Math.max(0, zeroAt - film - session.now()));
+    runCue(
+      cue,
+      () => {
+        const left = zeroAt - session.now();
+        return left > COUNT_FROM * 1000 ? `Midnight in ${hms(left)}. The phones count down the last ${COUNT_FROM} seconds.` : `Now: ${cue.name}`;
+      },
+      done,
+      { ms: zeroAt - session.now() + COUNT_AFTER, zeroAt },
+    );
   };
 
   const { el, say } = panel(
@@ -154,6 +202,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     h('label.check', { for: 'show-sound' }, sound, h('span', {}, 'With sound')),
     list,
     h('div.row', { role: 'group', 'aria-label': 'Event moments' }, ...CUES.filter((c) => c.moment).map((c) => h('button.btn', { type: 'button', onclick: () => moment(c) }, c.name))),
+    h('label.check', { for: 'show-midnight' }, midnight, h('span', {}, 'Time the New Year countdown to end at midnight, by this computer’s clock')),
     rec?.el,
     bar,
     now,

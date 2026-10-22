@@ -131,6 +131,12 @@ export interface Moment {
   make(names: [string, string], aspect: number): Stunt;
 }
 
+/** What the host still has to type before a template can go on the crowd, or null when it is ready. */
+export function missingNames(m: Moment, [a, b]: [string, string]): string | null {
+  const what = m.names === 2 ? (!a && !b ? 'both names' : !a ? 'the first name' : !b ? 'the second name' : null) : m.names === 1 && !a ? 'a name' : null;
+  return what && `Type ${what} for “${m.name}”.`;
+}
+
 /** Wide rooms read one long line; deep rooms stack the words. */
 const wide = (aspect: number) => aspect >= 1.6;
 

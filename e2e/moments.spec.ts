@@ -53,8 +53,22 @@ test('a New Year countdown runs on every phone in step, and the host keeps a rec
   expect(download.suggestedFilename()).toMatch(/^swarm-moment-\d{4}-\d\d-\d\d-\d{4}\.webm$/);
   await host.screenshot({ path: 'test-results/host-moment.png' });
 
-  // A card-stunt template with the couple's names flips on the crowd like any other picture.
+  // Timed for midnight: the host sees how long is left (unless this runs in the last half minute of the day).
+  const now = new Date();
+  if (new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime() > 30_000) {
+    await host.getByLabel(/end at midnight/).check();
+    await host.getByRole('button', { name: 'New Year countdown' }).click();
+    await expect(host.getByRole('status').filter({ hasText: /^Midnight in \d/ })).toBeVisible();
+    await host.getByRole('button', { name: 'Stop', exact: true }).click();
+  }
+
+  // A card-stunt template with the couple's names flips on the crowd like any other picture,
+  // but only once the names are typed: the placeholder never goes on the crowd.
   await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('button', { name: 'Names with a heart' }).click();
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  await expect(host.getByText('Type both names for “Names with a heart”.')).toBeVisible();
+  await expect(host.getByLabel('Name (birthday, couple)')).toBeFocused();
   await host.getByLabel('Name (birthday, couple)').fill('Ana');
   await host.getByLabel('Second name (couple)').fill('Ben');
   await host.getByRole('button', { name: 'Names with a heart' }).click();
