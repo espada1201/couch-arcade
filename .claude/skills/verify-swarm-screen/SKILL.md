@@ -53,7 +53,7 @@ adds a phone on bad Wi-Fi through `impair.mjs`, a TCP proxy that caps bandwidth 
 (`getByRole('tab', { name: /Poll/ })`, `'Join the swarm'`, `'Scan the room'`) plus the app's
 stable hooks: `[data-room]`, `.count`, phone `.status` / `.label` / `.screen`, `tr[data-seat]` with
 `data-x/y`, `data-raw-x/y`, `data-source`, `.nowplaying[data-state|data-anchor|data-pos]`,
-`.follow-text`, `.follow-picture`, `.score`.
+`.follow-text`, `.follow-picture`, `.score`; a host panel's message is `.notice > .note` (status) or `.notice > .alert` (something to fix).
 To add a check: add a function to `CHECKS`, add its feature file, keep it driving the user path.
 
 ## Evidence

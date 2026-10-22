@@ -175,6 +175,8 @@ async function openRoom(run, { sims = SIMS, transport = opt.transport, camera = 
   return room;
 }
 
+/** The host panel's current message: its status line, or the alert that replaces it when something needs fixing. */
+const SAID = '.panel-body .notice > :is(.note, .alert):not(:empty)';
 const tab = (room, name) => room.host.getByRole('tab', { name: new RegExp(name) }).click();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -936,7 +938,7 @@ const CHECKS = {
       await radio.check();
       await room.host.getByRole('button', { name: 'Show on phones' }).click();
       await sleep(6000);
-      const said = await room.host.locator('.panel-body > .note[role=status]').last().textContent();
+      const said = await room.host.locator(SAID).last().textContent();
       run.note('host status with real recogniser', said);
       run.inconclusive('headless: no microphone speech and no speech service, so real captions cannot be proven here');
     }
@@ -1211,7 +1213,7 @@ const CHECKS = {
       await expect(host.getByText(/Choose a video file to switch to it/)).toBeVisible({ timeout: 5000 });
       waits = true;
     } catch {}
-    run.note('host status after picking Video with no file', await host.locator('.panel-body > .note[role=status]').last().textContent().catch(() => null));
+    run.note('host status after picking Video with no file', await host.locator(SAID).last().textContent().catch(() => null));
     await run.shot(host, 'host-live-video-no-file');
     if (!waits) run.issue('switching to Video while live, before a file is chosen, does not keep the broadcast going');
     counts['Video, no file yet'] = await perPhone();
@@ -1633,7 +1635,7 @@ async function followPicture(run, source, ok, minSpread) {
   try {
     await expect(host.getByText(ok)).toBeVisible({ timeout: 15_000 });
   } catch {
-    const said = await host.locator('.panel-body > .note[role=status]').last().textContent();
+    const said = await host.locator(SAID).last().textContent();
     run.note('host status', said);
     return run.inconclusive(`no frames in this browser: ${said}`);
   }
