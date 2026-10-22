@@ -146,7 +146,10 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     else panelHost.tabIndex = 0;
   };
   new MutationObserver(syncPanelStop).observe(panelHost, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'tabindex'] });
-  const select = (id: string, focus = false) => {
+  let current = '';
+  /** `from`: the tab that sent the host here with "Go to …", so the way back is one press. */
+  const select = (id: string, focus = false, from: string | null = null) => {
+    current = id;
     for (const b of tablist.querySelectorAll<HTMLButtonElement>('button')) {
       const on = b.dataset.tab === id;
       b.setAttribute('aria-selected', String(on));
@@ -155,13 +158,21 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       if (on) panelHost.setAttribute('aria-labelledby', b.id);
     }
     if (!panels.has(id)) panels.set(id, tabs.find((t) => t[0] === id)![2]());
-    panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), panels.get(id)!);
+    const back = from
+      ? h(
+          'div.back-to',
+          {},
+          h('button.btn.small', { type: 'button', onclick: () => select(from, true) }, `Back to ${tabs.find((t) => t[0] === from)![1]}`),
+          h('span', {}, ' when you are done here.'),
+        )
+      : null;
+    panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), ...(back ? [back] : []), panels.get(id)!);
     // Every tab opens at its top, not wherever the last one was scrolled to.
     panelHost.scrollTop = 0;
     syncPanelStop();
   };
   // A panel can send the host to another tab ("Go to Locate"); the tab strip lives here.
-  panelHost.addEventListener(GOTO_TAB, (e) => select((e as CustomEvent<string>).detail, true));
+  panelHost.addEventListener(GOTO_TAB, (e) => select((e as CustomEvent<string>).detail, true, current));
   tabs.forEach(([id, label], i) =>
     tablist.append(
       h(

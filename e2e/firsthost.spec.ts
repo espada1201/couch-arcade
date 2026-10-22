@@ -486,3 +486,23 @@ test('keyboard: Enter on a tray number then Enter on the map puts that phone on 
   await expect(host.getByRole('status').filter({ hasText: 'is on the map. Arrows move it.' })).toBeAttached();
   expect(errors).toEqual([]);
 });
+
+test('Go to Locate from Card stunt offers the way back, and a started camera puts Scan under the keyboard', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');
+  await joinPhone(context, code, 0, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.locator('.needs').getByRole('button', { name: 'Go to Locate' }).click();
+  await expect(host.getByRole('tab', { name: /Locate/ })).toHaveAttribute('aria-selected', 'true');
+  await host.getByRole('button', { name: 'Start simulated camera' }).click();
+  await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
+  await host.keyboard.press('Enter');
+  await expect(host.getByText(/Placed 1 of 1 phone/)).toBeVisible({ timeout: 20000 });
+  await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
+  await host.getByRole('button', { name: 'Back to Card stunt' }).click();
+  await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
+  // Picking a tab directly carries no way back.
+  await host.getByRole('tab', { name: /Locate/ }).click();
+  await expect(host.getByRole('button', { name: /^Back to/ })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

@@ -109,6 +109,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       scanBtn.disabled = false;
       scanHint.hidden = true;
       startBtn.textContent = 'Restart camera';
+      // The preview pushes Scan down; the next step should be in view and under the keyboard.
+      scanBtn.focus();
       void listCameras();
     } catch (e) {
       source?.stop();
@@ -136,6 +138,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       clearInterval(tick);
       progress.hidden = true;
       scanBtn.disabled = false;
+      // Disabling the button dropped keyboard focus to the page; hand it back.
+      if (document.activeElement === document.body) scanBtn.focus();
       scanning = false;
     };
     // Something else took the crowd mid-scan: drop the burst rather than decode it and blank the screens.
