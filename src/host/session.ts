@@ -6,7 +6,7 @@ import type { Track } from '../core/speaker';
 import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
-import { parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
+import { fits, parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
 import { randomId, type HostEnd, type Link, type ServerState, type Transport } from '../net/transport';
 import { forget, loadJson, saveJson } from '../storage';
 
@@ -164,8 +164,10 @@ export class HostSession {
    * Set what every phone runs. `frame`: a picture frame, one of a stream each replacing the last.
    * A phone gets the next frame only once it confirms the one before, so on a slow link it skips
    * to the newest instead of falling further behind, however much the network buffers.
+   * Nothing changes when the program is too big for one message.
    */
   setProgram(p: Program | ((seat: number) => Program), { frame = false } = {}): void {
+    if (typeof p !== 'function' && !fits({ t: 'program', program: p, ack: 0 })) return;
     this.programFor = typeof p === 'function' ? p : () => p;
     // Programs change many times a second (live screen, games); they are not roster changes,
     // so no persistence or listener churn here. The stage reads programOf() every frame.
@@ -281,7 +283,17 @@ export class HostSession {
   }
 
   private sendTo(s: Seat, m: HostMsg): void {
-    s.link?.send(m);
+    if (s.link) this.deliver(s.link, m);
+  }
+
+  /**
+   * Every message to a phone passes here or through the size check in setProgram: one too big
+   * for the transport (the relay's 64 KB, a data channel's limit) is dropped, never sent to fail.
+   */
+  private deliver(link: Link, m: HostMsg): boolean {
+    if (!fits(m)) return false;
+    link.send(m);
+    return true;
   }
 
   /** The phone confirmed frame `n`: the newest held one goes now. */
@@ -293,12 +305,10 @@ export class HostSession {
     if (next) this.sendTo(s, next);
   }
 
-  /** Send one phone a message of its own (file chunks); false when it is offline. */
+  /** Send one phone a message of its own (file chunks); false when it is offline or the message too big. */
   send(seat: number, m: HostMsg): boolean {
-    const s = this.seats.get(seat);
-    if (!s?.link) return false;
-    s.link.send(m);
-    return true;
+    const link = this.seats.get(seat)?.link;
+    return !!link && this.deliver(link, m);
   }
 
   /** Close links that went quiet: a phone pings every 2 s, and a new link says hello at once. */
@@ -322,7 +332,7 @@ export class HostSession {
         if (me) return;
         me = conn.seat = this.claim(m.token, link);
         if (!me) {
-          link.send({ t: 'full' } satisfies HostMsg);
+          this.deliver(link, { t: 'full' });
           return;
         }
         this.sendTo(me, { t: 'welcome', seat: me.seat, room: this.room });
@@ -336,7 +346,7 @@ export class HostSession {
       if (!me) return;
       if (m.t === 'ping') {
         const h1 = this.now();
-        link.send({ t: 'pong', c0: m.c0, h1, h2: this.now() } satisfies HostMsg);
+        this.deliver(link, { t: 'pong', c0: m.c0, h1, h2: this.now() });
         if (m.u !== undefined) me.sync = m.u;
       } else if (m.t === 'tap') {
         const now = this.now();
@@ -377,7 +387,7 @@ export class HostSession {
         if (s.link && s.link !== link) {
           // The same phone opened the room again (new tab); the newest wins and the old one stands down.
           const old = s.link;
-          old.send({ t: 'replaced' } satisfies HostMsg);
+          this.deliver(old, { t: 'replaced' });
           // Give the message time to arrive: WebRTC drops queued data on an immediate close.
           setTimeout(() => old.close(), 400);
         }

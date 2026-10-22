@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HostSession } from '../src/host/session';
 import { BasicLink } from '../src/net/transport';
-import type { HostMsg } from '../src/core/protocol';
+import { MAX_MESSAGE_BYTES, fits, type HostMsg } from '../src/core/protocol';
 import { memoryStorage, testTransport } from './harness';
 
 /** Several phones against a real HostSession. */
@@ -224,6 +224,32 @@ describe('untrusted phones', () => {
     next.say({ t: 'hello', token: 'bbb' });
     expect(next.inbox[0]).toMatchObject({ t: 'welcome' });
     expect(session.online).toHaveLength(2);
+  });
+});
+
+describe('message size', () => {
+  it('never hands a link a message over the limit, whatever sends it', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    a.say({ t: 'hello', token: 'aaa' });
+    const before = a.inbox.length;
+    const big = 'x'.repeat(MAX_MESSAGE_BYTES);
+    session.setProgram({ kind: 'follow', view: { show: 'card', text: big, n: 1, of: 1 } });
+    expect(a.inbox.length).toBe(before);
+    // The program in place stays, so a late joiner isn't handed the oversized one either.
+    expect(session.programOf(0)).toEqual({ kind: 'lobby' });
+    session.setProgram(() => ({ kind: 'follow', view: { show: 'card', text: big, n: 1, of: 1 } }));
+    expect(a.inbox.length).toBe(before);
+    expect(session.send(0, { t: 'chunk', id: 'f', i: 0, n: 1, d: big })).toBe(false);
+    expect(a.inbox.length).toBe(before);
+    expect(session.send(0, { t: 'chunk', id: 'f', i: 0, n: 1, d: 'AAAA' })).toBe(true);
+  });
+
+  it('judges size in UTF-8 bytes', () => {
+    expect(fits({ s: 'a'.repeat(MAX_MESSAGE_BYTES - 20) })).toBe(true);
+    expect(fits({ s: 'é'.repeat(MAX_MESSAGE_BYTES / 2) })).toBe(false);
+    expect(fits({ s: 'é'.repeat(MAX_MESSAGE_BYTES / 2 - 20) })).toBe(true);
   });
 });
 

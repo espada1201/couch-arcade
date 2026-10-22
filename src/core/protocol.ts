@@ -85,6 +85,12 @@ export function payloadBytes(envelope: number): number {
   return Math.floor((MAX_MESSAGE_BYTES - envelope) / 4) * 3;
 }
 
+/** Whether `m` fits in one message; short ones are judged without encoding (UTF-8 takes at most 3 bytes a char). */
+export function fits(m: unknown): boolean {
+  const json = JSON.stringify(m);
+  return json.length * 3 <= MAX_MESSAGE_BYTES || new TextEncoder().encode(json).length <= MAX_MESSAGE_BYTES;
+}
+
 /** Size of a message on the wire (UTF-8 JSON). */
 export function messageBytes(m: unknown): number {
   return new TextEncoder().encode(JSON.stringify(m)).length;

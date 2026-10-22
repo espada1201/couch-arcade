@@ -3,7 +3,8 @@
 // shared screen, the host's camera, typed text cards, and live captions of the host mic.
 import { NO_CAPTIONS, captionLines, deckFrom, heard, step, type Deck, type FollowView } from '../core/follow';
 import { FRAME_BUDGET, FrameGate, dataUrlBytes, encodeWithin, lumaOf } from '../core/frames';
-import { MAX_MESSAGE_BYTES, messageBytes, type HostMsg } from '../core/protocol';
+import type { Program } from '../core/effects';
+import { fits } from '../core/protocol';
 import { canvas2d } from '../ui/canvas';
 import { errorText, h, plural, segmented, setText, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
@@ -101,11 +102,11 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
 
   /** Send a view to every phone (and to late joiners when they arrive) and mirror it here. */
   const show = (view: FollowView) => {
-    const msg: HostMsg = { t: 'program', program: { kind: 'follow', view } };
-    // Never hand the transport more than one message can carry (frames and cards are sized to fit).
-    if (messageBytes(msg) > MAX_MESSAGE_BYTES) return;
+    const program: Program = { kind: 'follow', view };
+    // Frames and cards are sized to fit one message; the session drops one that doesn't, so don't preview it.
+    if (!fits({ t: 'program', program })) return;
     // A phone still busy with an older frame skips to the newest once it has it.
-    session.setProgram(msg.program, { frame: view.show === 'picture' });
+    session.setProgram(program, { frame: view.show === 'picture' });
     preview.show(view);
   };
 
