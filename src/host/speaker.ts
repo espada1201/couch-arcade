@@ -1,6 +1,6 @@
 // Party Speaker: the host picks a song, every phone downloads it over the room's own
 // link, and they all play it in step on the shared clock.
-import { audioFileProblem, clockTime, durationProblem, PAUSED, playingAt, positionAt, schedule, type Command, type SpeakerProgram, type Track } from '../core/speaker';
+import { audioFileProblem, clockTime, durationProblem, MAX_TRACK_SECONDS, PAUSED, playingAt, positionAt, schedule, type Command, type SpeakerProgram, type Track } from '../core/speaker';
 import { randomId } from '../net/transport';
 import { h, plural, setText, slider } from '../ui/dom';
 import type { Director, Hold } from './director';
@@ -91,7 +91,7 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     const f = file.files?.[0];
     if (f) void load(f);
   });
-  const drop = h('label.file.drop', { for: 'speaker-file' }, 'Pick a song file (MP3 or M4A; WAV and OGG work too), up to 12 minutes, or drop it here', file);
+  const drop = h('label.file.drop', { for: 'speaker-file' }, `Pick a song file (MP3 or M4A; WAV and OGG work too), up to ${MAX_TRACK_SECONDS / 60} minutes, or drop it here`, file);
   drop.addEventListener('dragover', (e) => {
     e.preventDefault();
     drop.classList.add('over');

@@ -84,19 +84,20 @@ export class PartySpeaker {
     const asm = this.asm;
     if (!asm || m.id !== this.track?.id) return;
     asm.add(m.i, m.d);
-    if (asm.done) void this.decode(asm);
-    else this.ack();
+    if (!asm.done) return this.ack();
+    // Joined, then let go of, before the decode: the song is held once, not twice, while it unpacks.
+    this.asm = null;
+    void this.decode(asm.bytes());
   }
 
-  private async decode(asm: Reassembler): Promise<void> {
+  private async decode(bytes: Uint8Array): Promise<void> {
     const track = this.track!;
-    this.asm = null;
     this.load = 'decoding';
     this.ack();
     const ctx = this.speaker.context;
     try {
       if (!ctx) throw new Error('No audio on this phone');
-      const buffer = await ctx.decodeAudioData(asm.bytes().buffer as ArrayBuffer);
+      const buffer = await ctx.decodeAudioData(bytes.buffer as ArrayBuffer);
       if (this.track !== track) return;
       this.buffer = buffer;
       this.load = 'ready';

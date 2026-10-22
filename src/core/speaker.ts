@@ -190,11 +190,13 @@ export function channelFor(pos: Point | null, spread: boolean): Channel {
 export const MAX_TRACK_BYTES = 25 * 1024 * 1024;
 
 /**
- * Every phone holds the whole song decoded in memory, about 10 MB a minute (stereo, 32-bit
- * float at 44.1 kHz), however small the file. Past 12 minutes (about 120 MB) older phones
- * start to fail, so a longer track is refused, using the duration the host's probe reads.
+ * Every phone holds the whole song decoded in memory, however small the file: 48 kHz (most phones'
+ * output rate) x 2 channels x 4-byte floats is 23 MB a minute. Older phones start to fail past about
+ * 120 MB, so a track over 5 minutes (115 MB) is refused, using the duration the host's probe reads.
+ * Decoding to one channel would not help: decodeAudioData gives every channel of the file whatever
+ * the context, so the stereo copy is still held while it is mixed down.
  */
-export const MAX_TRACK_SECONDS = 12 * 60;
+export const MAX_TRACK_SECONDS = 5 * 60;
 
 const AUDIO_EXT = /\.(mp3|m4a|wav|ogg)$/i;
 

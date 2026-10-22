@@ -237,11 +237,15 @@ describe('track files', () => {
     expect(audioFileProblem('big.wav', '', 52_000_000)).toMatch(/49\.6 MB.*25 MB/);
   });
 
-  it('refuses tracks over 12 minutes, because every phone holds the whole song unpacked', () => {
-    expect(MAX_TRACK_SECONDS).toBe(12 * 60);
-    expect(durationProblem(12 * 60)).toBeNull();
+  it('refuses tracks over 5 minutes, because every phone holds the whole song unpacked', () => {
+    expect(durationProblem(5 * 60)).toBeNull();
     expect(durationProblem(3 * 60 + 30)).toBeNull();
-    expect(durationProblem(15 * 60 + 20)).toMatch(/15:20.*12 minutes/);
+    expect(durationProblem(5 * 60 + 1)).toMatch(/5:01.*5 minutes/);
+    expect(durationProblem(15 * 60 + 20)).toMatch(/15:20.*5 minutes/);
+  });
+
+  it('the longest track a phone accepts decodes to no more than 120 MB (48 kHz, stereo, 32-bit float)', () => {
+    expect(MAX_TRACK_SECONDS * 48_000 * 2 * 4).toBeLessThanOrEqual(120e6);
   });
 
   it('formats track times as m:ss', () => {
