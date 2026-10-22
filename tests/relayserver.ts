@@ -16,8 +16,8 @@ export function freePort(): Promise<number> {
 }
 
 /** Runs server/relay.mjs on `port` and resolves once it says it is running. */
-export function startRelay(port: number): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [SCRIPT], { env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'inherit'] });
+export function startRelay(port: number, env: Record<string, string> = {}): Promise<ChildProcess> {
+  const child = spawn(process.execPath, [SCRIPT], { env: { ...process.env, ...env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'inherit'] });
   return new Promise((resolve, reject) => {
     child.once('exit', (code) => reject(new Error(`relay exited with ${code}`)));
     child.stdout!.on('data', (d) => String(d).includes('running') && resolve(child));
@@ -28,10 +28,10 @@ export function startRelay(port: number): Promise<ChildProcess> {
  * A phone on the relay over a bare TCP socket, so a test can stop reading (`pause`) and let the
  * relay's socket to it back up, as a phone on weak Wi-Fi does. Sends and receives JSON text frames.
  */
-export async function rawPhone(port: number, room: string) {
+export async function rawPhone(port: number, room: string, query = 'role=phone') {
   const sock = connect(port, '127.0.0.1');
   sock.write(
-    `GET /relay?room=${room}&role=phone HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +
+    `GET /relay?room=${room}&${query} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +
       `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`,
   );
   const got: unknown[] = [];

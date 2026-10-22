@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { freePort, startRelay } from './relayserver';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { freePort, rawPhone, startRelay } from './relayserver';
 
 let child: ChildProcess;
 let port = 0;
@@ -73,5 +73,35 @@ describe('relay server', () => {
     expect(await upgrade('room=MINE&role=host')).toBe(400);
     expect(await upgrade('room=MINE&role=phone')).toBe(101);
     sock.destroy();
+  });
+});
+
+describe('relay heartbeat', () => {
+  it('closes a socket that stops answering pings, host or phone, and keeps one that answers', async () => {
+    const hbPort = await freePort();
+    const relay = await startRelay(hbPort, { RELAY_HEARTBEAT_MS: '200' });
+    try {
+      const host = await rawPhone(hbPort, 'BEAT', 'role=host&key=beatkey123');
+      const deaf = await rawPhone(hbPort, 'BEAT');
+      const live = new WebSocket(`ws://127.0.0.1:${hbPort}/relay?room=BEAT&role=phone`);
+      await new Promise((r) => (live.onopen = r));
+      let liveClosed = false;
+      live.onclose = () => (liveClosed = true);
+      // The bare sockets never answer a ping: gone within two beats. The host going closes its phones.
+      await vi.waitFor(() => expect(deaf.closed() && host.closed()).toBe(true), { timeout: 3000 });
+      await vi.waitFor(() => expect(liveClosed).toBe(true), { timeout: 3000 });
+      // A browser-like socket answers pings and stays as long as its room exists.
+      const host2 = new WebSocket(`ws://127.0.0.1:${hbPort}/relay?room=BEAT2&role=host&key=beatkey123`);
+      await new Promise((r) => (host2.onopen = r));
+      const phone2 = new WebSocket(`ws://127.0.0.1:${hbPort}/relay?room=BEAT2&role=phone`);
+      await new Promise((r) => (phone2.onopen = r));
+      await new Promise((r) => setTimeout(r, 1000));
+      expect(phone2.readyState).toBe(WebSocket.OPEN);
+      expect(host2.readyState).toBe(WebSocket.OPEN);
+      host2.close();
+      phone2.close();
+    } finally {
+      relay.kill();
+    }
   });
 });

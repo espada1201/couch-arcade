@@ -96,6 +96,7 @@ server.on('upgrade', (req, socket, head) => {
   if (status) return refuse(socket, status);
   wss.handleUpgrade(req, socket, head, (ws) => {
     ws.on('error', () => ws.terminate());
+    ws.on('pong', () => (ws.missed = false));
     // Re-check: the room may have changed while the handshake completed.
     if (admit(room, role, key)) return ws.close(1013, 'refused');
     if (role === 'host') attachHost(ws, room, key);
@@ -204,6 +205,20 @@ function attachPhone(ws, r) {
     r.host.send(JSON.stringify({ t: 'close', id }));
   });
 }
+
+// A phone that walked out of Wi-Fi range leaves its socket open with nobody behind it. Ping every
+// socket; one that hasn't answered the last ping by the next is gone, and closing it lets the host
+// (or the phones, if it was the host) know.
+const HEARTBEAT_MS = Number(process.env.RELAY_HEARTBEAT_MS) || 15_000;
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.missed) ws.terminate();
+    else {
+      ws.missed = true;
+      ws.ping();
+    }
+  }
+}, HEARTBEAT_MS);
 
 server.listen(PORT, () => {
   console.log(`\n  Swarm Screen is running.\n`);

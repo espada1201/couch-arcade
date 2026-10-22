@@ -33,6 +33,17 @@ export interface Seat {
 
 type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
 
+interface Conn {
+  link: Link;
+  heard: number;
+  seat: Seat | null;
+}
+
+/** A seated phone the host hasn't heard from for this long has gone (a Wi-Fi dead spot, a dead battery). */
+const SILENT_MS = 15_000;
+/** A link that hasn't said hello by now never will. */
+const HELLO_MS = 10_000;
+
 /**
  * 'source': raw positions are camera or seat-grid coordinates, stretched to fill the room.
  * 'room': positions were edited by hand and are used exactly as placed.
@@ -76,6 +87,8 @@ export class HostSession {
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
+  /** Every open link, seated or not, with when the host last heard from it. */
+  private conns = new Set<Conn>();
   /** Numbers frames for their acks. */
   private frames = 0;
   /** Phones can reach the room only while the room server is 'up'. */
@@ -109,6 +122,7 @@ export class HostSession {
 
   async open(): Promise<void> {
     this.end = await this.transport.host(this.room);
+    setInterval(() => this.sweep(), 1000);
     this.end.onLink((link) => this.accept(link));
     this.end.onServer((state) => {
       this.server = state;
@@ -283,15 +297,24 @@ export class HostSession {
     return true;
   }
 
+  /** Close links that went quiet: a phone pings every 2 s, and a new link says hello at once. */
+  sweep(): void {
+    const now = this.now();
+    for (const c of this.conns) if (now - c.heard > (c.seat ? SILENT_MS : HELLO_MS)) c.link.close();
+  }
+
   private accept(link: Link): void {
+    const conn: Conn = { link, heard: this.now(), seat: null };
+    this.conns.add(conn);
     let me: Seat | null = null;
     link.onMessage((raw) => {
+      conn.heard = this.now();
       const m = parsePhoneMsg(raw);
       if (!m) return;
       if (m.t === 'hello') {
         // One seat per connection, so a single client can't fill the room.
         if (me) return;
-        me = this.claim(m.token, link);
+        me = conn.seat = this.claim(m.token, link);
         if (!me) {
           link.send({ t: 'full' } satisfies HostMsg);
           return;
@@ -322,6 +345,7 @@ export class HostSession {
       }
     });
     link.onClose(() => {
+      this.conns.delete(conn);
       if (me && me.link === link) {
         me.link = null;
         this.changed();

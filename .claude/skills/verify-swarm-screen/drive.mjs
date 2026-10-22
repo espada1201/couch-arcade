@@ -311,6 +311,7 @@ async function slowPhone(run, room, impair, sim = '0.9,0.5') {
   await expect(page.locator('.status')).toContainText('Seat', { timeout: 20_000 });
   return {
     page,
+    proxy,
     sockets: () => page.evaluate(() => window.__ws.sockets),
     close: () => {
       proxy.dropAll();
@@ -1191,6 +1192,26 @@ const CHECKS = {
     await expect(room.host.locator('.score')).toContainText(/[0-4] still in|last one standing/, { timeout: 30_000 });
     run.note('score after a burn', await room.host.locator('.score').textContent());
     await run.shot(room.host, 'host-potato');
+  },
+
+  async ghost(run) {
+    // A phone walks into a Wi-Fi dead spot: its packets vanish, no FIN, no reset. The host must
+    // stop counting it soon, not a minute later.
+    const room = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5]] });
+    const { host } = room;
+    const { proxy, close } = await slowPhone(run, room, {});
+    try {
+      await expect(host.locator('.count')).toHaveText(/^3 phones /, { timeout: 15_000 });
+      proxy.hole = true;
+      const t = Date.now();
+      await expect(host.locator('.count')).toHaveText(/^2 phones /, { timeout: 90_000 });
+      const s = Math.round((Date.now() - t) / 1000);
+      run.note('dead-spot phone dropped from the count after s', s);
+      await run.shot(host, 'host-after-ghost');
+      if (s > 25) run.issue(`the host counted a phone in a dead spot for ${s} s`);
+    } finally {
+      close();
+    }
   },
 
   async 'host-moved'(run) {

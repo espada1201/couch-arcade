@@ -13,7 +13,7 @@ function harness() {
     const inbox: HostMsg[] = [];
     const hostSide = new BasicLink((m) => inbox.push(m as HostMsg));
     accept(hostSide);
-    return { inbox, say: (m: unknown) => hostSide.deliver(m), drop: () => hostSide.ended() };
+    return { inbox, say: (m: unknown) => hostSide.deliver(m), drop: () => hostSide.ended(), onClose: (cb: () => void) => hostSide.onClose(cb) };
   };
   return { session, phone, server, tick: (ms: number) => (clock += ms) };
 }
@@ -158,6 +158,36 @@ describe('pings', () => {
     a.say({ t: 'ping', c0: 2, u: 7 });
     expect(a.inbox.at(-1)).toMatchObject({ t: 'pong', c0: 2 });
     expect(session.seats.get(0)!.sync).toBe(7);
+  });
+});
+
+describe('links that go quiet', () => {
+  it('drops a seated phone the host has not heard from for 15 s, and keeps one that pings', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const [quiet, chatty] = [phone(), phone()];
+    quiet.say({ t: 'hello', token: 'quiet' });
+    chatty.say({ t: 'hello', token: 'chatty' });
+    for (let s = 0; s < 16; s++) {
+      tick(1000);
+      chatty.say({ t: 'ping', c0: s });
+      session.sweep();
+    }
+    expect(session.online.map((x) => x.token)).toEqual(['chatty']);
+  });
+
+  it('closes a link that never says hello', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const mute = phone();
+    let closed = false;
+    mute.onClose(() => (closed = true));
+    tick(9000);
+    session.sweep();
+    expect(closed).toBe(false);
+    tick(2000);
+    session.sweep();
+    expect(closed).toBe(true);
   });
 });
 
