@@ -107,9 +107,9 @@ function verdict(s: PollState, counts: number[], pct: number[]): string {
 }
 
 export function pollPanel(session: HostSession, director: Director): HTMLElement {
-  const question = h('input', { type: 'text', id: 'poll-q', maxlength: 80, placeholder: 'Where should we eat?', autocomplete: 'off' });
+  const question = h('input', { type: 'text', id: 'poll-q', maxlength: 80, placeholder: 'e.g. Where should we eat?', autocomplete: 'off' });
   const fields = Array.from({ length: MAX_OPTIONS }, (_, i) =>
-    h('input', { type: 'text', id: `poll-opt-${i}`, maxlength: 24, placeholder: ['Yes', 'No', 'Optional', 'Optional'][i], autocomplete: 'off', required: i < MIN_OPTIONS }),
+    h('input', { type: 'text', id: `poll-opt-${i}`, maxlength: 24, placeholder: ['e.g. Yes', 'e.g. No', 'Optional answer', 'Optional answer'][i], autocomplete: 'off', required: i < MIN_OPTIONS }),
   );
   // Answers fill in order: an optional answer opens once the one before it has text.
   const fillInOrder = () => fields.forEach((f, i) => (f.disabled = i >= MIN_OPTIONS && !f.value.trim() && !fields[i - 1].value.trim()));
