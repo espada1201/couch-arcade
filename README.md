@@ -23,11 +23,11 @@ floor plan. The host header shows how tightly phones are synced ("in sync to ±N
 1. Install Homebrew from https://brew.sh, then open Terminal and run `brew install node`.
 2. Download this repo (green **Code** button, **Download ZIP**) and unzip it.
 3. In Terminal, type `cd ` (with a space), drag the unzipped folder onto the window, press Return.
-4. Run `npm install && npm start`.
-5. Open the printed `http://localhost:4321/` link and click **Host a room**. Phones on the same Wi-Fi scan the QR code.
+4. Run `npm install && npm start`. The first start takes a minute. Click **Allow** if macOS asks about incoming connections.
+5. In Chrome, open the printed `http://localhost:4321/` link and click **Host a room**. Phones on the same Wi-Fi scan the QR code. If the venue Wi-Fi blocks devices, use a phone hotspot or your own router.
 
 `npm start` serves the app plus a tiny Wi-Fi relay, so the room works with no internet. Live
-captions are the exception: the browser sends speech to its maker's online service. Plain http has
+captions are the exception. They need Chrome or Edge and an internet connection, because the browser sends speech to its maker's online service. Plain http has
 no screen wake lock, so phones loop a tiny silent video to stay awake; if one still dims, set Auto-Lock to Never.
 
 ## Hosting it online

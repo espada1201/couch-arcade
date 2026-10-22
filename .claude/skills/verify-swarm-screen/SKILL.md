@@ -76,6 +76,7 @@ Cleanup leaves `<out>` in place; that is the proof. Delete it yourself when done
 
 ## Gotchas
 
+- **Never `pkill`, `killall` or `pkill -f`: other agents run servers on this machine. Stop only the PIDs you started** (`drive.mjs` does this for its own server; if you launched `npm start` yourself, keep its PID and `kill` that one).
 - Chromium is launched with `--no-proxy-server`: an environment HTTPS proxy otherwise answers the
   phones' LAN-address WebSocket with 403 and phones sit at `disconnected`.
 - Headless background tabs get no animation frames; a phone that must react to clicks is brought to
