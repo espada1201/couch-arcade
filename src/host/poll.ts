@@ -44,6 +44,12 @@ export function savedPoll(room: string): PollState | null {
 /** Run a poll on the crowd until the director moves on (or resume one from `from`). `show` hears every new state. */
 export function runPoll(session: HostSession, director: Pick<Director, 'run'>, question: string, options: string[], show: (s: PollState) => void, anon = false, from?: PollState): PollRun {
   const online = () => new Set(session.online.map((x) => x.seat));
+  // Which phone cast each vote: a seat handed to a new phone (all seats taken) must not inherit it.
+  const voters = new Map<number, string>();
+  for (const seat of from?.votes.keys() ?? []) {
+    const token = session.seats.get(seat)?.token;
+    if (token) voters.set(seat, token);
+  }
   const crowd = runCrowd<PollState>(session, director, from ?? startPoll(question, options, anon), {
     program: (s) => {
       const counts = liveTally(s, online());
@@ -58,10 +64,22 @@ export function runPoll(session: HostSession, director: Pick<Director, 'run'>, q
         anon: s.anon,
       });
     },
-    input: { vote: (s, seat, m) => pollReduce(s, { type: 'vote', seat, choice: m.choice }) },
+    input: {
+      vote: (s, seat, m) => {
+        const token = session.seats.get(seat)?.token;
+        if (token) voters.set(seat, token);
+        return pollReduce(s, { type: 'vote', seat, choice: m.choice });
+      },
+    },
     // A vote outlives a dropped connection; only a phone the host forgets loses it. Joins, leaves and moves reshape the count and the chart.
     roster: (s) => {
-      for (const seat of s.votes.keys()) if (!session.seats.has(seat)) s = pollReduce(s, { type: 'leave', seat });
+      for (const seat of s.votes.keys()) {
+        const token = session.seats.get(seat)?.token;
+        if (!token || (voters.has(seat) && voters.get(seat) !== token)) {
+          voters.delete(seat);
+          s = pollReduce(s, { type: 'leave', seat });
+        }
+      }
       return s;
     },
     show: (s) => {

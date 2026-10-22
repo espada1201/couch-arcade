@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MAX_IDS } from '../src/core/blinkcode';
 import { POLL_COLORS } from '../src/core/poll';
 import { runPoll, savedPoll } from '../src/host/poll';
 import { lastProgram, memoryStorage, room } from './harness';
@@ -38,6 +39,24 @@ describe('room poll on the host', () => {
     expect(ballot(late.inbox).phase).toBe('open');
     late.say({ t: 'vote', choice: 1 });
     expect(poll.counts()).toEqual([1, 2]);
+  });
+
+  it('a seat handed to a new phone once the room is full does not inherit the old phone’s vote', async () => {
+    const r = await room([0]);
+    const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {});
+    const gone = r.join('gone');
+    const seat = [...r.session.seats.values()].find((x) => x.token === 'gone')!.seat;
+    gone.say({ t: 'vote', choice: 1 });
+    gone.drop();
+    poll.dispatch({ type: 'reveal' });
+    expect(poll.counts()).toEqual([0, 1]);
+    poll.dispatch({ type: 'reopen' });
+    for (let i = 0; r.session.seats.size < MAX_IDS; i++) r.join(`fill${i}`);
+    const heir = r.join('heir');
+    expect([...r.session.seats.values()].find((x) => x.token === 'heir')?.seat).toBe(seat);
+    expect(ballot(heir.inbox).mine).toBeNull();
+    poll.dispatch({ type: 'reveal' });
+    expect(poll.counts()).toEqual([0, 0]);
   });
 
   it('Reveal counts every phone that voted, offline ones included; only Forget offline drops a vote', async () => {
