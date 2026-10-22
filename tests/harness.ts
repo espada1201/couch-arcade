@@ -10,7 +10,7 @@ export async function room(xs: number[]) {
   let accept: (l: Link) => void = () => {};
   const transport: Transport = {
     name: 'test',
-    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), close: () => {} }),
+    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: () => {}, close: () => {} }),
     join: async () => {
       throw new Error('unused');
     },

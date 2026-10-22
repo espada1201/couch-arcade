@@ -17,12 +17,14 @@ afterEach(() => {
 function silentHost() {
   const links: BasicLink[] = [];
   let answering = true;
+  let away = false;
   const transport: Transport = {
     name: 'test',
     host: async () => {
       throw new Error('unused');
     },
     join: async (): Promise<Link> => {
+      if (away) throw new Error('No host is running room ABCD on this network.');
       const link: BasicLink = new BasicLink((m) => {
         const msg = m as { t: string; c0?: number };
         if (!answering) return;
@@ -33,7 +35,16 @@ function silentHost() {
       return link;
     },
   };
-  return { transport, links, goQuiet: () => (answering = false) };
+  return {
+    transport,
+    links,
+    goQuiet: () => (answering = false),
+    /** The relay restarted: the room is gone (join refused) until the host reclaims it. */
+    setAway: (v: boolean) => {
+      away = v;
+      if (v) links.at(-1)?.ended();
+    },
+  };
 }
 
 describe('phone client', () => {
@@ -47,6 +58,21 @@ describe('phone client', () => {
     await vi.advanceTimersByTimeAsync(9000);
     expect(host.links.length).toBeGreaterThan(1);
     expect(client.status).not.toBe('live');
+  });
+
+  it('a seated phone keeps reconnecting through a long relay restart and gets its seat back', async () => {
+    const host = silentHost();
+    const client = new PhoneClient(host.transport, 'ABCD');
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.status).toBe('live');
+    host.setAway(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(client.status).toBe('reconnecting');
+    host.setAway(false);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(client.status).toBe('live');
+    expect(client.seat).toBe(4);
   });
 
   it('a first join to a room nobody hosts says connecting, then fails soon with the reason', async () => {

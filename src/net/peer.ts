@@ -1,7 +1,7 @@
 // Internet transport: WebRTC data channels brokered by the free public PeerJS server.
 // Only signalling goes through the broker; everything after that is phone <-> host.
 import type { DataConnection, Peer as PeerType } from 'peerjs';
-import { BasicLink, type HostEnd, type Link, type Transport } from './transport';
+import { BasicLink, backoff, type HostEnd, type Link, type Transport } from './transport';
 
 const PREFIX = 'swarmscreen-v1-';
 
@@ -61,10 +61,21 @@ export class PeerTransport implements Transport {
       throw err;
     });
     let onLink: (l: Link) => void = () => {};
+    let onServer: (up: boolean) => void = () => {};
+    let tries = 0;
     peer.on('connection', (conn) => conn.on('open', () => onLink(wrap(conn))));
     // The broker connection can drop while the data channels stay up; keep it alive for late joiners.
-    peer.on('disconnected', () => setTimeout(() => !peer.destroyed && peer.reconnect(), 1000));
-    return { onLink: (cb) => (onLink = cb), close: () => peer.destroy() };
+    // A failed reconnect disconnects again, so this keeps trying with backoff until the broker answers.
+    peer.on('disconnected', () => {
+      if (peer.destroyed) return;
+      onServer(false);
+      setTimeout(() => !peer.destroyed && peer.disconnected && peer.reconnect(), backoff(++tries));
+    });
+    peer.on('open', () => {
+      if (tries) onServer(true);
+      tries = 0;
+    });
+    return { onLink: (cb) => (onLink = cb), onServer: (cb) => (onServer = cb), close: () => peer.destroy() };
   }
 
   async join(room: string): Promise<Link> {

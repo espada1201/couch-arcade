@@ -34,6 +34,8 @@ export class LocalTransport implements Transport {
     };
     return {
       onLink: (cb) => (onLink = cb),
+      // Same-browser channel: there is no server to lose.
+      onServer: () => {},
       close: () => {
         for (const l of links.values()) l.close();
         ch.close();

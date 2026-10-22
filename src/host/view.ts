@@ -83,6 +83,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
 
   const count = h('span.count', { role: 'status' });
   const updateCount = () => {
+    if (session.serverDown) return setText(count, 'Reconnecting to the room server…');
     const online = session.online.length;
     const placed = [...session.layout.positions.keys()].filter((s) => session.seats.get(s)?.link).length;
     const sync = session.worstSync;

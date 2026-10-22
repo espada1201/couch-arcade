@@ -12,7 +12,14 @@ export interface Link {
 
 export interface HostEnd {
   onLink(cb: (link: Link) => void): void;
+  /** The room server (relay or broker) went away (false) or took the room back (true). */
+  onServer(cb: (up: boolean) => void): void;
   close(): void;
+}
+
+/** Wait before reconnect attempt `n` (from 1): doubling from 800 ms, capped at 5 s. */
+export function backoff(n: number): number {
+  return Math.min(5000, 400 * 2 ** n);
 }
 
 export interface Transport {

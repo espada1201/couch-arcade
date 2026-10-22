@@ -6,9 +6,10 @@ import type { HostMsg } from '../src/core/protocol';
 /** In-memory transport: lets a test play several phones against a real HostSession. */
 function harness() {
   let accept: (l: Link) => void = () => {};
+  let server: (up: boolean) => void = () => {};
   const transport: Transport = {
     name: 'test',
-    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), close: () => {} }),
+    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), close: () => {} }),
     join: async () => {
       throw new Error('unused');
     },
@@ -21,7 +22,7 @@ function harness() {
     accept(hostSide);
     return { inbox, say: (m: unknown) => hostSide.deliver(m), drop: () => hostSide.ended() };
   };
-  return { session, phone, tick: (ms: number) => (clock += ms) };
+  return { session, phone, server: (up: boolean) => server(up), tick: (ms: number) => (clock += ms) };
 }
 
 describe('host session', () => {
@@ -154,10 +155,22 @@ describe('host session', () => {
   });
 });
 
+describe('room server outage', () => {
+  it('tells listeners while the room server is down, and when it is back', async () => {
+    const { session, server } = harness();
+    await session.open();
+    const seen: boolean[] = [];
+    session.subscribe(() => seen.push(session.serverDown));
+    server(false);
+    server(true);
+    expect(seen).toEqual([true, false]);
+  });
+});
+
 describe('backpressure', () => {
   it('a message that may be skipped is not queued on a link already holding too much', async () => {
     let accept: (l: Link) => void = () => {};
-    const transport: Transport = { name: 'test', host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), close: () => {} }), join: async () => Promise.reject(new Error('unused')) };
+    const transport: Transport = { name: 'test', host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: () => {}, close: () => {} }), join: async () => Promise.reject(new Error('unused')) };
     const session = new HostSession(transport, 'TEST', () => 0);
     await session.open();
     const phones = [0, 500_000].map((backlog, i) => {

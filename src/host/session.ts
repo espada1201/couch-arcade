@@ -71,6 +71,8 @@ export class HostSession {
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
+  /** The room server is down and the host is reconnecting to it; phones can't reach the room meanwhile. */
+  serverDown = false;
 
   constructor(
     readonly transport: Transport,
@@ -101,6 +103,10 @@ export class HostSession {
   async open(): Promise<void> {
     this.end = await this.transport.host(this.room);
     this.end.onLink((link) => this.accept(link));
+    this.end.onServer((up) => {
+      this.serverDown = !up;
+      this.changed();
+    });
     // Saved now, not at the first join, so reloading an empty new room keeps its code.
     this.save();
   }

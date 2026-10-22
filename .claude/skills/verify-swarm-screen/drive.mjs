@@ -1008,26 +1008,38 @@ const CHECKS = {
     for (const p of [...phones, p3]) await expect(p.locator('.status')).not.toContainText('reconnecting', { timeout: 20_000 });
     run.note('host reload keeps room', room.code);
     await run.shot(host, 'host-after-reload');
-    // Relay restart (only when this run owns the server): does the room come back without anyone touching it?
+    // Relay restart (only when this run owns the server): the room must come back without anyone touching it.
     if (server && room.transport === 'lan') {
+      const seatsBefore = await Promise.all([...phones, p3].map(seatOf));
       const port = server.port;
       stopServer();
+      let warned = false;
+      try {
+        await expect(host.locator('.count')).toHaveText('Reconnecting to the room server…', { timeout: 10_000 });
+        warned = true;
+      } catch {}
+      run.note('host warns while the relay is down', warned);
+      await run.shot(host, 'host-relay-down');
+      if (!warned) run.issue('while the relay is down the host shows no warning');
       await sleep(1500);
       opt.port = port;
       await launch();
       opt.port = 0;
+      const t = Date.now();
       let back = false;
       try {
         await expect(host.locator('.count')).toHaveText(/^3 phones /, { timeout: 30_000 });
-        for (const p of phones) await expect(p.locator('.status')).toContainText(/· (placed|not placed yet)$/, { timeout: 30_000 });
+        for (const [i, p] of [...phones, p3].entries())
+          await expect(p.locator('.status')).toContainText(new RegExp(`Seat ${seatsBefore[i] + 1} · (placed|not placed yet)$`), { timeout: 30_000 });
         back = true;
       } catch {}
-      run.note('room recovers after relay restart (30 s)', back);
+      run.note('room recovers after relay restart, same seats (30 s)', back);
+      run.note('relay back -> room whole ms', Date.now() - t);
       run.note('phone status after relay restart', await phones[0].locator('.status').textContent());
       run.note('host count after relay restart', await host.locator('.count').textContent());
       await run.shot(host, 'host-after-relay-restart');
       await run.shot(phones[0], 'phone-after-relay-restart');
-      if (!back) run.issue('after the relay restarts, the host never re-opens its room: phones stay reconnecting/failed until the host page is reloaded');
+      if (!back) run.issue('after the relay restarts, the room does not come back with every phone in its old seat');
     }
   },
 };

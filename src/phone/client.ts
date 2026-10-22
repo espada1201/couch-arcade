@@ -7,7 +7,7 @@ import type { Point } from '../core/layout';
 import type { Track } from '../core/speaker';
 import type { HostMsg, PhoneMsg } from '../core/protocol';
 import type { ChunkMsg } from '../net/chunks';
-import type { Link, Transport } from '../net/transport';
+import { backoff, type Link, type Transport } from '../net/transport';
 import { stableId } from '../storage';
 
 export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
@@ -150,9 +150,10 @@ export class PhoneClient {
     this.link = null;
     if (this.status === 'full' || this.status === 'replaced') return this.onChange();
     this.retries++;
-    // Never seated: most likely a wrong room code, so say so soon rather than retry for a minute.
+    // Never seated: most likely a wrong room code, so say so soon. Seated: the host or its relay
+    // may be restarting, so keep trying for about two minutes before asking for a tap.
     const joined = this.seat >= 0;
-    this.status = this.retries > (joined ? 8 : 2) ? 'failed' : joined ? 'reconnecting' : 'connecting';
+    this.status = this.retries > (joined ? 26 : 2) ? 'failed' : joined ? 'reconnecting' : 'connecting';
     this.onChange();
     if (this.status === 'failed') return;
     const again = () => {
@@ -160,7 +161,7 @@ export class PhoneClient {
       if (document.hidden) document.addEventListener('visibilitychange', again, { once: true });
       else void this.connect();
     };
-    setTimeout(again, Math.min(5000, 400 * 2 ** this.retries));
+    setTimeout(again, backoff(this.retries));
   }
 
   retry(): void {
