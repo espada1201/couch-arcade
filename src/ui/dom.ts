@@ -39,18 +39,6 @@ export function segmented<T extends string>(label: string, options: [T, string][
   );
 }
 
-/** A row of toggle buttons, exactly one pressed (aria-pressed); a lighter alternative to a radio group. */
-export function toggles<T extends string>(label: string, options: [T, string][], value: T, onChange: (v: T) => void): HTMLElement {
-  const buttons = options.map(([v, text]) =>
-    h('button.btn.small', { type: 'button', 'aria-pressed': String(v === value), 'data-value': v, onclick: () => pick(v) }, text),
-  );
-  const pick = (v: T) => {
-    for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.value === v));
-    onChange(v);
-  };
-  return h('div.toggles', { role: 'group', 'aria-label': label }, ...buttons);
-}
-
 export function slider(label: string, min: number, max: number, step: number, value: number, fmt: (v: number) => string, onInput: (v: number) => void): HTMLElement {
   const out = h('output', {}, fmt(value));
   const input = h('input', { type: 'range', min, max, step, value });

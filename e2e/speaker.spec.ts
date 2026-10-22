@@ -54,7 +54,9 @@ test('party speaker: a song reaches every phone and plays in step, late joiners 
   for (let i = 0; i < 3; i++) phones.push(await joinPhone(context, code, i, errors));
   await expect(host.locator('.count')).toContainText('3 phones');
 
-  await host.getByRole('tab', { name: /Sound/ }).click();
+  await host.getByRole('tab', { name: /Music/ }).click();
+  // Party speaker is what the Music tab opens on.
+  await expect(host.getByRole('radio', { name: 'Party speaker' })).toBeChecked();
   // 12 s of 22 kHz audio is about 530 KB: a dozen chunks per phone.
   await host.locator('#speaker-file').setInputFiles({ name: 'Test Tone.wav', mimeType: 'audio/wav', buffer: wav(12) });
   await expect(host.getByText('3 of 3 phones ready')).toBeVisible({ timeout: 20_000 });

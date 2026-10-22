@@ -3,6 +3,7 @@ import { carry } from '../landing';
 import { RoomTakenError } from '../net/peer';
 import { pickTransport } from '../net/pick';
 import { h, plural, setText } from '../ui/dom';
+import { followPanel } from './follow';
 import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { Director } from './director';
@@ -103,16 +104,18 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     setTimeout(() => (copy.textContent = 'Copy link'), 1800);
   });
 
+  // The ones hosts come for first, then the rest.
   const tabs: [string, string, () => HTMLElement][] = [
     ['locate', 'Locate', () => locatePanel(session, params, director)],
+    ['music', 'Music', () => soundPanel(session, director)],
+    ['big', 'Big screen', () => followPanel(session, director)],
+    ['poll', 'Poll', () => pollPanel(session, director)],
     ['show', 'Show', () => showPanel(session, director)],
     ['card', 'Card stunt', () => cardPanel(session, director)],
     ['live', 'Live screen', () => livePanel(session, director)],
     ['wave', 'Wave', () => wavePanel(session, stage, director)],
-    ['sound', 'Sound', () => soundPanel(session, director)],
     ['territory', 'Territory', () => territoryPanel(session, director)],
     ['potato', 'Hot Potato', () => potatoPanel(session, director)],
-    ['poll', 'Poll', () => pollPanel(session, director)],
   ];
   const panels = new Map<string, HTMLElement>();
   const tablist = h('div.tabs', { role: 'tablist', 'aria-label': 'Experiences' });

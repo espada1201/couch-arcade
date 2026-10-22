@@ -39,11 +39,12 @@ async function openRoom(context: BrowserContext, errors: string[], phones: numbe
   const list: Page[] = [];
   for (let i = 0; i < phones; i++) list.push(await joinPhone(context, code, i, errors));
   await expect(host.locator('.count')).toContainText(`${phones} phones`);
-  await host.getByRole('tab', { name: /Live screen/ }).click();
-  const whole = host.getByRole('button', { name: 'Every phone shows it all' });
-  await whole.click();
-  await expect(whole).toHaveAttribute('aria-pressed', 'true');
-  await expect(host.getByRole('button', { name: 'Spread across phones' })).toHaveAttribute('aria-pressed', 'false');
+  // Every phone showing the whole picture has its own tab, named for what hosts want.
+  const big = host.getByRole('tab', { name: /Big screen/ });
+  await big.click();
+  await expect(big).toHaveAttribute('aria-selected', 'true');
+  await expect(host.getByRole('tab', { name: /Live screen/ })).toHaveAttribute('aria-selected', 'false');
+  await expect(host.locator('.panel-intro')).toContainText('slides');
   return { host, phones: list, code };
 }
 

@@ -347,7 +347,6 @@ label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
 .record a[hidden] { display: none; }
 
 /* ---------- Follow mode (every phone shows the whole picture) ---------- */
-.live-modes > .toggles { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 20px 0; }
 .follow-source { display: grid; gap: 8px; }
 .follow-source > label { font-size: 13px; color: var(--muted); }
 .follow-cards {

@@ -4,11 +4,13 @@ Turn a room full of phones into one machine. Everyone scans a QR code; the host 
 camera watches every phone flash a unique blink code and works out where each one physically
 sits. Then the crowd is a giant display and speaker array.
 
-- **Show**: one button runs a looping choreography: title card, waves with sound, live aurora and fire, pictures.
-- **Card stunt**: any picture or your own words, split across the crowd, flipping on a 3-2-1.
+- **Music**: Party speaker plays a song file (MP3/M4A) on every phone in step; spatial tones send notes seat to seat.
+- **Big screen**: every phone shows the whole picture: shared slides, lyrics or an agenda as text cards, live captions, the camera.
+- **Poll**: a ballot on every phone, and on Reveal the room itself becomes the chart.
+- **Show**: one button runs a looping choreography: title card, waves with sound, live aurora and fire, pictures. Plus event moments: a New Year countdown (optionally to midnight) and a first-dance wash.
+- **Card stunt**: any picture, your own words or an event template, split across the crowd, flipping on a 3-2-1.
 - **Live screen**: the host camera, a video, or a generated animation, one pixel per phone.
 - **Wave**: light sweeping, ping-ponging or rippling through real space.
-- **Sound**: each phone is one speaker, scheduled on a shared clock so notes travel seat to seat.
 - **Territory**: two halves of the room tap to push a front line; phones it passes defect.
 - **Hot Potato**: a fireball flies between neighbours; tap before the fuse burns out.
 

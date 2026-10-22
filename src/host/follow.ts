@@ -1,4 +1,4 @@
-// Follow mode for the Live screen: every phone shows the whole picture, for rooms where
+// Follow mode, the Big screen tab: every phone shows the whole picture, for rooms where
 // not everyone can see the screen or there is no screen at all. Sources: the host's
 // shared screen, the host's camera, typed text cards, and live captions of the host mic.
 import { NO_CAPTIONS, captionLines, deckFrom, heard, step, type Deck, type FollowView } from '../core/follow';
@@ -169,7 +169,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const captionsBox = h(
     'div.follow-source',
     { hidden: true },
-    h('p.note', {}, 'Speak near this computer’s microphone; phones show the last few lines as you talk. In Chrome and Edge the speech is turned into text by the browser maker’s online service.'),
+    h('p.note', {}, 'Speak near this computer’s microphone; phones show the last few lines as you talk. Captions need an internet connection: in Chrome and Edge the browser maker’s online service turns the speech into text.'),
   );
 
   const go = h('button.btn.primary', { type: 'button' }, 'Show on phones');
@@ -305,7 +305,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const boxes: Record<FollowSource, HTMLElement> = { cards: cardsBox, screen: mediaBox, camera: mediaBox, captions: captionsBox };
 
   const { el, say } = panel(
-    'Every phone shows the whole picture: your slides, a video, the camera, big text cards or live captions. For rooms where not everyone can see the screen, or there is no screen at all.',
+    'A big screen in every hand. Share your screen to put your slides on every phone, type song lyrics or an agenda as big text cards, show live captions of what you say, or the camera. For rooms where not everyone can see the screen, or there is no screen at all.',
     segmented<FollowSource>('Show', sources, source, (v) => {
       source = v;
       for (const box of new Set(Object.values(boxes))) box.hidden = box !== boxes[v];
