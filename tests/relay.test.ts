@@ -1,5 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
-import { connect } from 'node:net';
+import { once } from 'node:events';
+import { mkdirSync, rmSync } from 'node:fs';
+import { connect, createServer } from 'node:net';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { freePort, rawPhone, startRelay } from './relayserver';
@@ -43,6 +47,24 @@ afterAll(() => {
 describe('relay server', () => {
   it('answers a malformed URL with 400 and keeps serving', async () => {
     expect((await fetch(`http://127.0.0.1:${port}/%E0`)).status).toBe(400);
+    expect(await relayJsonStatus()).toBe(200);
+  });
+
+  it('survives a file it cannot read', async () => {
+    // A socket file in dist/: it exists and is no directory, yet opening it to read fails (ENXIO).
+    const dist = fileURLToPath(new URL('../dist/', import.meta.url));
+    mkdirSync(dist, { recursive: true });
+    const path = join(dist, 'unreadable.sock');
+    rmSync(path, { force: true });
+    const sock = createServer().listen(path);
+    await once(sock, 'listening');
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/unreadable.sock`).then((r) => r.text().then(() => r.status), () => 'dropped');
+      expect(res).not.toBe(200);
+    } finally {
+      sock.close();
+      rmSync(path, { force: true });
+    }
     expect(await relayJsonStatus()).toBe(200);
   });
 

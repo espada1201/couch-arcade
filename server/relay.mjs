@@ -3,6 +3,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
+import { pipeline } from 'node:stream';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -70,7 +71,8 @@ const server = createServer((req, res) => {
     return res.end('Build missing: run `npm start` (it builds first).');
   }
   res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-  createReadStream(file).pipe(res);
+  // A file that fails to read (gone mid-request, not a plain file) ends this response, not the relay.
+  pipeline(createReadStream(file), res, () => {});
 });
 
 const MAX_ROOMS = 64;
