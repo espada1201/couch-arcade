@@ -6,6 +6,7 @@
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { impairProxy } from './impair.mjs';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
@@ -269,6 +270,53 @@ function renderRoomVideo(path) {
     parts.push(Buffer.from('FRAME\n'), y4, chroma);
   }
   writeFileSync(path, Buffer.concat(parts));
+}
+
+/**
+ * A phone on bad Wi-Fi: it loads the page through impair.mjs (a TCP proxy with a bandwidth cap,
+ * latency and jitter), so its relay socket backs up as on a real weak link. Counts its WebSockets
+ * and the file chunks it receives (`window.__ws`).
+ */
+async function slowPhone(run, room, impair, sim = '0.9,0.5') {
+  const port = await new Promise((res) => {
+    const s = createServer();
+    s.listen(0, () => {
+      const { port: p } = s.address();
+      s.close(() => res(p));
+    });
+  });
+  const proxy = impairProxy({ listen: port, target: Number(new URL(base()).port), host: '127.0.0.1' });
+  Object.assign(proxy, impair);
+  run.note('slow phone link', impair);
+  const page = await room.context.newPage();
+  run.watch(page);
+  await page.addInitScript(() => {
+    window.__ws = { sockets: 0, chunks: 0, distinct: new Set() };
+    const Orig = WebSocket;
+    window.WebSocket = class extends Orig {
+      constructor(...a) {
+        super(...a);
+        window.__ws.sockets++;
+        this.addEventListener('message', (e) => {
+          if (!String(e.data).startsWith('{"t":"chunk"')) return;
+          window.__ws.chunks++;
+          window.__ws.distinct.add(JSON.parse(e.data).i);
+        });
+      }
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`http://127.0.0.1:${port}/?${q({ room: room.code, transport: room.transport, sim })}`, { timeout: 60_000 });
+  await page.getByRole('button', { name: 'Join the swarm' }).click();
+  await expect(page.locator('.status')).toContainText('Seat', { timeout: 20_000 });
+  return {
+    page,
+    sockets: () => page.evaluate(() => window.__ws.sockets),
+    close: () => {
+      proxy.dropAll();
+      proxy.close();
+    },
+  };
 }
 
 /** A camera video of coloured noise, which JPEG can't shrink: every frame lands near the 60 KB budget. */
@@ -547,6 +595,82 @@ const CHECKS = {
     await host.getByRole('button', { name: 'Pause' }).click();
     for (const p of phones) await expect(p.locator('.np-state')).toHaveText('Paused', { timeout: 3000 });
     await run.shot(host, 'host-paused');
+  },
+
+  async 'slow-song'(run) {
+    // One phone on slow Wi-Fi (200 kbps): it must fetch the song on one link, without dropping it
+    // or being sent the same chunks over and over.
+    const song = { name: 'Slow Tone.wav', mimeType: 'audio/wav', buffer: wav(15) };
+    run.note('song KB', Math.round(song.buffer.length / 1024));
+    const room = await openRoom(run, { sims: [[0.1, 0.5], [0.2, 0.5]] });
+    const { host } = room;
+    const { page: slow, sockets, close } = await slowPhone(run, room, { kbps: 200, latencyMs: 40, jitterMs: 30 });
+    try {
+      await tab(room, 'Music');
+      const t = Date.now();
+      await host.locator('#speaker-file').setInputFiles(song);
+      let ready = true;
+      try {
+        await expect(host.getByText('3 of 3 phones ready')).toBeVisible({ timeout: 120_000 });
+        run.note('slow phone ready after s', Math.round((Date.now() - t) / 1000));
+      } catch {
+        ready = false;
+      }
+      const seen = await slow.evaluate(() => ({ chunks: window.__ws.chunks, distinct: window.__ws.distinct.size }));
+      const n = await sockets();
+      run.note('slow phone sockets', n);
+      run.note('chunks the slow phone received / distinct', `${seen.chunks} / ${seen.distinct}`);
+      await run.shot(host, 'host-ready');
+      await run.shot(slow, 'slow-phone');
+      if (!ready) run.issue('the slow phone never got the whole song in 120 s');
+      if (n > 1) run.issue(`the slow phone reconnected ${n - 1} times while fetching the song`);
+      if (seen.chunks > seen.distinct * 1.25) run.issue(`the slow phone received ${seen.chunks} chunks for ${seen.distinct} distinct ones`);
+    } finally {
+      close();
+    }
+  },
+
+  async 'slow-flip'(run) {
+    // A 5 MB song downloads in the background over 1 Mbps Wi-Fi while the host flips a card stunt:
+    // the slow phone must still get the flip in time and flip with the rest.
+    const room = await openRoom(run, { sims: [[0.2, 0.5], [0.6, 0.5]] });
+    const { host, phones } = room;
+    const { page: slow, sockets, close } = await slowPhone(run, room, { kbps: 1000, latencyMs: 40, jitterMs: 30 });
+    try {
+      // Seat numbers place the slow phone too: the synthetic camera can't film a tab on another origin.
+      await host.getByText('No camera? Use seat numbers').click();
+      await host.locator('#grid-rows').fill('1');
+      await host.locator('#grid-seats').fill('3');
+      await host.getByRole('button', { name: 'Ask phones for their seat' }).click();
+      for (const [i, p] of [...phones, slow].entries()) {
+        await p.locator('#row').fill('1');
+        await p.locator('#seatno').fill(String(i + 1));
+        await p.getByRole('button', { name: 'Done' }).click();
+      }
+      await expect(host.getByText('3 of 3 phones have answered.')).toBeVisible({ timeout: 15_000 });
+      await host.getByRole('button', { name: 'Use typed seats' }).click();
+      await tab(room, 'Music');
+      await host.locator('#speaker-file').setInputFiles({ name: 'Background.wav', mimeType: 'audio/wav', buffer: wav(Math.round((5 * 1024 * 1024) / 44100)) });
+      await expect(host.getByText(/of 3 phones ready/)).toBeVisible({ timeout: 15_000 });
+      await sleep(8000);
+      run.note('download while flipping', await host.getByText(/of 3 phones ready/).textContent());
+      await tab(room, 'Card stunt');
+      await host.locator('#stunt-file').setInputFiles({ name: 'quadrants.png', mimeType: 'image/png', buffer: QUADRANTS_PNG });
+      const all = [...phones, slow];
+      await watchScreens(all);
+      await host.getByRole('button', { name: 'Flip the cards' }).click();
+      await sleep(6000);
+      const flips = await flipMoments(all);
+      run.note('flip moment per phone, ms after the first (last is the slow phone)', flips);
+      const n = await sockets();
+      run.note('slow phone sockets', n);
+      await run.shot(slow, 'slow-phone-after-flip');
+      if (flips.at(-1) === null) run.issue('the slow phone never showed the countdown: the flip arrived too late');
+      else if (Math.max(...flips) > 150) run.issue(`phones did not flip together: ${flips.join(', ')}`);
+      if (n > 1) run.issue(`the slow phone reconnected ${n - 1} times during the download`);
+    } finally {
+      close();
+    }
   },
 
   async tones(run) {

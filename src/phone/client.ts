@@ -13,7 +13,7 @@ import { errorText } from '../ui/dom';
 
 export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
 
-/** A host that hasn't answered a ping for this long is gone, even if the link never said so. */
+/** A host that hasn't sent anything (a pong, a chunk, a program) for this long is gone, even if the link never said so. */
 const SILENT_MS = 6000;
 
 export class PhoneClient {
@@ -37,7 +37,7 @@ export class PhoneClient {
   private link: Link | null = null;
   private pingTimer = 0;
   private retries = 0;
-  private lastPong = 0;
+  private lastHeard = 0;
 
   constructor(
     private readonly transport: Transport,
@@ -100,11 +100,11 @@ export class PhoneClient {
 
   private startPinging(): void {
     clearTimeout(this.pingTimer);
-    this.lastPong = performance.now();
+    this.lastHeard = performance.now();
     let n = 0;
     const tick = () => {
       // Closing runs the usual reconnect path.
-      if (performance.now() - this.lastPong > SILENT_MS) return void this.link?.close();
+      if (performance.now() - this.lastHeard > SILENT_MS) return void this.link?.close();
       const u = this.clock.uncertainty;
       this.send({ t: 'ping', c0: performance.now(), u: Number.isFinite(u) ? Math.round(u) : undefined });
       // A quick burst to lock on, then a slow trickle to track drift.
@@ -114,11 +114,12 @@ export class PhoneClient {
   }
 
   private receive(m: HostMsg): void {
+    // On slow Wi-Fi a pong can queue behind song chunks; whatever arrives proves the host is there.
+    this.lastHeard = performance.now();
     switch (m.t) {
       case 'chunk':
         return this.onChunk(m);
       case 'pong':
-        this.lastPong = performance.now();
         this.clock.add(sampleFrom(m.c0, m.h1, m.h2, performance.now()));
         return;
       case 'welcome':

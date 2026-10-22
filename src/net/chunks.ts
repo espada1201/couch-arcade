@@ -92,14 +92,22 @@ export class Reassembler {
 /**
  * One receiver's side of a transfer, as the sender sees it. Pure: the caller passes the
  * time, sends whatever `due` returns, and feeds back the receiver's acks. A chunk lost in
- * flight (a reconnect, a dropped ack) holds the window shut; after `stallMs` with no
- * progress the sender goes back to the first missing chunk and sends from there again.
+ * flight (a reconnect, a dropped ack) holds the window shut; after a stall with no progress
+ * the sender goes back to the first missing chunk and sends from there again. The stall is
+ * at least `stallMs` and grows with the round trip the acks show, so a phone on slow Wi-Fi,
+ * whose chunks are merely late, is not sent them twice.
  */
 export class ChunkSender {
   private hi = 0;
   private low = 0;
   private got = 0;
   private lastProgress = -Infinity;
+  /** When each chunk was first sent, or NaN once resent: its ack then can't say which copy arrived. */
+  private sentAt: number[] = [];
+  /** Smoothed round trip from sending a chunk to its ack (ms); 0 until measured. */
+  private rtt = 0;
+  /** Stalls in a row with no progress between them; each doubles the wait for the next. */
+  private stalls = 0;
   private readonly window: number;
   private readonly stallMs: number;
 
@@ -107,29 +115,45 @@ export class ChunkSender {
     readonly n: number,
     opts: { window?: number; stallMs?: number } = {},
   ) {
-    this.window = opts.window ?? 8;
-    this.stallMs = opts.stallMs ?? 2000;
+    // Two chunks (about 120 KB) in flight: plenty for LAN speed, and on 1 Mbps Wi-Fi a card flip or
+    // pong queued behind them waits about a second, well inside the 3.2 s flip countdown.
+    this.window = opts.window ?? 2;
+    // Links are ordered and reliable, so a chunk goes missing only with its link, and a new link gets
+    // a new sender: the stall is a backstop, and must not race a slow link's first chunk.
+    this.stallMs = opts.stallMs ?? 8000;
   }
 
   /** The receiver holds everything below `next`, and `got` chunks in all. */
   ack(next: number, got: number, now: number): void {
+    const sent = next > this.low ? this.sentAt[Math.min(next, this.n) - 1] : NaN;
+    if (Number.isFinite(sent)) this.rtt = this.rtt ? 0.75 * this.rtt + 0.25 * (now - sent) : now - sent;
+    if (next > this.low || got > this.got) this.stalls = 0;
     if (next > this.low || got > this.got || this.lastProgress === -Infinity) this.lastProgress = now;
     this.low = Math.max(this.low, Math.min(next, this.n));
     this.got = Math.max(this.got, got);
     this.hi = Math.max(this.hi, this.low);
   }
 
-  /** Chunk indices to send now. */
-  due(now: number): number[] {
+  /** Chunk indices to send now, at most `max` of them. */
+  due(now: number, max = Infinity): number[] {
     if (this.done) return [];
     if (this.lastProgress === -Infinity) this.lastProgress = now;
-    else if (now - this.lastProgress > this.stallMs) {
+    else if (now - this.lastProgress > this.stall) {
       this.hi = this.low;
       this.lastProgress = now;
+      this.stalls++;
     }
     const out: number[] = [];
-    while (this.hi < this.n && this.hi < this.low + this.window) out.push(this.hi++);
+    while (out.length < max && this.hi < this.n && this.hi < this.low + this.window) {
+      this.sentAt[this.hi] = this.sentAt[this.hi] === undefined ? now : NaN;
+      out.push(this.hi++);
+    }
     return out;
+  }
+
+  /** How long without progress counts as a lost chunk: a few round trips, doubling while stalls repeat. */
+  get stall(): number {
+    return Math.max(this.stallMs, 4 * this.rtt) * 2 ** Math.min(this.stalls, 4);
   }
 
   get done(): boolean {

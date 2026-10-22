@@ -60,6 +60,21 @@ describe('phone client', () => {
     expect(client.status).not.toBe('live');
   });
 
+  it('counts any message from the host as alive, so pongs queued behind song chunks do not drop the link', async () => {
+    const host = silentHost();
+    const client = new PhoneClient(host.transport, 'ABCD');
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(1000);
+    host.goQuiet();
+    // No pongs for 12 s, but a chunk arrives every second.
+    for (let s = 0; s < 12; s++) {
+      host.links.at(-1)!.deliver({ t: 'chunk', id: 'song', i: s, n: 99, d: '' });
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(host.links).toHaveLength(1);
+    expect(client.status).toBe('live');
+  });
+
   it('a seated phone keeps reconnecting through a long relay restart and gets its seat back', async () => {
     const host = silentHost();
     const client = new PhoneClient(host.transport, 'ABCD');

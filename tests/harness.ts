@@ -37,9 +37,10 @@ export async function room(xs: number[]) {
   let clock = 1000;
   const session = new HostSession(transport, 'TEST', () => clock);
   await session.open();
-  const join = (token: string) => {
+  /** A phone saying hello as `token`; `backlog` is what its link reports as still queued. */
+  const join = (token: string, backlog = () => 0) => {
     const inbox: HostMsg[] = [];
-    const link = new BasicLink((m) => inbox.push(m as HostMsg));
+    const link = new BasicLink((m) => inbox.push(m as HostMsg), () => {}, backlog);
     accept(link);
     link.deliver({ t: 'hello', token });
     const say = (m: PhoneMsg) => link.deliver(m);

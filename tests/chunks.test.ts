@@ -79,6 +79,33 @@ describe('chunks', () => {
     expect(r.bytes()).toEqual(data);
   });
 
+  it('a receiver whose acks come back slowly is not sent the same chunks twice', () => {
+    const sender = new ChunkSender(20, { window: 4, stallMs: 2000 });
+    expect(sender.due(0)).toEqual([0, 1, 2, 3]);
+    // Slow Wi-Fi: the first chunk took 3 s to arrive and be acked.
+    sender.ack(1, 1, 3000);
+    expect(sender.due(3000)).toEqual([4]);
+    // 2.5 s with no further ack is longer than stallMs but well inside a few round trips.
+    expect(sender.due(5500)).toEqual([]);
+    expect(sender.stall).toBe(12_000);
+    // A chunk really lost still comes back, once the round trip based stall has passed.
+    expect(sender.due(15_001)).toEqual([1, 2, 3, 4]);
+    // The ack for a resent chunk can't tell which copy arrived, so it doesn't shrink the round trip;
+    // and a second stall in a row waits twice as long.
+    sender.ack(2, 2, 15_100);
+    expect(sender.stall).toBe(12_000);
+    expect(sender.due(15_100 + 12_001)).toEqual([2, 3, 4, 5]);
+    expect(sender.due(15_100 + 12_001 + 20_000)).toEqual([]);
+    expect(sender.stall).toBe(24_000);
+  });
+
+  it('hands out at most the chunks asked for, keeping the rest for later', () => {
+    const sender = new ChunkSender(10, { window: 4 });
+    expect(sender.due(0, 1)).toEqual([0]);
+    expect(sender.due(0, 2)).toEqual([1, 2]);
+    expect(sender.due(0)).toEqual([3]);
+  });
+
   it('a receiver that already holds part of the file (a reconnect) resumes where it left off', () => {
     const sender = new ChunkSender(10, { window: 3 });
     sender.ack(6, 6, 0);

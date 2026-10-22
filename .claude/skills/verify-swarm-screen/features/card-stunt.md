@@ -8,6 +8,7 @@ Any picture, the host's words or an event template is split across the crowd; ev
 - `stunt-words` "Use words" flips a word image.
 - `templates` Names with a heart needs both names (message, focus on the empty field); Happy birthday needs a name; Just married needs none.
 - `record` "Record the moment" films the flip and offers a `.webm` keepsake.
+- `slow-flip` with a 5 MB song downloading in the background, a phone on 1 Mbps Wi-Fi still flips with the rest.
 
 ## How to get to it (user POV)
 
@@ -19,6 +20,7 @@ Preconditions: phones scanned (each check does it).
 
 - **Picture and words.** `drive.mjs stunt`. Reading `flip moment per phone` (all within 150 ms); `phone colours` must equal red, red, green, blue, yellow, yellow; `distinct colours for "GO"` > 1.
 - **Templates.** `drive.mjs templates` (12 phones in a 4x3 block). Readings `flip moment per phone`, `Names with a heart: distinct colours`, `Just married: distinct colours` (> 1 each); `host-names.png`.
+- **Slow Wi-Fi.** `drive.mjs slow-flip`. Two phones plus one loaded through `impair.mjs` at 1 Mbps (40 ms latency, 30 ms jitter); a 5 MB WAV is fetched in the background while the host flips. Reading `flip moment per phone` (last is the slow phone; all within 150 ms; null means the flip arrived after the countdown should have started), `slow phone sockets` (1).
 - **Record.** `drive.mjs record`. Reading `keepsake` (`swarm-moment-YYYY-MM-DD-HHMM.webm`, > 10 KB), saved in the check folder.
 
 ## Gotchas
