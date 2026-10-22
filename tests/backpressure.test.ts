@@ -1,59 +1,56 @@
 import { describe, expect, it } from 'vitest';
-import { BasicLink, LATEST_BACKLOG } from '../src/net/transport';
+import type { Program } from '../src/core/effects';
+import type { HostMsg } from '../src/core/protocol';
+import { room } from './harness';
 
-/** A link whose backlog the test sets, recording what it actually sends. */
-function link() {
-  const out: unknown[] = [];
-  let backlog = 0;
-  const l = new BasicLink((m) => out.push(m), () => {}, () => backlog);
-  return { l, out, setBacklog: (b: number) => (backlog = b) };
-}
+const frame = (seq: number): Program => ({ kind: 'follow', view: { show: 'picture', src: 'data:image/jpeg;base64,AAAA', seq } });
+const programs = (inbox: HostMsg[]) => inbox.flatMap((m) => (m.t === 'program' ? [m] : []));
+const seqs = (inbox: HostMsg[]) => programs(inbox).flatMap((m) => (m.program.kind === 'follow' && m.program.view.show === 'picture' ? [m.program.view.seq] : []));
 
-describe('backpressure on one link', () => {
-  it('holds a latest message back on a backed-up link, and nothing else', () => {
-    const { l, out, setBacklog } = link();
-    l.send('frame 1', { latest: true });
-    setBacklog(LATEST_BACKLOG + 1);
-    l.send('frame 2', { latest: true });
-    expect(out).toEqual(['frame 1']);
-    // Cards, file chunks, pongs and the rest always go, after the held frame so order holds.
-    l.send('pong');
-    expect(out).toEqual(['frame 1', 'frame 2', 'pong']);
+describe('picture frames to a phone that falls behind', () => {
+  it('sends the next frame only once the phone has the one before, and then the newest', async () => {
+    const r = await room([0.2, 0.8]);
+    const [fast, slow] = r.phones;
+    for (let seq = 1; seq <= 4; seq++) {
+      r.session.setProgram(frame(seq), { frame: true });
+      const m = programs(fast.inbox).at(-1)!;
+      fast.say({ t: 'ack', n: m.ack! });
+    }
+    expect(seqs(fast.inbox)).toEqual([1, 2, 3, 4]);
+    // The slow phone confirmed nothing: it holds frame 1 and nothing more is queued for it.
+    expect(seqs(slow.inbox)).toEqual([1]);
+    slow.say({ t: 'ack', n: programs(slow.inbox).at(-1)!.ack! });
+    expect(seqs(slow.inbox)).toEqual([1, 4]);
   });
 
-  it('keeps only the newest held frame and sends it once the link drains', () => {
-    const { l, out, setBacklog } = link();
-    setBacklog(LATEST_BACKLOG + 1);
-    for (const f of ['a', 'b', 'c']) l.send(f, { latest: true });
-    l.drained();
-    expect(out).toEqual([]);
-    setBacklog(0);
-    l.drained();
-    l.drained();
-    expect(out).toEqual(['c']);
+  it('a program that is not a frame goes at once and drops the held frame', async () => {
+    const r = await room([0.5]);
+    const [p] = r.phones;
+    r.session.setProgram(frame(1), { frame: true });
+    r.session.setProgram(frame(2), { frame: true });
+    r.session.setProgram({ kind: 'lobby' });
+    expect(programs(p.inbox).at(-1)!.program).toEqual({ kind: 'lobby' });
+    p.say({ t: 'ack', n: programs(p.inbox).find((m) => m.ack)!.ack! });
+    expect(seqs(p.inbox)).toEqual([1]);
+    expect(programs(p.inbox).at(-1)!.program).toEqual({ kind: 'lobby' });
   });
 
-  it('drops a held frame when a newer one goes out', () => {
-    const { l, out, setBacklog } = link();
-    setBacklog(LATEST_BACKLOG + 1);
-    l.send('old', { latest: true });
-    setBacklog(0);
-    l.send('new', { latest: true });
-    l.drained();
-    expect(out).toEqual(['new']);
+  it('a phone that reconnects is not left waiting for an ack from its old link', async () => {
+    const r = await room([0.5]);
+    r.session.setProgram(frame(1), { frame: true });
+    r.phones[0].drop();
+    const again = r.join('p0');
+    r.session.setProgram(frame(2), { frame: true });
+    expect(seqs(again.inbox)).toEqual([1, 2]);
   });
 
-  it('the bound is about two full frames', () => {
-    expect(LATEST_BACKLOG).toBe(2 * 60 * 1024);
-  });
-
-  it('a closed link sends nothing it held', () => {
-    const { l, out, setBacklog } = link();
-    setBacklog(LATEST_BACKLOG + 1);
-    l.send('frame', { latest: true });
-    l.ended();
-    setBacklog(0);
-    l.drained();
-    expect(out).toEqual([]);
+  it('a stale or bogus ack changes nothing', async () => {
+    const r = await room([0.5]);
+    const [p] = r.phones;
+    r.session.setProgram(frame(1), { frame: true });
+    r.session.setProgram(frame(2), { frame: true });
+    p.say({ t: 'ack', n: 0 });
+    p.say({ t: 'ack', n: -1 });
+    expect(seqs(p.inbox)).toEqual([1]);
   });
 });

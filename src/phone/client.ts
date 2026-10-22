@@ -140,6 +140,7 @@ export class PhoneClient {
         this.aspect = m.aspect;
         break;
       case 'program':
+        if (m.ack !== undefined) this.send({ t: 'ack', n: m.ack });
         this.program = m.program;
         this.programSeq++;
         break;

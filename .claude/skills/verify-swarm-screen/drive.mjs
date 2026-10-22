@@ -760,6 +760,58 @@ const CHECKS = {
     await expect(phones[0].locator('.follow')).toBeHidden();
   },
 
+  async 'slow-follow'(run) {
+    // Big screen to a phone on 256 kbps Wi-Fi, frames near 50 KB (about 1.7 s each on that link):
+    // the picture the slow phone shows must stay about one frame behind, not drift further back.
+    const video = resolve(run.dir, 'noise.y4m');
+    renderNoiseVideo(video);
+    const FRAME_LOG = () => {
+      window.__fs = { sent: {}, got: [] };
+      const at = () => performance.timeOrigin + performance.now();
+      const seqOf = (s) => s.includes('"show":"picture"') && (/"seq":(\d+)\}/.exec(s.slice(-120)) ?? [])[1];
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (d) {
+        const seq = typeof d === 'string' && seqOf(d);
+        if (seq) window.__fs.sent[seq] = at();
+        return send.call(this, d);
+      };
+      const Orig = WebSocket;
+      window.WebSocket = class extends Orig {
+        constructor(...a) {
+          super(...a);
+          this.addEventListener('message', (e) => {
+            const seq = seqOf(String(e.data));
+            if (seq) window.__fs.got.push({ seq, at: at() });
+          });
+        }
+      };
+    };
+    const room = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5]], args: [`--use-file-for-fake-video-capture=${video}`], init: FRAME_LOG });
+    const { host } = room;
+    const { page: slow, close } = await slowPhone(run, room, { kbps: 256, latencyMs: 40, jitterMs: 30 });
+    try {
+      await tab(room, 'Big screen');
+      await host.getByRole('radio', { name: 'Camera' }).check();
+      await host.getByRole('button', { name: 'Show on phones' }).click();
+      await expect(host.getByText(/Showing the camera on 3 phones/)).toBeVisible({ timeout: 15_000 });
+      await sleep(30_000);
+      const sent = await host.evaluate(() => window.__fs.sent);
+      const got = await slow.evaluate(() => window.__fs.got);
+      const lags = got.filter((g) => sent[g.seq]).map((g) => ({ s: Math.round((g.at - sent[g.seq]) / 100) / 10, at: g.at }));
+      const t0 = lags[0]?.at ?? 0;
+      run.note('host frames sent', Object.keys(sent).length);
+      run.note('slow phone frames', lags.length);
+      run.note('slow phone lag s over time', lags.map((l) => `${Math.round((l.at - t0) / 1000)}s:${l.s}`).join(' '));
+      await run.shot(slow, 'slow-phone-picture');
+      const late = lags.filter((l) => l.at - t0 > 15_000).map((l) => l.s);
+      if (lags.length < 5) run.issue(`the slow phone got only ${lags.length} frames in 30 s`);
+      else if (Math.max(...late) > 6) run.issue(`the slow phone's picture fell ${Math.max(...late)} s behind`);
+      await host.getByRole('button', { name: 'Stop' }).last().click();
+    } finally {
+      close();
+    }
+  },
+
   async 'screen-share'(run) {
     await followPicture(run, 'Share my screen', /Showing your screen on 2 phones/, 0);
   },

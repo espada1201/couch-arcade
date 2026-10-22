@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HostSession } from '../src/host/session';
-import { BasicLink, LATEST_BACKLOG } from '../src/net/transport';
+import { BasicLink } from '../src/net/transport';
 import type { HostMsg } from '../src/core/protocol';
 import { memoryStorage, testTransport } from './harness';
 
@@ -173,26 +173,7 @@ describe('room server outage', () => {
   });
 });
 
-describe('backpressure', () => {
-  it('a message that may be skipped is not queued on a link already holding too much', async () => {
-    const { transport, accept } = testTransport();
-    const session = new HostSession(transport, 'TEST', () => 0);
-    await session.open();
-    const phones = [0, LATEST_BACKLOG + 1].map((backlog, i) => {
-      const inbox: HostMsg[] = [];
-      const link = new BasicLink((m) => inbox.push(m as HostMsg), () => {}, () => backlog);
-      accept(link);
-      link.deliver({ t: 'hello', token: `t${i}` });
-      return inbox;
-    });
-    session.setProgram({ kind: 'identify' }, { latest: true });
-    expect(phones[0].at(-1)).toEqual({ t: 'program', program: { kind: 'identify' } });
-    expect(phones[1].at(-1)).not.toEqual({ t: 'program', program: { kind: 'identify' } });
-    // Without the limit everyone gets it.
-    session.setProgram({ kind: 'lobby' });
-    expect(phones[1].at(-1)).toEqual({ t: 'program', program: { kind: 'lobby' } });
-  });
-
+describe('links', () => {
   it('local links never report a backlog', () => {
     expect(new BasicLink(() => {}).buffered()).toBe(0);
   });

@@ -10,6 +10,8 @@ export type PhoneMsg =
   | { t: 'tap' }
   | { t: 'seat'; row: number; seat: number }
   | { t: 'vote'; choice: number }
+  /** The phone has the program that carried this `ack`. */
+  | { t: 'ack'; n: number }
   /** File transfer ack: every chunk below `next` is here, `got` in all; then whether it decoded. */
   | { t: 'have'; id: string; next: number; got: number; state?: HaveState };
 
@@ -20,7 +22,8 @@ export type HostMsg =
   | { t: 'full' }
   | { t: 'replaced' }
   | { t: 'pong'; c0: number; h1: number; h2: number }
-  | { t: 'program'; program: Program }
+  /** `ack`: the phone answers with it, and the host sends the next such program only then (picture frames). */
+  | { t: 'program'; program: Program; ack?: number }
   | { t: 'pos'; pos: Point | null; aspect: number }
   /** A song to fetch and get ready in the background, whatever the room is doing (null: none). */
   | { t: 'offer'; track: Track | null }
@@ -45,6 +48,8 @@ export function parsePhoneMsg(v: unknown): PhoneMsg | null {
       return { t: 'tap' };
     case 'seat':
       return num(v.row) && num(v.seat) ? { t: 'seat', row: v.row, seat: v.seat } : null;
+    case 'ack':
+      return count(v.n) ? { t: 'ack', n: v.n } : null;
     case 'vote':
       return count(v.choice) && v.choice < MAX_OPTIONS ? { t: 'vote', choice: v.choice } : null;
     case 'have': {

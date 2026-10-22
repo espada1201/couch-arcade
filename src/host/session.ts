@@ -7,7 +7,7 @@ import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
-import { randomId, type HostEnd, type Link, type SendOptions, type ServerState, type Transport } from '../net/transport';
+import { randomId, type HostEnd, type Link, type ServerState, type Transport } from '../net/transport';
 import { forget, loadJson, saveJson } from '../storage';
 
 export type Source = 'camera' | 'grid' | 'manual';
@@ -25,7 +25,13 @@ export interface Seat {
   /** The phone's own estimate of its clock error (ms); Infinity until it has synced. */
   sync: number;
   lastTap: number;
+  /** The `ack` of the frame this phone hasn't confirmed yet (0: none in flight). */
+  awaiting: number;
+  /** The newest frame, held until the phone confirms the one in flight. */
+  held: ProgramMsg | null;
 }
+
+type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
 
 /**
  * 'source': raw positions are camera or seat-grid coordinates, stretched to fill the room.
@@ -70,6 +76,8 @@ export class HostSession {
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
+  /** Numbers frames for their acks. */
+  private frames = 0;
   /** Phones can reach the room only while the room server is 'up'. */
   server: ServerState = 'up';
 
@@ -88,7 +96,7 @@ export class HostSession {
       s.sourceAspect = saved.sourceAspect ?? s.sourceAspect;
       s.roomAspect = saved.roomAspect ?? 1;
       s.perspective = saved.perspective ?? null;
-      for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null, sync: Infinity, lastTap: 0 });
+      for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null });
       s.relayout(false);
     }
     return s;
@@ -135,15 +143,25 @@ export class HostSession {
   }
 
   /**
-   * Set what every phone runs. `latest`: each one replaces the last (a picture frame), so a phone
-   * whose link is backed up skips to the newest once it catches up instead of queueing them all.
+   * Set what every phone runs. `frame`: a picture frame, one of a stream each replacing the last.
+   * A phone gets the next frame only once it confirms the one before, so on a slow link it skips
+   * to the newest instead of falling further behind, however much the network buffers.
    */
-  setProgram(p: Program | ((seat: number) => Program), { latest = false } = {}): void {
+  setProgram(p: Program | ((seat: number) => Program), { frame = false } = {}): void {
     this.programFor = typeof p === 'function' ? p : () => p;
     // Programs change many times a second (live screen, games); they are not roster changes,
     // so no persistence or listener churn here. The stage reads programOf() every frame.
-    if (typeof p === 'function') for (const s of this.online) this.sendTo(s, { t: 'program', program: p(s.seat) }, { latest });
-    else this.end?.broadcast(this.online.map((s) => s.link!), { t: 'program', program: p } satisfies HostMsg, { latest });
+    const ack = frame ? ++this.frames : undefined;
+    const msgFor = (seat: number): ProgramMsg => ({ t: 'program', program: this.programFor(seat), ack });
+    const ready: Seat[] = [];
+    for (const s of this.online) {
+      s.held = ack && s.awaiting ? msgFor(s.seat) : null;
+      if (s.held) continue;
+      if (ack) s.awaiting = ack;
+      ready.push(s);
+    }
+    if (typeof p === 'function') for (const s of ready) this.sendTo(s, msgFor(s.seat));
+    else this.end?.broadcast(ready.map((s) => s.link!), msgFor(0));
   }
 
   /** Offer every phone, late joiners too, a song to fetch in the background. */
@@ -244,8 +262,17 @@ export class HostSession {
     this.sendTo(s, { t: 'pos', pos: this.layout.positions.get(s.seat) ?? null, aspect: this.layout.aspect });
   }
 
-  private sendTo(s: Seat, m: HostMsg, opts?: SendOptions): void {
-    s.link?.send(m, opts);
+  private sendTo(s: Seat, m: HostMsg): void {
+    s.link?.send(m);
+  }
+
+  /** The phone confirmed frame `n`: the newest held one goes now. */
+  private acked(s: Seat, n: number): void {
+    if (n < s.awaiting) return;
+    const next = s.held;
+    s.held = null;
+    s.awaiting = next?.ack ?? 0;
+    if (next) this.sendTo(s, next);
   }
 
   /** Send one phone a message of its own (file chunks); false when it is offline. */
@@ -287,7 +314,8 @@ export class HostSession {
         if (now - me.lastTap < 40) return;
         me.lastTap = now;
         this.heard(me.seat, m);
-      } else if (m.t === 'vote' || m.t === 'have') this.heard(me.seat, m);
+      } else if (m.t === 'ack') this.acked(me, m.n);
+      else if (m.t === 'vote' || m.t === 'have') this.heard(me.seat, m);
       else {
         this.gridEntries.set(me.seat, { row: m.row, seat: m.seat });
         this.changed();
@@ -317,11 +345,14 @@ export class HostSession {
         }
         s.link = link;
         s.sync = Infinity;
+        // Frames in flight on the old link are gone with it; the hello sends the current program.
+        s.awaiting = 0;
+        s.held = null;
         return s;
       }
     for (let seat = 0; seat < MAX_IDS; seat++)
       if (!this.seats.has(seat)) {
-        const s: Seat = { seat, token, link, raw: null, source: null, sync: Infinity, lastTap: 0 };
+        const s: Seat = { seat, token, link, raw: null, source: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null };
         this.seats.set(seat, s);
         return s;
       }

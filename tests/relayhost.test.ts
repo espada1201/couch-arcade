@@ -4,7 +4,7 @@ import type { HostMsg } from '../src/core/protocol';
 import type { Program } from '../src/core/effects';
 import { HostSession } from '../src/host/session';
 import { RelayTransport } from '../src/net/relay';
-import { LATEST_BACKLOG, type Link } from '../src/net/transport';
+import type { Link } from '../src/net/transport';
 import { memoryStorage } from './harness';
 import { freePort, rawPhone, startRelay } from './relayserver';
 
@@ -91,7 +91,12 @@ async function relayRoom(code: string, n: number) {
     Array.from({ length: n }, async (_, i) => {
       const link = await t.join(code);
       const got: unknown[] = [];
-      link.onMessage((m) => got.push(m));
+      // Like PhoneClient: confirm every frame.
+      link.onMessage((m) => {
+        got.push(m);
+        const ack = (m as { ack?: number }).ack;
+        if (ack !== undefined) link.send({ t: 'ack', n: ack });
+      });
       link.send({ t: 'hello', token: `${code}-phone-${i}` });
       return { link, got };
     }),
@@ -104,35 +109,27 @@ describe('Big screen frames through the relay', () => {
   it('every phone in the room gets each 50 KB picture, not just the first two', async () => {
     const { session, phones } = await relayRoom('PICS', 6);
     for (let seq = 1; seq <= 3; seq++) {
-      session.setProgram(picture(seq), { latest: true });
+      session.setProgram(picture(seq), { frame: true });
       await until(() => phones.every((p) => p.got.some((m) => seqOf(m) === seq)), 5000);
     }
   }, 20_000);
 
-  it('a phone that stops reading skips frames, then gets the newest once it drains', async () => {
+  it('a phone that stops reading gets one frame queued, not all of them, then the newest', async () => {
     const { session, phones } = await relayRoom('SLOW', 3);
     const slow = await rawPhone(port, 'SLOW');
     slow.send({ t: 'hello', token: 'SLOW-raw' });
     await until(() => session.online.length === 4);
-    const link = session.online.find((s) => s.token === 'SLOW-raw')!.link!;
     slow.pause();
-    let seq = 0;
-    // Fill the slow phone's socket and the kernel buffers behind it until the host holds frames back.
-    while (link.buffered() <= LATEST_BACKLOG && seq < 2000) {
-      session.setProgram(picture(++seq), { latest: true });
-      await new Promise((r) => setTimeout(r, 5));
+    for (let seq = 1; seq <= 20; seq++) {
+      session.setProgram(picture(seq), { frame: true });
+      await until(() => phones.every((p) => p.got.some((m) => seqOf(m) === seq)), 5000);
     }
-    expect(link.buffered()).toBeGreaterThan(LATEST_BACKLOG);
-    const sent = seq;
-    for (let i = 0; i < 5; i++) session.setProgram(picture(++seq), { latest: true });
-    // The phones that keep up see every frame, the newest included.
-    await until(() => phones.every((p) => p.got.some((m) => seqOf(m) === seq)), 5000);
-    // The slow phone's backlog stays bounded: the five newer frames were not all queued for it.
-    expect(link.buffered()).toBeLessThan(LATEST_BACKLOG + 3 * 52 * 1024);
     slow.resume();
-    await until(() => slow.got.some((m) => seqOf(m) === seq), 10_000);
-    const seen = slow.got.map(seqOf).filter((x) => x > sent);
-    expect(seen).toEqual([seq]);
+    await until(() => slow.got.some((m) => seqOf(m) === 1), 10_000);
+    slow.send({ t: 'ack', n: (slow.got.find((m) => seqOf(m) === 1) as { ack: number }).ack });
+    await until(() => slow.got.some((m) => seqOf(m) === 20), 10_000);
+    // Frames 2 to 19 were never queued for it, however much the network would have buffered.
+    expect(slow.got.map(seqOf).filter((x) => x > 0)).toEqual([1, 20]);
     slow.destroy();
   }, 60_000);
 });

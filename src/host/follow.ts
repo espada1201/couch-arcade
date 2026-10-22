@@ -104,8 +104,8 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     const msg: HostMsg = { t: 'program', program: { kind: 'follow', view } };
     // Never hand the transport more than one message can carry (frames and cards are sized to fit).
     if (messageBytes(msg) > MAX_MESSAGE_BYTES) return;
-    // A phone still busy with older frames skips to this one once it catches up.
-    session.setProgram(msg.program, { latest: view.show === 'picture' });
+    // A phone still busy with an older frame skips to the newest once it has it.
+    session.setProgram(msg.program, { frame: view.show === 'picture' });
     preview.show(view);
   };
 

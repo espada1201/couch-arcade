@@ -1,7 +1,7 @@
 // LAN transport: a WebSocket relay served by `npm start` on the host computer, so a
 // room works on any Wi-Fi network with no internet at all.
 import { stableId } from '../storage';
-import { BasicLink, backoff, type HostEnd, type Link, type SendOptions, type ServerState, type Transport } from './transport';
+import { BasicLink, backoff, type HostEnd, type Link, type ServerState, type Transport } from './transport';
 
 // The host's socket carries every phone. Up (host to relay): `msg` for one phone, `all` for the
 // same message to many (one copy on the host's socket, fanned out by the relay), `close`. Down:
@@ -40,7 +40,6 @@ class RelayPhone {
   /** The relay has written `n` messages in all to the phone. */
   drain(n: number): void {
     for (; this.confirmed < n && this.sizes.length; this.confirmed++) this.backlog -= this.sizes.shift()!;
-    this.link.drained();
   }
 }
 
@@ -111,11 +110,8 @@ export class RelayTransport implements Transport {
         retry();
       };
     };
-    const broadcast = (links: Link[], msg: unknown, opts?: SendOptions) => {
-      const to = links.flatMap((l) => {
-        const p = byLink.get(l);
-        return p && p.link.take(msg, opts?.latest) ? [p] : [];
-      });
+    const broadcast = (links: Link[], msg: unknown) => {
+      const to = links.flatMap((l) => byLink.get(l) ?? []);
       if (!to.length) return;
       const json = JSON.stringify(msg);
       for (const p of to) p.queued(json.length);
