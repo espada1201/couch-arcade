@@ -131,7 +131,8 @@ function waveControls(stage: Stage, initial: Partial<WaveParams>, onChange: (w: 
   return { el, get: () => ({ ...w }), arm: picking };
 }
 
-export function wavePanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
+/** A wave on the crowd that can be edited while it rolls. */
+export function liveWave(session: HostSession) {
   let wave: WaveProgram | null = null;
   let sentAt = 0;
   let pending = 0;
@@ -140,32 +141,42 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
     sentAt = performance.now();
     if (wave) session.setProgram({ ...wave });
   };
-  const go = (w: WaveParams) => {
-    if (!requirePlaced(session, say)) return;
-    director.take(() => {
+  return {
+    start(w: WaveParams, leadMs: number): void {
+      wave = makeWave(session.now() + leadMs, w);
+      send();
+    },
+    // Live edits keep the wave's phase so the band never jumps and phones keep their audio
+    // schedule; a new speed rebases t0 so the band stays where it is (pingpong parity included).
+    retune(w: WaveParams): void {
+      if (!wave) return;
+      const now = session.now();
+      let t0 = wave.t0;
+      if (w.period !== wave.period && now > t0) t0 = now - (((now - t0) / wave.period) % 2) * w.period;
+      wave = makeWave(t0, w);
+      // Slider drags fire per pixel; at most one broadcast per 150 ms, trailing edge included.
+      const wait = 150 - (performance.now() - sentAt);
+      if (wait <= 0) send();
+      else pending ||= window.setTimeout(send, wait);
+    },
+    stop(): void {
       wave = null;
       clearTimeout(pending);
       pending = 0;
-    });
+    },
+  };
+}
+
+export function wavePanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
+  const wave = liveWave(session);
+  const go = (w: WaveParams) => {
+    if (!requirePlaced(session, say)) return;
+    director.take(wave.stop);
     controls.arm();
-    wave = makeWave(session.now() + 250, w);
-    send();
+    wave.start(w, 250);
     say('Rolling. Change anything and it updates live.');
   };
-  // Live edits keep the wave's phase so the band never jumps and phones keep their audio
-  // schedule; a new speed rebases t0 so the band stays where it is (pingpong parity included).
-  const retune = (w: WaveParams) => {
-    if (!wave) return;
-    const now = session.now();
-    let t0 = wave.t0;
-    if (w.period !== wave.period && now > t0) t0 = now - (((now - t0) / wave.period) % 2) * w.period;
-    wave = makeWave(t0, w);
-    // Slider drags fire per pixel; at most one broadcast per 150 ms, trailing edge included.
-    const wait = 150 - (performance.now() - sentAt);
-    if (wait <= 0) send();
-    else pending ||= window.setTimeout(send, wait);
-  };
-  const controls = waveControls(stage, {}, retune, true);
+  const controls = waveControls(stage, {}, wave.retune, true);
   const { el, say } = panel(
     'A band of light rolls through the room in real space: a sweep from wall to wall, a ping-pong, or a ripple spreading out from any spot you tap on the map.',
     controls.el,
@@ -184,10 +195,12 @@ const SOUNDS: { name: string; blurb: string; w: Partial<WaveParams> & Pick<WaveP
 export function soundPanel(session: HostSession, director: Director): HTMLElement {
   let current = SOUNDS[0];
   let tempo = 1;
+  const wave = liveWave(session);
+  const params = (): WaveParams => ({ ...WAVE_DEFAULTS, ...current.w, period: current.w.period / tempo });
   const play = () => {
     if (!requirePlaced(session, say)) return;
-    director.take();
-    session.setProgram(makeWave(session.now() + 400, { ...current.w, period: current.w.period / tempo }));
+    director.take(wave.stop);
+    wave.start(params(), 400);
     say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
   const { el, say } = panel(
@@ -205,7 +218,10 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
         ),
       ),
     ),
-    slider('Tempo', 0.5, 2, 0.05, 1, (v) => `${v.toFixed(2)}×`, (v) => (tempo = v)),
+    slider('Tempo', 0.5, 2, 0.05, 1, (v) => `${v.toFixed(2)}×`, (v) => {
+      tempo = v;
+      wave.retune(params());
+    }),
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: play }, 'Play'), stopButton(director, () => say(''))),
   );
   return el;

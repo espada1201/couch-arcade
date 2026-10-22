@@ -47,6 +47,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   let lastLum = -1;
   let lastPost = 0;
   let lastPaint = -Infinity;
+  let won = false;
   let lastCss = '';
   const optics = sim ? new BroadcastChannel(OPTICS_CHANNEL) : null;
 
@@ -57,6 +58,13 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     if (bg !== lastCss) screen.style.backgroundColor = lastCss = bg;
     const text = frame.label ?? '';
     if (label.textContent !== text) label.textContent = text;
+    // Celebrate once, the moment this phone shows WIN.
+    const win = text === 'WIN';
+    if (win && !won) {
+      navigator.vibrate?.([80, 60, 80, 60, 200]);
+      speaker.blip('win');
+    }
+    won = win;
     const y = luma(frame.rgb);
     screen.classList.toggle('light', y > 150);
     if (optics && client.seat >= 0) {
