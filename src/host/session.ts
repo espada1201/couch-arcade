@@ -95,6 +95,8 @@ export class HostSession {
   async open(): Promise<void> {
     this.end = await this.transport.host(this.room);
     this.end.onLink((link) => this.accept(link));
+    // Saved now, not at the first join, so reloading an empty new room keeps its code.
+    this.save();
   }
 
   close(): void {
@@ -291,6 +293,11 @@ export class HostSession {
   }
 
   private changed(): void {
+    this.save();
+    for (const cb of this.listeners) cb();
+  }
+
+  private save(): void {
     // If storage is unavailable the room still works, it just won't survive a refresh.
     saveJson(STORE, {
       room: this.room,
@@ -301,6 +308,5 @@ export class HostSession {
       perspective: this.perspective,
       seats: [...this.seats.values()].map(({ seat, token, raw, source }) => ({ seat, token, raw, source })),
     } satisfies Saved);
-    for (const cb of this.listeners) cb();
   }
 }

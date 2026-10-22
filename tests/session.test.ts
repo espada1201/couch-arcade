@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HostSession } from '../src/host/session';
 import { BasicLink, type HostEnd, type Link, type Transport } from '../src/net/transport';
 import type { HostMsg } from '../src/core/protocol';
@@ -104,5 +104,17 @@ describe('host session', () => {
     const p = phone();
     for (const junk of [null, 3, 'hi', { t: 'hello' }, { t: 'ping', c0: 'x' }, { t: 'nope' }]) p.say(junk);
     expect(session.seats.size).toBe(0);
+  });
+
+  it('a room is saved as soon as it opens, so a reload before anyone joins keeps the code', async () => {
+    const m = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) });
+    try {
+      const { session } = harness();
+      await session.open();
+      expect(HostSession.restore(session.transport, false).room).toBe('TEST');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

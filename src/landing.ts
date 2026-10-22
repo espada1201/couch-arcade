@@ -46,12 +46,22 @@ function heroField(): HTMLCanvasElement {
 }
 
 export function landing(app: HTMLElement, params: URLSearchParams): void {
-  const code = h('input', { id: 'code', maxlength: 4, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'ABCD', 'aria-describedby': 'code-hint' });
+  const code = h('input', { id: 'code', maxlength: 4, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'ABCD', 'aria-describedby': 'code-hint code-error' });
+  const error = h('small.error', { id: 'code-error', hidden: true }, 'Room codes are 4 letters or numbers, like ABCD.');
+  const flag = (bad: boolean) => {
+    if (bad) code.setAttribute('aria-invalid', 'true');
+    else code.removeAttribute('aria-invalid');
+    error.hidden = !bad;
+  };
+  code.addEventListener('input', () => flag(false));
   const join = (e: Event) => {
     e.preventDefault();
     const v = code.value.trim().toUpperCase();
     if (/^[A-Z0-9]{4}$/.test(v)) location.search = carry(params, { room: v });
-    else code.focus();
+    else {
+      flag(true);
+      code.focus();
+    }
   };
   app.replaceChildren(
     h(
@@ -72,6 +82,7 @@ export function landing(app: HTMLElement, params: URLSearchParams): void {
             { onsubmit: join },
             h('label', { for: 'code' }, 'Joining? Enter the room code'),
             h('div.join-row', {}, code, h('button.btn', { type: 'submit' }, 'Join')),
+            error,
             h('small', { id: 'code-hint' }, 'Or just scan the QR code on the host screen.'),
           ),
         ),

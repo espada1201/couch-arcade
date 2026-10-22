@@ -89,6 +89,8 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--amber); }
 .join-form { display: grid; gap: 6px; }
 .join-form label { font-size: 13px; color: var(--muted); }
 .join-form small { color: var(--muted); font-size: 12px; }
+.join-form small.error { color: var(--red); }
+.join-form input[aria-invalid='true'] { border-color: var(--red); }
 .join-row { display: flex; gap: 8px; }
 .join-row input { width: 120px; font: 700 20px var(--mono); letter-spacing: 0.2em; text-transform: uppercase; }
 

@@ -64,6 +64,13 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     }
   }
 
+  if (fresh) {
+    // A reload must come back to this room, not roll yet another one.
+    const q = new URLSearchParams(location.search);
+    q.delete('fresh');
+    history.replaceState(history.state, '', `${location.pathname}?${q}${location.hash}`);
+  }
+
   const base = relay?.lanUrl ?? `${location.origin}${location.pathname}`;
   const q = new URLSearchParams(carry(params, { room: session.room }));
   q.delete('camera');
@@ -81,6 +88,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   };
   session.subscribe(updateCount);
   updateCount();
+  // Sync quality arrives with every ping, which is not a roster change; refresh it on a clock.
+  setInterval(updateCount, 1000);
 
   const copy = h('button.btn.ghost.small', { type: 'button' }, 'Copy link');
   copy.addEventListener('click', async () => {
