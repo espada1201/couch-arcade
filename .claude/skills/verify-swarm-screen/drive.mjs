@@ -787,6 +787,36 @@ const CHECKS = {
     await expect(phones[0].locator('.follow')).toBeHidden();
   },
 
+  async 'lost-acks'(run) {
+    // A phone whose frame acks never reach the host (dropped on its way out) must still get a new
+    // picture every couple of seconds, not freeze on the first one.
+    const video = resolve(run.dir, 'noise.y4m');
+    renderNoiseVideo(video);
+    const DROP_ACKS = () => {
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (d) {
+        if (!(typeof d === 'string' && d.startsWith('{"t":"ack"'))) return send.call(this, d);
+      };
+    };
+    const room = await openRoom(run, { sims: [[0.3, 0.5]], args: [`--use-file-for-fake-video-capture=${video}`], init: DROP_ACKS });
+    const { host, phones } = room;
+    await tab(room, 'Big screen');
+    await host.getByRole('radio', { name: 'Camera' }).check();
+    await host.getByRole('button', { name: 'Show on phones' }).click();
+    await expect(host.getByText(/Showing the camera on 1 phone/)).toBeVisible({ timeout: 15_000 });
+    await phones[0].evaluate(() => {
+      window.__frames = 0;
+      new MutationObserver(() => window.__frames++).observe(document.querySelector('.follow-picture'), { attributes: true, attributeFilter: ['src'] });
+    });
+    await sleep(15_000);
+    const n = await phones[0].evaluate(() => window.__frames);
+    run.note('frames in 15 s with every ack lost', n);
+    await run.shot(phones[0], 'phone-picture');
+    // The host waits 2 s for each ack and checks every second: a frame every 2 to 3 s.
+    if (n < 4) run.issue(`the phone froze: ${n} frames in 15 s`);
+    await host.getByRole('button', { name: 'Stop' }).last().click();
+  },
+
   async 'slow-follow'(run) {
     // Big screen to a phone on 256 kbps Wi-Fi, frames near 50 KB (about 1.7 s each on that link):
     // the picture the slow phone shows must stay about one frame behind, not drift further back.

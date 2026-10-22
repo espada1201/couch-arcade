@@ -30,11 +30,20 @@ export interface Seat {
   awaiting: number;
   /** The newest frame, held until the phone confirms the one in flight. */
   held: ProgramMsg | null;
+  /** When the frame in flight went. */
+  sentAt: number;
+  /** Smoothed time from sending a frame to its ack (ms); 0 until measured. */
+  ackRtt: number;
   /** When the phone's link last closed (0 if never, or before a reload). */
   left: number;
 }
 
 type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
+
+/** A seat as it starts out, or comes back from a saved room: no link, nothing in flight. */
+function blankSeat(x: Pick<Seat, 'seat' | 'token' | 'raw' | 'source'>, link: Link | null = null): Seat {
+  return { ...x, link, sync: Infinity, lastTap: 0, awaiting: 0, held: null, sentAt: 0, ackRtt: 0, left: 0 };
+}
 
 interface Conn {
   link: Link;
@@ -47,6 +56,8 @@ interface Conn {
 
 /** A seated phone the host hasn't heard from for this long has gone (a Wi-Fi dead spot, a dead battery). */
 const SILENT_MS = 15_000;
+/** Shortest wait for a frame's ack before the next frame goes anyway; slow phones get eight round trips. */
+const ACK_WAIT_MS = 2000;
 /** A link without a seat this long after it opened never gets one (a phone says hello at once). */
 const HELLO_MS = 10_000;
 /** Links open at once that have not said hello; a new one past this closes the oldest. */
@@ -119,7 +130,7 @@ export class HostSession {
       s.sourceAspect = saved.sourceAspect ?? s.sourceAspect;
       s.roomAspect = saved.roomAspect ?? 1;
       s.perspective = saved.perspective ?? null;
-      for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null, left: 0 });
+      for (const x of saved.seats) s.seats.set(x.seat, blankSeat(x));
       s.relayout(false);
     }
     return s;
@@ -183,7 +194,10 @@ export class HostSession {
     for (const s of this.online) {
       s.held = ack && s.awaiting ? msgFor(s.seat) : null;
       if (s.held) continue;
-      if (ack) s.awaiting = ack;
+      if (ack) {
+        s.awaiting = ack;
+        s.sentAt = this.now();
+      }
       ready.push(s);
     }
     if (typeof p === 'function') for (const s of ready) this.sendTo(s, msgFor(s.seat));
@@ -305,9 +319,17 @@ export class HostSession {
   /** The phone confirmed frame `n`: the newest held one goes now. */
   private acked(s: Seat, n: number): void {
     if (n < s.awaiting) return;
+    const rtt = this.now() - s.sentAt;
+    if (n === s.awaiting) s.ackRtt = s.ackRtt ? 0.75 * s.ackRtt + 0.25 * rtt : rtt;
+    this.release(s);
+  }
+
+  /** Stop waiting for the frame in flight and send the newest held one. */
+  private release(s: Seat): void {
     const next = s.held;
     s.held = null;
     s.awaiting = next?.ack ?? 0;
+    s.sentAt = this.now();
     if (next) this.sendTo(s, next);
   }
 
@@ -324,6 +346,8 @@ export class HostSession {
   sweep(): void {
     const now = this.now();
     for (const c of this.conns) if (c.seat ? now - c.heard > SILENT_MS : now - c.opened > HELLO_MS) c.link.close();
+    // A frame whose ack never came (a lost message, a phone that forgot) must not freeze that phone's picture.
+    for (const s of this.online) if (s.awaiting && now - s.sentAt > Math.max(ACK_WAIT_MS, 8 * s.ackRtt)) this.release(s);
   }
 
   private accept(link: Link): void {
@@ -413,12 +437,13 @@ export class HostSession {
         // Frames in flight on the old link are gone with it; the hello sends the current program.
         s.awaiting = 0;
         s.held = null;
+        s.ackRtt = 0;
         return s;
       }
     const seat = this.freeSeat();
     if (seat === null) return null;
     this.gridEntries.delete(seat);
-    const s: Seat = { seat, token, link, raw: null, source: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null, left: 0 };
+    const s = blankSeat({ seat, token, raw: null, source: null }, link);
     this.seats.set(seat, s);
     return s;
   }
