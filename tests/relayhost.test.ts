@@ -116,7 +116,7 @@ describe('relay host end', () => {
     end.close();
     await new Promise((r) => setTimeout(r, 1500));
     expect(server).toEqual([]);
-    await expect(t.join('GONE')).rejects.toThrow('No host');
+    await expect(t.join('GONE')).rejects.toThrow('Room GONE is not open');
   });
 });
 

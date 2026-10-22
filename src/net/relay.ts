@@ -33,13 +33,30 @@ function opened(ws: WebSocket, failure: string): Promise<void> {
   });
 }
 
+/** What the relay would answer this socket: 204 it would be let in, else why not. null: the relay did not answer. */
+async function probe(url: string): Promise<number | null> {
+  try {
+    return (await fetch(url.replace(/^ws/, 'http'), { cache: 'no-store' })).status;
+  } catch {
+    return null;
+  }
+}
+
 /** Whether the relay would refuse this host because another host holds (or just held) the room. */
 async function taken(url: string): Promise<boolean> {
-  try {
-    return (await fetch(url.replace(/^ws/, 'http'), { cache: 'no-store' })).status === 409;
-  } catch {
-    return false;
-  }
+  return (await probe(url)) === 409;
+}
+
+/**
+ * Why a phone could not join, from what the relay says it would answer (`status`, null when it
+ * does not answer). The browser hides the reason itself, so anything unknown is most likely a
+ * phone on a different network.
+ */
+export function joinFailure(status: number | null, room: string): string {
+  if (status === 404) return `Room ${room} is not open on this network. Check the room code, then try again.`;
+  if (status === 429) return 'Too many phones are joining from this device. Close the other tabs and try again.';
+  if (status === 503) return 'The relay is full, so no more phones can join right now. Try again in a minute.';
+  return `Can’t reach the host. Check you’re on the same Wi-Fi as the host computer, then try again. Room code: ${room}.`;
 }
 
 /** Proves to the relay that a reloaded host page owns its room, so nobody else can take it over. */
@@ -133,8 +150,11 @@ export class RelayTransport implements Transport {
   }
 
   async join(room: string): Promise<Link> {
-    const ws = new WebSocket(socketUrl(room, 'phone'));
-    await opened(ws, `No host is running room ${room} on this network.`);
+    const url = socketUrl(room, 'phone');
+    const ws = new WebSocket(url);
+    await opened(ws, 'unreachable').catch(async () => {
+      throw new Error(joinFailure(await probe(url), room));
+    });
     const link = new BasicLink((data) => ws.send(JSON.stringify(data)), () => ws.close());
     ws.onerror = null;
     ws.onmessage = (e) => link.deliver(JSON.parse(e.data as string));

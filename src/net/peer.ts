@@ -104,7 +104,7 @@ export class PeerTransport implements Transport {
     // Binary: PeerJS cuts messages into 16 KB pieces, so 60 KB song chunks and frames get through.
     // JSON would refuse anything at or over 16300 bytes and close the link.
     const conn = peer.connect(PREFIX + room, { reliable: true, serialization: 'binary' });
-    return settleWithin<Link>(15000, 'The host did not answer. Check the room code.', () => peer.destroy(), (ok, fail, done) => {
+    return settleWithin<Link>(15000, 'Can’t reach the host. Check the room code and your internet connection, then try again.', () => peer.destroy(), (ok, fail, done) => {
       conn.on('open', () => {
         if (done()) return conn.close();
         const link = wrap(conn);

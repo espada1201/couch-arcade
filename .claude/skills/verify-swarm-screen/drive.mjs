@@ -1528,6 +1528,25 @@ const CHECKS = {
     squatter.close();
   },
 
+  async 'join-failure'(run) {
+    // A phone that cannot join is told why: a code nobody hosts says so, with the code; the relay's own
+    // refusal (here, a missing room) is read through the probe the browser's WebSocket error hides.
+    run.allowErrors = /WebSocket|relay|ERR_|Failed to load/;
+    const room = await openRoom(run, { transport: 'lan', sims: [[0.3, 0.5]] });
+    const p = await room.context.newPage();
+    run.watch(p);
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.goto(`./?${q({ room: 'NOPE1', transport: 'lan', sim: '0.6,0.5' })}`);
+    await p.getByRole('button', { name: 'Join the swarm' }).click();
+    const overlay = p.locator('.overlay:not([hidden])');
+    await expect(overlay).toContainText('Room NOPE1 is not open on this network', { timeout: 30_000 });
+    await expect(overlay.getByRole('button', { name: 'Try again' })).toBeVisible();
+    run.note('phone message for a room nobody hosts', (await overlay.textContent()).trim());
+    await run.shot(p, 'phone-room-not-open');
+    // The real room is untouched.
+    await expect(room.host.locator('.count')).toHaveText(/^1 phone /);
+  },
+
   async 'host-moved'(run) {
     // The host opens the same room in a second tab: phones must follow it, the first tab must say so.
     const room = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });

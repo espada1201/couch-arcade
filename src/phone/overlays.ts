@@ -33,7 +33,7 @@ export function youVoted(): Layer {
 
 export function overlays(client: PhoneClient, vote: (choice: number) => void): Layer[] {
   const connection = layer('div.overlay', connectionKey, (_p, c) => {
-    const why = { full: 'This room is full.', replaced: 'This phone joined again in another tab, so this one has stepped aside.', failed: `Can’t reach the host. ${c.error}` }[c.status as 'full' | 'replaced' | 'failed'];
+    const why = { full: 'This room is full.', replaced: 'This phone joined again in another tab, so this one has stepped aside.', failed: c.error || 'Can’t reach the host.' }[c.status as 'full' | 'replaced' | 'failed'];
     return h(
       'div',
       {},
