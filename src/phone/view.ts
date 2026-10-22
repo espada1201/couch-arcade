@@ -73,13 +73,18 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   let lastPaint = -Infinity;
   let won = false;
   let lastCss = '';
+  const themeColor = document.querySelector('meta[name="theme-color"]');
   const optics = sim ? new BroadcastChannel(OPTICS_CHANNEL) : null;
 
   const paint = () => {
     lastPaint = performance.now();
     frame = render(client.program, { seat: client.seat, pos: client.pos, aspect: client.aspect }, client.hostNow());
     const bg = css(frame.rgb);
-    if (bg !== lastCss) screen.style.backgroundColor = lastCss = bg;
+    if (bg !== lastCss) {
+      screen.style.backgroundColor = lastCss = bg;
+      // The browser's bars take the frame's colour too, so the whole phone is one pixel of the picture.
+      themeColor?.setAttribute('content', bg);
+    }
     const text = frame.label ?? '';
     setText(label, text);
     const win = text === 'WIN';
