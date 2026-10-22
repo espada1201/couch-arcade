@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioClock, audioFileProblem, channelFor, clockTime, DRIFT_TOLERANCE_MS, durationProblem, MAX_TRACK_BYTES, MAX_TRACK_SECONDS, PAUSED, positionAt, reconcile, schedule, segments, startPoint, type Timeline } from '../src/core/speaker';
+import { audioClock, audioFileProblem, channelFor, clockTime, DRIFT_TOLERANCE_MS, deliveryStatus, durationProblem, MAX_TRACK_BYTES, MAX_TRACK_SECONDS, PAUSED, pendingStart, positionAt, reconcile, schedule, segments, startPoint, type Timeline } from '../src/core/speaker';
 import { gaussian, rng } from './rng';
 
 const DUR = 100; // seconds
@@ -252,5 +252,48 @@ describe('track files', () => {
     expect(clockTime(0)).toBe('0:00');
     expect(clockTime(65.9)).toBe('1:05');
     expect(clockTime(600)).toBe('10:00');
+  });
+});
+
+describe('the host clock during the lead-in', () => {
+  it('knows a Play is on its way until the phones start, and not after', () => {
+    const tl = schedule(PAUSED, 10_000, 1500, DUR, 'play');
+    expect(pendingStart(tl, 10_200, DUR)).toEqual({ at: 11_500, pos: 0, playing: true });
+    expect(pendingStart(tl, 11_500, DUR)).toBeNull();
+    expect(pendingStart(PAUSED, 10_000, DUR)).toBeNull();
+  });
+
+  it('replaying a finished song starts from 0:00 straight away, while the old end position still reads as finished', () => {
+    let tl = schedule(PAUSED, 0, 0, DUR, 'play');
+    tl = schedule(tl, 200_000, 1500, DUR, 'play');
+    expect(positionAt(tl, 200_100, DUR)).toBe(DUR);
+    expect(pendingStart(tl, 200_100, DUR)).toMatchObject({ pos: 0 });
+  });
+
+  it('a pause or a seek while the song is sounding is not a start', () => {
+    let tl = schedule(PAUSED, 0, 0, DUR, 'play');
+    tl = schedule(tl, 5000, 600, DUR, { seek: 50 });
+    expect(pendingStart(tl, 5100, DUR)).toBeNull();
+  });
+});
+
+describe('the delivery line under the song picker', () => {
+  const d = { online: 3, ready: 0, failed: 0, playing: false };
+  it('counts up while the song is on its way, then says Play', () => {
+    expect(deliveryStatus({ ...d, ready: 2 })).toBe('Sending to phones… 2 of 3 ready');
+    expect(deliveryStatus({ ...d, ready: 3 })).toBe('Ready on all 3 phones. Press Play.');
+    expect(deliveryStatus({ ...d, online: 1, ready: 1 })).toBe('Ready on 1 phone. Press Play.');
+  });
+  it('goes quiet while playing once everyone has the song, and stays honest when someone is late', () => {
+    expect(deliveryStatus({ ...d, ready: 3, playing: true })).toBe('');
+    expect(deliveryStatus({ ...d, ready: 2, playing: true })).toBe('Playing. Sending to phones… 2 of 3 ready');
+  });
+  it('names the phones that cannot play the file', () => {
+    expect(deliveryStatus({ ...d, ready: 2, failed: 1 })).toBe('Ready on 2 of 3 phones. 1 phone can’t play this file. Press Play.');
+    expect(deliveryStatus({ ...d, ready: 0, failed: 3 })).toBe('No phone can play this file. Try an MP3.');
+    expect(deliveryStatus({ ...d, ready: 1, failed: 1 })).toBe('Sending to phones… 1 of 3 ready. 1 phone can’t play this file.');
+  });
+  it('asks for phones when none are here', () => {
+    expect(deliveryStatus({ ...d, online: 0 })).toMatch(/No phones yet/);
   });
 });

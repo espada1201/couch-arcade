@@ -55,6 +55,34 @@ export function playingAt(tl: Timeline, t: number, duration: number): boolean {
   return keyframeAt(tl, t).playing && positionAt(tl, t, duration) < duration;
 }
 
+/**
+ * The play keyframe that is about to start sound, when none is coming out now: the host's
+ * "Starting…" window between pressing Play and the instant every phone starts together.
+ */
+export function pendingStart(tl: Timeline, t: number, duration: number): Keyframe | null {
+  if (playingAt(tl, t, duration)) return null;
+  return tl.find((k) => k.at > t && k.playing) ?? null;
+}
+
+/** How many phones have the song, how many are online, and how many cannot play it. */
+export interface Delivery {
+  online: number;
+  ready: number;
+  failed: number;
+  playing: boolean;
+}
+
+/** The line under the song picker: what is happening to the song on the phones, and what the host should do next. */
+export function deliveryStatus({ online, ready, failed, playing }: Delivery): string {
+  if (online === 0) return 'No phones yet. Scan the QR code with a phone to join.';
+  const broken = failed ? ` ${failed === 1 ? '1 phone' : `${failed} phones`} can’t play this file.` : '';
+  if (ready + failed < online) return `${playing ? 'Playing. ' : ''}Sending to phones… ${ready} of ${online} ready${broken ? `.${broken}` : ''}`;
+  if (ready === 0) return 'No phone can play this file. Try an MP3.';
+  if (playing) return broken.trim();
+  const who = failed ? `${ready} of ${online} phones` : online === 1 ? '1 phone' : `all ${online} phones`;
+  return `Ready on ${who}.${broken} Press Play.`;
+}
+
 export type Command = 'play' | 'pause' | { seek: number };
 
 /**

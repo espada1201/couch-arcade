@@ -101,3 +101,163 @@ test('the web app manifest starts at the app and carries 192 and 512 pixel icons
   expect(sizes).toEqual(expect.arrayContaining(['192x192', '512x512']));
   for (const icon of manifest.icons) expect((await request.get(new URL(icon.src, new URL(href!, page.url())).href)).status()).toBe(200);
 });
+
+test('a keyboard-only host reaches the experience tabs in two Tabs, and Tab from a tab lands on the first control', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  await host.locator('body').click({ position: { x: 1, y: 1 } });
+  await host.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  // Tab 1 is the skip link, and it can be seen while it has focus.
+  await host.keyboard.press('Tab');
+  const skip = host.getByRole('link', { name: 'Skip to controls' });
+  await expect(skip).toBeFocused();
+  expect(await inViewport(host, 'a.skip-link')).toBe(true);
+  await host.screenshot({ path: 'test-results/host-skip-link.png' });
+
+  // Tab 2 is the tab strip. Without the skip link it would be the 11th stop.
+  await host.keyboard.press('Tab');
+  await expect(host.getByRole('tab', { name: /Locate/ })).toBeFocused();
+
+  // Enter on the skip link also lands on the selected tab.
+  await host.keyboard.press('Shift+Tab');
+  await host.keyboard.press('Enter');
+  await expect(host.getByRole('tab', { name: /Locate/ })).toBeFocused();
+
+  // From the selected tab, the next Tab goes into the panel's first control, not onto the panel box itself.
+  await host.keyboard.press('Tab');
+  const where = await host.evaluate(() => {
+    const el = document.activeElement as HTMLElement;
+    return { inPanel: !!el.closest('.panel'), isPanel: el.matches('[role=tabpanel]'), tag: el.tagName };
+  });
+  expect(where).toMatchObject({ inPanel: true, isPanel: false });
+
+  // Arrow keys still move along the strip.
+  await host.getByRole('tab', { name: /Locate/ }).focus();
+  await host.keyboard.press('ArrowRight');
+  await expect(host.getByRole('tab', { name: /Music/ })).toBeFocused();
+  await expect(host.getByRole('tab', { name: /Music/ })).toHaveAttribute('aria-selected', 'true');
+  expect(errors).toEqual([]);
+});
+
+test('every control on the Music and Card stunt panels shows a focus ring, the song picker included', async ({ context }) => {
+  const { host } = await openHost(context, []);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  for (const tab of [/Music/, /Card stunt/]) {
+    await host.getByRole('tab', { name: tab }).click();
+    await host.getByRole('tab', { name: tab }).focus();
+    const seen: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      await host.keyboard.press('Tab');
+      const ring = await host.evaluate(() => {
+        const el = document.activeElement as HTMLElement;
+        if (!el.closest('.panel')) return null;
+        // A visually hidden input shows its ring on the control it stands for.
+        const shown = el.matches('input[type=file]') ? ((el.closest('label') as HTMLElement | null) ?? el) : el;
+        const own = getComputedStyle(el);
+        const lab = getComputedStyle(shown);
+        const has = (s: CSSStyleDeclaration) => s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 2;
+        return { name: el.id || el.tagName, ok: has(own) || has(lab) || (el.matches('input[type=file]') && !!el.closest('label:focus-within')) };
+      });
+      if (ring) {
+        seen.push(ring.name);
+        expect(ring.ok, `focus ring on ${ring.name}`).toBe(true);
+      }
+    }
+    expect(seen.length).toBeGreaterThan(2);
+  }
+  await host.getByRole('tab', { name: /Music/ }).click();
+  await host.locator('#speaker-file').focus();
+  await host.screenshot({ path: 'test-results/host-picker-focus.png' });
+});
+
+test('Music: one short intro, a big Pick a song button, and a live status under it', async ({ context }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  for (let i = 0; i < 2; i++) await joinPhone(context, code, i, errors);
+  await expect(host.locator('.count')).toContainText('2 phones');
+  await host.getByRole('tab', { name: /Music/ }).click();
+
+  const intro = await host.locator('.panel-intro').first().innerText();
+  expect(intro.split(/[.!?](?:\s|$)/).filter(Boolean).length).toBeLessThanOrEqual(2);
+  expect(intro).toMatch(/same moment/i);
+  expect(intro).toMatch(/install/i);
+  expect(intro).toMatch(/file/i);
+
+  const pick = host.locator('.drop .pick');
+  await expect(pick).toHaveText('Pick a song');
+  expect((await pick.boundingBox())!.height).toBeGreaterThanOrEqual(56);
+
+  await host.locator('#speaker-file').setInputFiles({ name: 'Test Tone.wav', mimeType: 'audio/wav', buffer: wav(12) });
+  // The line right under the picker tells the story: never the old "Sending the song…" sentence that stays forever.
+  const status = host.locator('.drop + .notice > .note');
+  await expect(status).toHaveText('Ready on all 2 phones. Press Play.', { timeout: 20_000 });
+  expect(await inViewport(host, '.drop + .notice > .note')).toBe(true);
+  await expect(host.getByText('3 of 3 phones ready')).toHaveCount(0);
+  await expect(host.getByText('2 of 2 phones ready')).toBeVisible();
+  await expect(host.locator('.np-phones li')).toHaveCount(2);
+
+  // Play: the clock says it is starting during the 1.5 s lead-in, then runs.
+  await host.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(host.locator('.np-time')).toContainText('Starting');
+  await expect(host.locator('.np-time')).not.toContainText('Starting', { timeout: 4000 });
+  await expect(status).toHaveText('');
+  expect(errors).toEqual([]);
+});
+
+test('Poll answer boxes look empty: their hints are examples, not typed words', async ({ context }) => {
+  const { host } = await openHost(context, []);
+  await host.getByRole('tab', { name: /Poll/ }).click();
+  const hints = await host.locator('#poll-q, [id^=poll-opt-]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).placeholder));
+  expect(hints).toHaveLength(5);
+  for (const hint of hints) expect(hint === '' || /^e\.g\. |^Optional/.test(hint), hint).toBe(true);
+  expect(hints).not.toContain('Yes');
+  expect(hints).not.toContain('No');
+  expect(hints[1]).toBe('e.g. Yes');
+});
+
+test('on a touch screen the small buttons and chips are at least 44 px tall', async ({ browser }) => {
+  const ctx = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 820, height: 1000 } });
+  const page = await ctx.newPage();
+  await page.goto('./?host=1&transport=local&fresh=1');
+  await expect(page.getByRole('tab', { name: /Locate/ })).toBeVisible();
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+  const heights = await page.locator('.btn.small').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+  expect(heights.length).toBeGreaterThan(2);
+  for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
+  const chip = await page.evaluate(() => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = '1';
+    document.body.append(b);
+    return b.getBoundingClientRect().height;
+  });
+  expect(chip).toBeGreaterThanOrEqual(44);
+  await ctx.close();
+});
+
+test('help and secondary text on the host console is at least 15 px', async ({ context }) => {
+  const { host } = await openHost(context, []);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  const small = async () =>
+    host.evaluate(() => {
+      const out: string[] = [];
+      const walker = document.createTreeWalker(document.querySelector('.console')!, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const el = n.parentElement!;
+        if (!n.textContent!.trim() || el.closest('.sr-only, .tab-num, .room-code, script, style')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0) continue;
+        if (parseFloat(getComputedStyle(el).fontSize) < 15) out.push(`${el.className || el.tagName}: ${n.textContent!.trim().slice(0, 30)}`);
+      }
+      return out;
+    });
+  for (const tab of [/Locate/, /Music/, /Poll/, /Show/, /Card stunt/]) {
+    await host.getByRole('tab', { name: tab }).click();
+    expect(await small(), String(tab)).toEqual([]);
+  }
+  expect(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

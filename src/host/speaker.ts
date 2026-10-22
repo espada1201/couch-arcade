@@ -1,6 +1,6 @@
 // Party Speaker: the host picks a song, every phone downloads it over the room's own
 // link, and they all play it in step on the shared clock.
-import { audioFileProblem, clockTime, durationProblem, MAX_TRACK_SECONDS, PAUSED, playingAt, positionAt, schedule, type Command, type SpeakerProgram, type Track } from '../core/speaker';
+import { audioFileProblem, clockTime, deliveryStatus, durationProblem, MAX_TRACK_SECONDS, PAUSED, pendingStart, playingAt, positionAt, schedule, type Command, type SpeakerProgram, type Track } from '../core/speaker';
 import { randomId } from '../net/transport';
 import { h, plural, setText, slider } from '../ui/dom';
 import type { Director, Hold } from './director';
@@ -33,14 +33,22 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
 
   /** Messages about the chosen file sit under the picker, where the host is looking. */
   const picker = notice();
+  /** While the picker shows its own message (reading a file, or why it was refused), the live delivery line stays out of its way. */
+  let pickerBusy = false;
 
   const send = () => session.setProgram({ ...prog });
   // Something else may have taken the room while the volume change waited its turn.
   const sendSoon = throttle(() => active() && send(), 150);
 
+  const refuse = (text: string) => {
+    pickerBusy = true;
+    picker.fail(text);
+  };
+
   const load = async (f: File) => {
     const problem = audioFileProblem(f.name, f.type, f.size);
-    if (problem) return picker.fail(problem);
+    if (problem) return refuse(problem);
+    pickerBusy = true;
     picker.say(`Reading ${f.name}…`);
     let data: Uint8Array;
     let duration: number;
@@ -48,10 +56,10 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
       data = new Uint8Array(await f.arrayBuffer());
       duration = await probe(data);
     } catch {
-      return picker.fail('That file could not be read as audio. Try an MP3.');
+      return refuse('That file could not be read as audio. Try an MP3.');
     }
     const tooLong = durationProblem(duration);
-    if (tooLong) return picker.fail(tooLong);
+    if (tooLong) return refuse(tooLong);
     share?.stop();
     const id = randomId(8);
     share = new FileShare(session, id, data);
@@ -63,7 +71,8 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     session.offer(track);
     if (active()) send();
     seek.max = String(duration);
-    picker.say(active() ? '' : 'Sending the song to every phone. Whatever is running keeps running until you press Play.');
+    // From here the line under the picker follows the phones (see refresh).
+    pickerBusy = false;
     refresh();
   };
 
@@ -96,7 +105,13 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     const f = file.files?.[0];
     if (f) void load(f);
   });
-  const drop = h('label.file.drop', { for: 'speaker-file' }, `Pick a song file (MP3 or M4A; WAV and OGG work too), up to ${MAX_TRACK_SECONDS / 60} minutes, or drop it here`, file);
+  const drop = h(
+    'label.file.drop',
+    { for: 'speaker-file' },
+    h('span.pick.btn.primary.big', {}, 'Pick a song'),
+    h('span.drop-hint', {}, `MP3 or M4A, up to ${MAX_TRACK_SECONDS / 60} minutes. You can also drop the file here.`),
+    file,
+  );
   drop.addEventListener('dragover', (e) => {
     e.preventDefault();
     drop.classList.add('over');
@@ -143,18 +158,19 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     toggle.disabled = seek.disabled = !t;
     if (!t) return;
     const now = session.now();
-    const pos = positionAt(prog.tl, now, t.duration);
+    // Between pressing Play and the instant every phone starts, show where the song is about to start, and say so.
+    const starting = pendingStart(prog.tl, now, t.duration);
+    const pos = starting ? starting.pos : positionAt(prog.tl, now, t.duration);
     setText(toggle, willPlay(t) ? 'Pause' : 'Play');
     if (!seeking) seek.value = String(pos);
-    setText(time, `${clockTime(pos)} / ${clockTime(t.duration)}`);
+    setText(time, `${starting ? 'Starting… ' : ''}${clockTime(pos)} / ${clockTime(t.duration)}`);
     const online = session.online.length;
     const list = share?.progress() ?? [];
     const done = list.filter((p) => p.state === 'ready').length;
     const failed = list.filter((p) => p.state === 'error').length;
-    setText(
-      ready,
-      `${done} of ${plural(online, 'phone')} ready` + (failed ? ` · ${failed} can’t play this file` : '') + (playingAt(prog.tl, now, t.duration) ? ' · playing' : ''),
-    );
+    const playing = playingAt(prog.tl, now, t.duration);
+    setText(ready, `${done} of ${plural(online, 'phone')} ready` + (failed ? ` · ${failed} can’t play this file` : '') + (playing ? ' · playing' : ''));
+    if (!pickerBusy) picker.say(deliveryStatus({ online, ready: done, failed, playing: playing || !!starting }));
     phones.replaceChildren(
       ...list.map((p) =>
         h(
@@ -171,7 +187,7 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
   const tick = () => (ticking ||= window.setInterval(() => el.isConnected && refresh(), 400));
 
   const { el, say, fail } = panel(
-    'Play one song on every phone at once. Every phone plays your song at the same moment on the shared clock, so you need no speaker. Phones start within a few hundredths of a second of each other on good Wi-Fi; Bluetooth speakers add delay. The header shows how closely the phones’ clocks agree. Nothing to install on the phones. You need the song as a file (MP3 or M4A), because music in streaming apps can’t be shared this way.',
+    'Play one song on every phone at once. Every phone starts at the same moment and needs no install, but the song must be a file (MP3 or M4A), because streaming apps can’t share music.',
     drop,
     picker.el,
     title,
