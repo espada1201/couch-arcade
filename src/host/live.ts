@@ -3,9 +3,11 @@
 // its own pixel, all switching on the same synced instant so the picture never tears.
 import { BLACK } from '../core/effects';
 import { sampleCrowd, type RGB } from '../core/layout';
-import { h, plural, segmented, slider } from '../ui/dom';
+import { h, plural, segmented, slider, toggles } from '../ui/dom';
 import type { Director } from './director';
+import { followPanel } from './follow';
 import { panel, requirePlaced, stopButton } from './panel';
+import { every, type Broadcast } from './ticker';
 import type { HostSession } from './session';
 
 type SourceKind = 'aurora' | 'fire' | 'camera' | 'video';
@@ -70,29 +72,30 @@ export function castFrame(session: HostSession, ctx: CanvasRenderingContext2D, p
   return next;
 }
 
-export interface Broadcast {
-  stop(): void;
-  setFps(fps: number): void;
-}
-
 /** Draw a picture onto `ctx` and cast it to the crowd `fps` times a second until stopped. */
 export function broadcast(session: HostSession, ctx: CanvasRenderingContext2D, draw: (ctx: CanvasRenderingContext2D, t: number) => void, fps: number): Broadcast {
   let last = new Map<number, RGB>();
-  const frame = () => {
+  return every(fps, () => {
     draw(ctx, performance.now());
     last = castFrame(session, ctx, last);
-  };
-  let timer = window.setInterval(frame, 1000 / fps);
-  return {
-    stop: () => clearInterval(timer),
-    setFps: (v) => {
-      clearInterval(timer);
-      timer = window.setInterval(frame, 1000 / v);
-    },
-  };
+  });
 }
 
+type LiveMode = 'spread' | 'whole';
+
+/** The Live screen: one pixel per phone across the room, or the whole picture on every phone. */
 export function livePanel(session: HostSession, director: Director): HTMLElement {
+  const spread = spreadPanel(session, director);
+  const whole = followPanel(session, director);
+  whole.hidden = true;
+  const modes = toggles<LiveMode>('Live screen mode', [['spread', 'Spread across phones'], ['whole', 'Every phone shows it all']], 'spread', (m) => {
+    spread.hidden = m !== 'spread';
+    whole.hidden = m !== 'whole';
+  });
+  return h('div.live-modes', {}, modes, spread, whole);
+}
+
+function spreadPanel(session: HostSession, director: Director): HTMLElement {
   const canvas = h('canvas.live-preview', { width: W, height: H, 'aria-label': 'What the crowd is showing' });
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   const file = h('input', { type: 'file', accept: 'video/*', id: 'live-file', hidden: true });

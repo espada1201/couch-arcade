@@ -285,3 +285,33 @@ body.phone { overscroll-behavior: none; }
   * { transition: none !important; }
 }
 .wave-controls { display: grid; gap: 14px; }
+
+/* ---------- Follow mode (every phone shows the whole picture) ---------- */
+.live-modes > .toggles { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 20px 0; }
+.follow-source { display: grid; gap: 8px; }
+.follow-source > label { font-size: 13px; color: var(--muted); }
+.follow-cards {
+  width: 100%; resize: vertical; min-height: 120px; padding: 10px 12px; border-radius: 8px;
+  background: var(--ink); color: var(--text); border: 1px solid var(--edge); font: 15px/1.4 var(--display);
+}
+.follow-cards:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.follow-pos { flex: 1; text-align: center; font: 500 13px var(--mono); color: var(--muted); }
+.follow {
+  position: fixed; inset: 0; z-index: 1; background: #000; color: #fff;
+  display: grid; place-items: center; overflow: hidden; touch-action: none;
+  padding: max(44px, calc(env(safe-area-inset-top) + 36px)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.follow[data-show='picture'] { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.follow-picture { width: 100%; height: 100%; object-fit: contain; display: block; }
+.follow-text { font-family: var(--display); font-weight: 800; line-height: 1.15; text-align: center; overflow-wrap: normal; }
+.follow-text span { display: block; white-space: pre; }
+.follow[data-show='captions'] { place-items: end center; }
+.follow[data-show='captions'] .follow-text { text-align: left; justify-self: stretch; }
+.follow-text .interim { color: #c9c2b2; }
+.follow[data-show='wait'] .follow-text { font-weight: 600; color: #c9c2b2; }
+.follow-count { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); margin: 0; font: 500 13px var(--mono); color: #8d8574; }
+.follow.preview { position: relative; inset: auto; z-index: auto; aspect-ratio: 16 / 9; border-radius: 8px; padding: 12px; }
+.follow.preview[data-show='picture'] { padding: 0; }
+/* The connection pill and any prompt stay on top of the picture. */
+.status, .overlay { z-index: 2; }
+.follow-source .row { align-items: center; }

@@ -2,6 +2,7 @@
 // phone's own position, and the shared clock. The host sends one small message per
 // change; every phone renders the whole room's choreography locally, in step.
 import { litAt, type BlinkSchedule } from './blinkcode';
+import type { FollowView } from './follow';
 import { distance, type Point, type RGB } from './layout';
 import { ballAt, type PotatoState } from './potato';
 import { teamOf, type TerritoryState } from './territory';
@@ -32,7 +33,9 @@ export type Program =
   | { kind: 'live'; rgb: RGB; prev: RGB; at: number }
   | WaveProgram
   | { kind: 'territory'; state: TerritoryState; colors: [RGB, RGB] }
-  | { kind: 'potato'; state: PotatoState };
+  | { kind: 'potato'; state: PotatoState }
+  /** Every phone shows the whole picture (see core/follow). */
+  | { kind: 'follow'; view: FollowView };
 
 export interface Me {
   seat: number;
@@ -201,5 +204,8 @@ export function render(prog: Program, me: Me, t: number): Frame {
       }
       return { rgb: mix(base, [255, 120, 20], glow) };
     }
+    case 'follow':
+      // The phone draws the picture itself over a black screen.
+      return { rgb: BLACK };
   }
 }
