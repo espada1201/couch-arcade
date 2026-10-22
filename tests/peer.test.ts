@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { settleWithin } from '../src/net/peer';
+import { MAX_PHONE_MESSAGE_BYTES } from '../src/core/protocol';
+import { settleWithin, wrap } from '../src/net/peer';
 
 afterEach(() => vi.useRealTimers());
 
@@ -40,5 +41,38 @@ describe('settleWithin', () => {
     });
     await expect(p).rejects.toThrow('broker down');
     expect(onFail).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('wrap', () => {
+  const fakeConn = () => {
+    const dataChannel = new EventTarget();
+    const handlers: Record<string, (d?: unknown) => void> = {};
+    const conn = { dataChannel, on: (e: string, cb: (d?: unknown) => void) => (handlers[e] = cb), send: vi.fn(), close: vi.fn() };
+    const piece = (bytes: number) => dataChannel.dispatchEvent(new MessageEvent('message', { data: new ArrayBuffer(bytes) }));
+    return { conn: conn as unknown as Parameters<typeof wrap>[0], piece, handlers };
+  };
+
+  it('ends a link at the first piece over its limit, before PeerJS can stitch a big message together', () => {
+    const { conn, piece } = fakeConn();
+    const link = wrap(conn, MAX_PHONE_MESSAGE_BYTES);
+    const closed = vi.fn();
+    link.onClose(closed);
+    piece(MAX_PHONE_MESSAGE_BYTES);
+    expect(closed).not.toHaveBeenCalled();
+    piece(16300);
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(conn.close).toHaveBeenCalled();
+  });
+
+  it('takes pieces of any size from the host', () => {
+    const { conn, piece, handlers } = fakeConn();
+    const link = wrap(conn);
+    const got = vi.fn();
+    link.onMessage(got);
+    piece(16300);
+    handlers.data({ t: 'chunk' });
+    expect(got).toHaveBeenCalledWith({ t: 'chunk' });
+    expect(conn.close).not.toHaveBeenCalled();
   });
 });

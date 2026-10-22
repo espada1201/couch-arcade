@@ -1,6 +1,7 @@
 // Internet transport: WebRTC data channels brokered by the free public PeerJS server.
 // Only signalling goes through the broker; everything after that is phone <-> host.
 import type { DataConnection, Peer as PeerType } from 'peerjs';
+import { MAX_PHONE_MESSAGE_BYTES } from '../core/protocol';
 import { BasicLink, RoomTakenError, backoff, sendEach, type HostEnd, type Link, type ServerState, type Transport } from './transport';
 
 const PREFIX = 'swarmscreen-v1-';
@@ -37,8 +38,14 @@ async function makePeer(id?: string): Promise<PeerType> {
   });
 }
 
-function wrap(conn: DataConnection): BasicLink {
+/**
+ * A data connection as a Link. `limit`: the largest piece the other end may send. PeerJS stitches a
+ * large message back together from 16 KB pieces before it says anything, so the host ends a phone's
+ * link at its first oversized piece instead of holding pieces of a message no phone sends.
+ */
+export function wrap(conn: DataConnection, limit = Infinity): BasicLink {
   const link = new BasicLink((m) => conn.send(m), () => conn.close(), () => conn.dataChannel?.bufferedAmount ?? 0);
+  conn.dataChannel.addEventListener('message', (e: MessageEvent<ArrayBuffer>) => e.data.byteLength > limit && link.close());
   conn.on('data', (d) => link.deliver(d));
   conn.on('close', () => link.ended());
   conn.on('error', () => link.ended());
@@ -57,7 +64,7 @@ export class PeerTransport implements Transport {
     let onLink: (l: Link) => void = () => {};
     let onServer: (state: ServerState) => void = () => {};
     let tries = 0;
-    peer.on('connection', (conn) => conn.on('open', () => onLink(wrap(conn))));
+    peer.on('connection', (conn) => conn.on('open', () => onLink(wrap(conn, MAX_PHONE_MESSAGE_BYTES))));
     // The broker connection can drop while the data channels stay up; keep it alive for late joiners.
     // A failed reconnect disconnects again, so this keeps trying with backoff until the broker answers.
     peer.on('disconnected', () => {
@@ -77,7 +84,9 @@ export class PeerTransport implements Transport {
 
   async join(room: string): Promise<Link> {
     const peer = await makePeer();
-    const conn = peer.connect(PREFIX + room, { reliable: true, serialization: 'json' });
+    // Binary: PeerJS cuts messages into 16 KB pieces, so 60 KB song chunks and frames get through.
+    // JSON would refuse anything at or over 16300 bytes and close the link.
+    const conn = peer.connect(PREFIX + room, { reliable: true, serialization: 'binary' });
     return settleWithin<Link>(15000, 'The host did not answer. Check the room code.', () => peer.destroy(), (ok, fail, done) => {
       conn.on('open', () => {
         if (done()) return conn.close();
