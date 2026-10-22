@@ -76,3 +76,29 @@ test('a New Year countdown runs on every phone in step, and the host keeps a rec
   await host.screenshot({ path: 'test-results/host-template.png' });
   expect(errors).toEqual([]);
 });
+
+test('a recorder that fails to start says why, and the next moment still films', async ({ context }) => {
+  const errors: string[] = [];
+  // The browser's recorder refuses its first start, as a busy encoder does.
+  await context.addInitScript(() => {
+    const start = MediaRecorder.prototype.start;
+    let refused = false;
+    MediaRecorder.prototype.start = function (this: MediaRecorder, ms?: number) {
+      if (!refused) throw ((refused = true), new DOMException('The encoder is busy', 'NotSupportedError'));
+      return start.call(this, ms);
+    };
+  });
+  const room = await openRoom(context, errors, [[0.3, 0.5], [0.7, 0.5]]);
+  const { host } = room;
+  await host.getByRole('tab', { name: /Show/ }).click();
+  await host.getByLabel('Record the moment with this computer’s camera').check();
+  await expect(host.getByText('Camera ready')).toBeVisible();
+  await host.getByRole('button', { name: 'New Year countdown' }).click();
+  await expect(host.getByText('Couldn’t record: The encoder is busy')).toBeVisible();
+  await host.getByRole('button', { name: 'Stop', exact: true }).click();
+  await host.getByRole('button', { name: 'New Year countdown' }).click();
+  await expect(host.getByText('● Recording the moment…')).toBeVisible();
+  await host.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(host.getByRole('link', { name: /Download the keepsake/ })).toBeVisible({ timeout: 10_000 });
+  expect(errors).toEqual([]);
+});

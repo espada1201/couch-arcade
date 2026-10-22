@@ -94,10 +94,20 @@ export function recorder(): Recorder | null {
     }
     if (!wanted) return;
     const mimeType = pickMime((t) => MediaRecorder.isTypeSupported?.(t) ?? false);
-    const r = new MediaRecorder(s, mimeType ? { mimeType } : {});
     const chunks: Blob[] = [];
-    r.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    let r: MediaRecorder;
+    try {
+      r = new MediaRecorder(s, mimeType ? { mimeType } : {});
+      r.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      r.start(1000);
+    } catch (e) {
+      wanted = false;
+      failed(e);
+      return;
+    }
+    // Also runs when the browser stops on its own (the camera unplugged), so the next moment can film.
     r.onstop = () => {
+      if (rec === r) end();
       if (!on.checked) release();
       if (url) URL.revokeObjectURL(url);
       const type = r.mimeType || mimeType || 'video/webm';
@@ -112,7 +122,6 @@ export function recorder(): Recorder | null {
     };
     rec = r;
     began = performance.now();
-    r.start(1000);
     timer = window.setTimeout(end, maxMs);
     setText(status, '● Recording the moment…');
   };
