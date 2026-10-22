@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MAX_PHONE_MESSAGE_BYTES } from '../src/core/protocol';
+import { PHONE_MESSAGE_BYTES } from '../src/net/limits.js';
 import { settleWithin, wrap } from '../src/net/peer';
 
 afterEach(() => vi.useRealTimers());
@@ -55,10 +55,10 @@ describe('wrap', () => {
 
   it('ends a link at the first piece over its limit, before PeerJS can stitch a big message together', () => {
     const { conn, piece } = fakeConn();
-    const link = wrap(conn, MAX_PHONE_MESSAGE_BYTES);
+    const link = wrap(conn, PHONE_MESSAGE_BYTES);
     const closed = vi.fn();
     link.onClose(closed);
-    piece(MAX_PHONE_MESSAGE_BYTES);
+    piece(PHONE_MESSAGE_BYTES);
     expect(closed).not.toHaveBeenCalled();
     piece(16300);
     expect(closed).toHaveBeenCalledTimes(1);

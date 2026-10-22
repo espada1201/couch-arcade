@@ -1190,6 +1190,62 @@ const CHECKS = {
     await run.shot(room.host, 'host-territory');
   },
 
+  async masher(run) {
+    // An honest phone mashing Territory at 15 taps a second while a 20 MB song downloads in the
+    // background: its acks, taps and pings together must stay inside the relay's limit (no 1008).
+    const CLOSES = () => {
+      window.__closes = [];
+      window.__sent = {};
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (d) {
+        const sec = Math.floor(performance.now() / 1000);
+        window.__sent[sec] = (window.__sent[sec] ?? 0) + 1;
+        return send.call(this, d);
+      };
+      const Orig = WebSocket;
+      window.WebSocket = class extends Orig {
+        constructor(...a) {
+          super(...a);
+          this.addEventListener('close', (e) => window.__closes.push(e.code));
+        }
+      };
+    };
+    const room = await openRoom(run, { sims: [[0.2, 0.5], [0.8, 0.5]], init: CLOSES });
+    const { host, phones } = room;
+    await scan(room);
+    await tab(room, 'Music');
+    const song = { name: 'Big.wav', mimeType: 'audio/wav', buffer: wav(290, 44100) };
+    run.note('song MB', +(song.buffer.length / 2 ** 20).toFixed(1));
+    await host.locator('#speaker-file').setInputFiles(song);
+    await expect(host.getByText(/of 2 phones ready/)).toBeVisible({ timeout: 15_000 });
+    await tab(room, 'Territory');
+    await host.getByRole('button', { name: 'Start Territory' }).click();
+    const masher = phones[0];
+    await expect(masher.locator('.label')).toHaveText('TAP');
+    await masher.bringToFront();
+    const sent = await masher.evaluate(
+      () =>
+        new Promise((res) => {
+          const screen = document.querySelector('.screen');
+          let n = 0;
+          const t = setInterval(() => {
+            screen.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 400 }));
+            if (++n === 225) (clearInterval(t), res(n));
+          }, 1000 / 15);
+        }),
+    );
+    run.note('taps in 15 s', sent);
+    const closes = await Promise.all(phones.map((p) => p.evaluate(() => window.__closes)));
+    await tab(room, 'Music');
+    await expect(host.getByText('2 of 2 phones ready')).toBeVisible({ timeout: 60_000 });
+    run.note('song on both phones', true);
+    run.note('relay closes per phone', closes);
+    run.note('masher messages per second', Object.values(await masher.evaluate(() => window.__sent)).join(' '));
+    await run.shot(host, 'host-after-mashing');
+    if (closes.flat().includes(1008)) run.issue('the relay closed an honest phone for too many messages');
+    await expect(masher.locator('.status')).toContainText('Seat');
+  },
+
   async potato(run) {
     const room = await openRoom(run, { sims: [[0.2, 0.3], [0.2, 0.7], [0.5, 0.5], [0.8, 0.3], [0.8, 0.7]] });
     await scan(room);

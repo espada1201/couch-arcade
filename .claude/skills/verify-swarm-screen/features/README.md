@@ -27,6 +27,6 @@ H1 and one paragraph, then four H2s: `Sub-features`, `How to get to it (user POV
 - [Card stunt](./card-stunt.md): `stunt`, `templates`, `record`, `slow-flip`
 - [Live screen](./live-screen.md): `live`
 - [Wave](./wave.md): `wave`
-- [Territory](./territory.md): `territory`
+- [Territory](./territory.md): `territory`, `masher`
 - [Hot Potato](./hot-potato.md): `potato`
 - [Reconnect and seat keep](./reconnect.md): `reconnect`, `ghost`

@@ -6,6 +6,7 @@ import { networkInterfaces } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../src/net/limits.js';
 
 const PORT = Number(process.env.PORT) || 4321;
 const ROOT = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -91,10 +92,7 @@ const tombs = new Map();
 const rooms = new Map();
 let nextId = 1;
 // Hosts send frames and song chunks of up to 60 KB; phones send only small control messages.
-const servers = { host: new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }), phone: new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 }) };
-/** A phone may send this many messages a second on average, in bursts of up to BURST. */
-const PHONE_RATE = 30;
-const PHONE_BURST = 60;
+const servers = { host: new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }), phone: new WebSocketServer({ noServer: true, maxPayload: PHONE_MESSAGE_BYTES }) };
 
 // Refusing before the upgrade makes the browser's WebSocket fail to open, so join() rejects instead of retrying.
 function refuse(socket, status) {
@@ -215,13 +213,10 @@ function attachPhone(ws, r) {
   const id = String(nextId++);
   r.phones.set(id, { ws, written: 0, since: 0 });
   r.host.send(JSON.stringify({ t: 'open', id }));
-  let tokens = PHONE_BURST;
-  let at = Date.now();
+  // The outer wall: the host enforces the same limit on every transport.
+  const wall = tokenBucket(PHONE_LIMIT, Date.now());
   ws.on('message', (raw) => {
-    const now = Date.now();
-    tokens = Math.min(PHONE_BURST, tokens + ((now - at) * PHONE_RATE) / 1000) - 1;
-    at = now;
-    if (tokens < 0) return ws.close(1008, 'too many messages');
+    if (!wall.take(Date.now())) return ws.close(1008, 'too many messages');
     const data = parse(raw);
     if (data === undefined || r.phones.get(id)?.ws !== ws) return;
     r.host.send(JSON.stringify({ t: 'msg', id, data }));

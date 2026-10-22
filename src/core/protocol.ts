@@ -3,7 +3,6 @@ import type { Point } from './layout';
 import type { Track } from './speaker';
 import { MAX_OPTIONS } from './poll';
 import type { ChunkMsg } from '../net/chunks';
-import limits from '../net/limits.json';
 
 export type PhoneMsg =
   | { t: 'hello'; token: string }
@@ -74,15 +73,15 @@ export interface Optics {
 
 export const OPTICS_CHANNEL = 'swarm-optics';
 
+/** The host counts at most one tap per this long from a phone, and a phone sends no more. */
+export const TAP_MS = 40;
+
 /**
  * Largest message the host may send, and the one limit file chunks and picture frames
  * are cut from. The relay's 64 KB maxPayload needs headroom, so stay well under 64 KB.
  * PeerJS cuts each message into 16 KB pieces itself (binary serialization).
  */
 export const MAX_MESSAGE_BYTES = 60 * 1024;
-
-/** Largest message a phone may send: phones send only small control messages. The relay enforces the same. */
-export const MAX_PHONE_MESSAGE_BYTES = limits.phoneMessageBytes;
 
 /** Raw bytes that fit in one message as base64 (3 bytes to 4 chars), leaving `envelope` bytes for the rest. */
 export function payloadBytes(envelope: number): number {

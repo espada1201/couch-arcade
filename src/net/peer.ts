@@ -1,7 +1,7 @@
 // Internet transport: WebRTC data channels brokered by the free public PeerJS server.
 // Only signalling goes through the broker; everything after that is phone <-> host.
 import type { DataConnection, Peer as PeerType } from 'peerjs';
-import { MAX_PHONE_MESSAGE_BYTES } from '../core/protocol';
+import { PHONE_MESSAGE_BYTES } from './limits.js';
 import { BasicLink, RoomTakenError, backoff, sendEach, type HostEnd, type Link, type ServerState, type Transport } from './transport';
 
 const PREFIX = 'swarmscreen-v1-';
@@ -64,7 +64,7 @@ export class PeerTransport implements Transport {
     let onLink: (l: Link) => void = () => {};
     let onServer: (state: ServerState) => void = () => {};
     let tries = 0;
-    peer.on('connection', (conn) => conn.on('open', () => onLink(wrap(conn, MAX_PHONE_MESSAGE_BYTES))));
+    peer.on('connection', (conn) => conn.on('open', () => onLink(wrap(conn, PHONE_MESSAGE_BYTES))));
     // The broker connection can drop while the data channels stay up; keep it alive for late joiners.
     // A failed reconnect disconnects again, so this keeps trying with backoff until the broker answers.
     peer.on('disconnected', () => {

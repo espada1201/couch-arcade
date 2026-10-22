@@ -5,8 +5,9 @@ import { ClockEstimator, sampleFrom } from '../core/clock';
 import type { Program } from '../core/effects';
 import type { Point } from '../core/layout';
 import type { Track } from '../core/speaker';
-import type { HostMsg, PhoneMsg } from '../core/protocol';
+import { TAP_MS, type HostMsg, type PhoneMsg } from '../core/protocol';
 import type { ChunkMsg } from '../net/chunks';
+import { PHONE_BUDGET, tokenBucket } from '../net/limits.js';
 import { backoff, type Link, type Transport } from '../net/transport';
 import { stableId } from '../storage';
 import { errorText } from '../ui/dom';
@@ -16,8 +17,13 @@ export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced
 
 /** A host that hasn't sent anything (a pong, a chunk, a program) for this long is gone, even if the link never said so. */
 const SILENT_MS = 6000;
-/** Shortest gap between two file acks (25 a second, under the relay's 30 messages a second). */
+/** Shortest gap between two file acks. */
 const HAVE_MS = 40;
+/** Budget a message that can wait (a file or frame ack) leaves for taps and pings. */
+const RESERVE = 5;
+
+/** Acks: each sums up all before it, so only the newest of each kind waits for the budget. */
+type Ack = Extract<PhoneMsg, { t: 'have' | 'ack' }>;
 
 export class PhoneClient {
   seat = -1;
@@ -45,8 +51,13 @@ export class PhoneClient {
   private readonly sendHave = throttle(() => {
     const m = this.pendingHave;
     this.pendingHave = null;
-    if (m) this.send(m);
+    if (m) this.later(m);
   }, HAVE_MS);
+  /** Taps, pings and acks share it, so an honest phone stays well inside what the relay allows. */
+  private readonly budget = tokenBucket(PHONE_BUDGET, performance.now());
+  private readonly waiting = new Map<Ack['t'], Ack>();
+  private flushTimer = 0;
+  private lastTap = -Infinity;
 
   constructor(
     private readonly transport: Transport,
@@ -74,6 +85,8 @@ export class PhoneClient {
     try {
       const link = await this.transport.join(this.room);
       this.link = link;
+      // Acks were for the old link: the host starts this one afresh, and the music re-acks on welcome.
+      this.waiting.clear();
       // The host's clock restarts if the host page reloads; never mix samples across links.
       this.clock.reset();
       link.onMessage((m) => this.receive(m as HostMsg));
@@ -86,7 +99,11 @@ export class PhoneClient {
     }
   }
 
+  /** The host counts one tap per TAP_MS; a sooner one, or one past the budget, is not sent. */
   tap(): void {
+    const now = performance.now();
+    if (now - this.lastTap < TAP_MS || !this.budget.take(now)) return;
+    this.lastTap = now;
     this.send({ t: 'tap' });
   }
 
@@ -112,6 +129,23 @@ export class PhoneClient {
     this.link?.send(m);
   }
 
+  /** Send an ack once the budget allows, keeping RESERVE for taps and pings. */
+  private later(m: Ack): void {
+    this.waiting.set(m.t, m);
+    this.flush();
+  }
+
+  private readonly flush = (): void => {
+    clearTimeout(this.flushTimer);
+    this.flushTimer = 0;
+    for (const [t, m] of this.waiting) {
+      const now = performance.now();
+      if (!this.budget.take(now, RESERVE)) return void (this.flushTimer = window.setTimeout(this.flush, this.budget.wait(now, RESERVE)));
+      this.waiting.delete(t);
+      this.send(m);
+    }
+  };
+
   private startPinging(): void {
     clearTimeout(this.pingTimer);
     this.lastHeard = performance.now();
@@ -120,7 +154,8 @@ export class PhoneClient {
       // Closing runs the usual reconnect path.
       if (performance.now() - this.lastHeard > SILENT_MS) return void this.link?.close();
       const u = this.clock.uncertainty;
-      this.send({ t: 'ping', c0: performance.now(), u: Number.isFinite(u) ? Math.round(u) : undefined });
+      // Out of budget: this ping is skipped, and the next tick tries again.
+      if (this.budget.take(performance.now())) this.send({ t: 'ping', c0: performance.now(), u: Number.isFinite(u) ? Math.round(u) : undefined });
       // A quick burst to lock on, then a slow trickle to track drift.
       this.pingTimer = window.setTimeout(tick, n++ < 16 ? 150 : 2000);
     };
@@ -154,7 +189,7 @@ export class PhoneClient {
         this.aspect = m.aspect;
         break;
       case 'program':
-        if (m.ack !== undefined) this.send({ t: 'ack', n: m.ack });
+        if (m.ack !== undefined) this.later({ t: 'ack', n: m.ack });
         this.program = m.program;
         this.programSeq++;
         break;

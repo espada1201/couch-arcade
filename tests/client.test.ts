@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PhoneClient } from '../src/phone/client';
 import { BasicLink, type Link, type Transport } from '../src/net/transport';
+import { PHONE_BUDGET, PHONE_LIMIT, tokenBucket } from '../src/net/limits.js';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -122,5 +123,38 @@ describe('phone client', () => {
     expect(seen).not.toContain('reconnecting');
     expect(client.status).toBe('failed');
     expect(client.error).toContain('No host is running room ZZZZ');
+  });
+
+  it('mashing taps through a fast song download keeps the phone inside its own message budget', async () => {
+    const sent: { t: string; at: number }[] = [];
+    let link!: BasicLink;
+    const transport: Transport = {
+      name: 'test',
+      host: async () => {
+        throw new Error('unused');
+      },
+      join: async () => (link = new BasicLink((m) => sent.push({ t: (m as { t: string }).t, at: performance.now() }))),
+    };
+    const client = new PhoneClient(transport, 'ABCD');
+    await client.connect();
+    link.deliver({ t: 'welcome', seat: 0, room: 'ABCD' });
+    let next = 0;
+    for (let ms = 0; ms < 20_000; ms += 5) {
+      // Chunks land every 5 ms on fast Wi-Fi, a picture frame every 100 ms, and a tap every 66 ms.
+      client.have({ t: 'have', id: 'song', next: ++next, got: next });
+      if (ms % 100 === 0) link.deliver({ t: 'program', program: { kind: 'lobby' }, ack: ms / 100 + 1 });
+      if (ms % 66 < 5) client.tap();
+      await vi.advanceTimersByTimeAsync(5);
+    }
+    // The phone keeps to its own budget, which leaves the host's and relay's limit real headroom.
+    const own = tokenBucket(PHONE_BUDGET, 0);
+    expect(sent.filter((m) => m.t !== 'hello' && !own.take(m.at))).toEqual([]);
+    expect(PHONE_LIMIT.rate).toBeGreaterThanOrEqual(2 * PHONE_BUDGET.rate);
+    const count = (t: string) => sent.filter((m) => m.t === t).length;
+    // Every tap a person makes at 15 a second still goes, and the song and frames keep moving.
+    expect(count('tap')).toBeGreaterThanOrEqual(300);
+    expect(count('have')).toBeGreaterThan(100);
+    expect(count('ack')).toBeGreaterThan(50);
+    expect(sent.filter((m) => m.t === 'ack').at(-1)!.at).toBeGreaterThan(19_000);
   });
 });
