@@ -212,6 +212,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     marking = true;
     corners = [];
     view.classList.add('marking');
+    // The panel scrolls inside the console now: bring the picture to be clicked into view.
+    view.scrollIntoView({ block: 'nearest' });
     setText(perspectiveMsg, `Click the ${CORNER_NAMES[0]} corner of the area, as it appears in the camera picture.`);
     drawOverlay();
   });
