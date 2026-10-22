@@ -262,6 +262,30 @@ body.phone { overscroll-behavior: none; }
 .done { color: var(--teal); }
 .fatal { padding: 32px; color: var(--red); }
 
+/* ---------- Party speaker ---------- */
+.sound-modes { display: grid; }
+.sound-modes > .seg { padding: 18px 20px 0; }
+label.file.drop { padding: 14px; border: 1px dashed var(--edge); border-radius: 8px; cursor: pointer; }
+label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
+.np-host-title { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.np-time { font: 500 13px var(--mono); color: var(--muted); align-self: center; }
+.np-phones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px; font-size: 12px; }
+.np-phones li {
+  display: flex; justify-content: space-between; gap: 6px; padding: 4px 8px; border-radius: 4px; font-variant-numeric: tabular-nums;
+  background: linear-gradient(90deg, var(--ink-3) calc(var(--p) * 100%), transparent 0); border: 1px solid var(--edge);
+}
+.nowplaying {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100vw - 32px));
+  display: grid; gap: 10px; text-align: center; pointer-events: none;
+}
+.np-eyebrow { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted); }
+.np-title { margin: 0; font-size: 26px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.np-bar { height: 6px; border-radius: 3px; background: rgba(242, 234, 216, 0.15); overflow: hidden; }
+.np-fill { height: 100%; width: 0; background: var(--amber); }
+.nowplaying .np-time { margin: 0; }
+.np-state { margin: 0; color: #d9d0bc; font-size: 15px; }
+.nowplaying[data-state='error'] .np-state, .nowplaying[data-state='muted'] .np-state { color: var(--amber); }
+
 /* ---------- Narrow screens ---------- */
 @media (max-width: 1100px) {
   .console { grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: 'top top' 'stage controls' 'join controls'; }

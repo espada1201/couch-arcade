@@ -35,6 +35,17 @@ export class Speaker {
     document.addEventListener('pointerdown', () => this.resume());
   }
 
+  /** The unlocked audio context, for other players on this phone (null before the join tap). */
+  get context(): AudioContext | null {
+    return this.ctx;
+  }
+
+  /** Seconds between scheduling a sample and it leaving the speaker. */
+  latency(): number {
+    const ctx = this.ctx;
+    return ctx ? ctx.outputLatency || ctx.baseLatency || 0 : 0;
+  }
+
   private resume(): void {
     const ctx = this.ctx;
     if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
@@ -53,7 +64,7 @@ export class Speaker {
     if (!ctx || ctx.state !== 'running' || prog.kind !== 'wave' || prog.voice === 'off' || !pos) return;
     this.pending = this.pending.filter((p) => p.end > ctx.currentTime);
     // Schedule early by the output latency so the sound leaves the speaker at the host instant.
-    const latency = ctx.outputLatency || ctx.baseLatency || 0;
+    const latency = this.latency();
     const from = Math.max(this.scheduledUntil, hostNow);
     const to = hostNow + LOOKAHEAD_MS;
     const u = travel(prog, pos, aspect);

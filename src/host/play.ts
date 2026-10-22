@@ -9,6 +9,7 @@ import type { Director } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { fileStunt, presets, textStunt, type Stunt } from './images';
 import { panel, requirePlaced, stopButton } from './panel';
+import { speakerPanel } from './speaker';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
 
@@ -224,7 +225,14 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
     }),
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: play }, 'Play'), stopButton(director, () => say(''))),
   );
-  return el;
+  // Two modes: your music on every phone, or the spatial tones above.
+  const party = speakerPanel(session, director);
+  el.hidden = true;
+  const mode = segmented<'party' | 'tones'>('Mode', [['party', 'Party speaker'], ['tones', 'Spatial tones']], 'party', (v) => {
+    party.hidden = v !== 'party';
+    el.hidden = v !== 'tones';
+  });
+  return h('div.sound-modes', {}, mode, party, el);
 }
 
 const TEAMS: [RGB, RGB] = [AMBER, TEAL];

@@ -5,6 +5,7 @@ import { litAt, type BlinkSchedule } from './blinkcode';
 import type { FollowView } from './follow';
 import { distance, type Point, type RGB } from './layout';
 import { ballAt, type PotatoState } from './potato';
+import type { SpeakerProgram } from './speaker';
 import { teamOf, type TerritoryState } from './territory';
 
 export type WaveShape = 'sweep' | 'pingpong' | 'ripple';
@@ -35,7 +36,8 @@ export type Program =
   | { kind: 'territory'; state: TerritoryState; colors: [RGB, RGB] }
   | { kind: 'potato'; state: PotatoState }
   /** Every phone shows the whole picture (see core/follow). */
-  | { kind: 'follow'; view: FollowView };
+  | { kind: 'follow'; view: FollowView }
+  | SpeakerProgram;
 
 export interface Me {
   seat: number;
@@ -183,6 +185,9 @@ export function render(prog: Program, me: Me, t: number): Frame {
       const shimmer = edge < 0.12 ? 0.75 + 0.25 * Math.sin(t / 40) : 1;
       return { rgb: scale(base, shimmer), label: 'TAP', tappable: true };
     }
+    case 'speaker':
+      // The phone's now-playing card sits on top; the screen just stays dark.
+      return { rgb: DIM };
     case 'potato': {
       const s = prog.state;
       if (s.out.includes(me.seat)) return { rgb: EMBER, label: s.phase === 'over' ? '' : 'OUT' };

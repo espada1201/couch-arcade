@@ -6,6 +6,7 @@ import { FollowScreen } from '../ui/follow';
 import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
+import { PartySpeaker } from './music';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
   const m = v?.match(/^([\d.]+),([\d.]+)$/);
@@ -42,7 +43,9 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const status = h('div.status', { role: 'status' });
   const overlay = h('div.overlay', { hidden: true });
   const follow = new FollowScreen();
-  const screen = h('div.screen', {}, label, follow.el, status, overlay);
+  const party = new PartySpeaker(client, speaker);
+  client.onChunk = (m) => party.chunk(m);
+  const screen = h('div.screen', {}, label, follow.el, party.el, status, overlay);
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
@@ -99,6 +102,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   let lastHolder = -1;
   let wasOut = false;
   const showStatus = () => {
+    party.sync();
     const seat = client.seat >= 0 ? `Seat ${client.seat + 1}` : 'Joining';
     const place = client.pos ? 'placed' : 'not placed yet';
     const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', replaced: 'open in another tab', failed: 'disconnected' }[client.status];
