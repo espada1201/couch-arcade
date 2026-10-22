@@ -3,7 +3,7 @@
 // is re-checked every couple of seconds, because the audio clock drifts against the
 // system clock (and the clock-offset estimate moves); the decision itself is pure, in
 // core/speaker.ts.
-import { channelFor, clockTime, playingAt, positionAt, reconcile, type Channel, type Segment, type SpeakerProgram, type Track } from '../core/speaker';
+import { channelFor, clockTime, PAUSED, playingAt, positionAt, reconcile, type Channel, type Segment, type SpeakerProgram, type Track } from '../core/speaker';
 import { Reassembler, type ChunkMsg } from '../net/chunks';
 import { h } from '../ui/dom';
 import type { Speaker } from './audio';
@@ -65,9 +65,10 @@ export class PartySpeaker {
     return p.kind === 'speaker' ? p : null;
   }
 
-  /** The client changed (new program, reconnect): pick up a new song and re-ack, which also resumes a download. */
+  /** The client changed (new program, an offer, a reconnect): pick up a new song and re-ack, which also resumes a download. */
   sync(): void {
-    const t = this.program?.track;
+    // The song playing, or the one the host has offered: phones fetch it in the background before Play.
+    const t = this.program?.track ?? this.client.offer;
     if (t && t.id !== this.track?.id) {
       this.silence();
       this.track = t;
@@ -218,11 +219,12 @@ export class PartySpeaker {
     this.applied = '';
   }
 
+  /** The card shows only while the host plays to the room, but its state is kept up to date for the download in the background. */
   private render(): void {
     const p = this.program;
     this.el.hidden = !p;
-    if (!p) return;
-    const t = p.track;
+    const t = this.track;
+    const tl = p?.tl ?? PAUSED;
     const ctx = this.speaker.context;
     const hostNow = this.client.hostNow();
     let state: string;
@@ -232,12 +234,12 @@ export class PartySpeaker {
     else if (this.load === 'decoding') [state, text] = ['decoding', 'Getting the song ready…'];
     else if (this.load === 'error') [state, text] = ['error', 'This phone can’t play this file.'];
     else if (!ctx || ctx.state !== 'running') [state, text] = ['muted', 'Tap the screen to turn the sound on'];
-    else if (playingAt(p.tl, hostNow, t.duration)) [state, text] = ['playing', `Playing${{ left: ' · left channel', right: ' · right channel', mono: '', stereo: '' }[this.channel ?? 'stereo']}`];
-    else [state, text] = ['ready', positionAt(p.tl, hostNow, t.duration) > 0 ? 'Paused' : 'Ready. Keep this page open with the sound up.'];
+    else if (playingAt(tl, hostNow, t.duration)) [state, text] = ['playing', `Playing${{ left: ' · left channel', right: ' · right channel', mono: '', stereo: '' }[this.channel ?? 'stereo']}`];
+    else [state, text] = ['ready', positionAt(tl, hostNow, t.duration) > 0 ? 'Paused' : 'Ready. Keep this page open with the sound up.'];
     this.title.textContent = t?.name ?? '';
     this.state.textContent = text;
     this.el.dataset.state = state;
-    const pos = t ? positionAt(p.tl, hostNow, t.duration) : 0;
+    const pos = t ? positionAt(tl, hostNow, t.duration) : 0;
     const pct = t && t.duration > 0 ? (pos / t.duration) * 100 : 0;
     this.fill.style.width = `${pct}%`;
     this.bar.setAttribute('aria-valuenow', String(Math.round(pct)));

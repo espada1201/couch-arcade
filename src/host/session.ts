@@ -2,6 +2,7 @@
 // holds, where it physically is, and what program it should be running.
 import { MAX_IDS } from '../core/blinkcode';
 import type { Program } from '../core/effects';
+import type { Track } from '../core/speaker';
 import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
@@ -66,6 +67,7 @@ export class HostSession {
   private frame: Frame = 'source';
   private roomAspect = 1;
   private inputs = new Set<InputHandlers>();
+  private offered: Track | null = null;
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
@@ -136,6 +138,12 @@ export class HostSession {
     // Programs change many times a second (live screen, games); they are not roster changes,
     // so no persistence or listener churn here. The stage reads programOf() every frame.
     for (const s of this.online) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
+  }
+
+  /** Offer every phone, late joiners too, a song to fetch in the background. */
+  offer(track: Track | null): void {
+    this.offered = track;
+    for (const s of this.online) this.sendTo(s, { t: 'offer', track });
   }
 
   /** Hear phone input until the returned function is called. */
@@ -265,6 +273,7 @@ export class HostSession {
         this.sendTo(me, { t: 'welcome', seat: me.seat, room: this.room });
         this.sendPos(me);
         this.sendTo(me, { t: 'program', program: this.programFor(me.seat) });
+        if (this.offered) this.sendTo(me, { t: 'offer', track: this.offered });
         this.changed();
         return;
       }

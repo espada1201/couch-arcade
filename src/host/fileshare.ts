@@ -1,7 +1,7 @@
 // Sends one file to every phone that asks for it. Phones pull: they ack what they hold
 // (starting with "nothing"), and each ack slides that phone's window along. A phone that
 // joins late or reconnects acks again on its new link and is resumed from what it has.
-import { ChunkSender, chunkCount, chunkMsg } from '../net/chunks';
+import { ChunkSender, chunkCount, chunkMsg, type ChunkMsg } from '../net/chunks';
 import type { HaveState, PhoneMsg } from '../core/protocol';
 import type { Link } from '../net/transport';
 import type { HostSession } from './session';
@@ -23,6 +23,8 @@ export class FileShare {
   readonly n: number;
   private peers = new Map<number, Peer>();
   private timer = 0;
+  /** Each chunk is base64-encoded once and the same message goes to every phone. */
+  private chunks: ChunkMsg[] = [];
 
   constructor(
     private readonly session: HostSession,
@@ -67,6 +69,6 @@ export class FileShare {
 
   private pump(seat: number, peer: Peer): void {
     if (this.session.seats.get(seat)?.link !== peer.link) return void this.peers.delete(seat);
-    for (const i of peer.sender.due(performance.now())) this.session.send(seat, chunkMsg(this.id, this.data, i));
+    for (const i of peer.sender.due(performance.now())) this.session.send(seat, (this.chunks[i] ??= chunkMsg(this.id, this.data, i)));
   }
 }

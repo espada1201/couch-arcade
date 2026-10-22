@@ -228,7 +228,7 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
     say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
   const { el, say } = panel(
-    'Every phone is one speaker, timed to within a few milliseconds on the shared clock, so sound physically moves through the crowd. Each phone sings its own note, set by where it sits.',
+    'Every phone is one speaker, in step on the shared clock, to within a few hundredths of a second, so sound physically moves through the crowd. Each phone sings its own note, set by where it sits.',
     h(
       'div.sound-list',
       { role: 'radiogroup', 'aria-label': 'Sound' },

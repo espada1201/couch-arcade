@@ -51,11 +51,11 @@ export class Speaker {
     if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   }
 
-  /** Call every ~200 ms with the current program; schedules notes inside the look-ahead window. */
-  pump(prog: Program, pos: Point | null, aspect: number, hostNow: number): void {
+  /** Call every ~200 ms with the current program and its arrival count; schedules notes inside the look-ahead window. */
+  pump(prog: Program, seq: number, pos: Point | null, aspect: number, hostNow: number): void {
     const ctx = this.ctx;
-    // By content, not identity: a reconnect resends the same program as a new object.
-    const key = JSON.stringify(prog);
+    // A new program (even a resend after a reconnect) re-plans from now; notes already due are simply scheduled again.
+    const key = `${prog.kind}:${seq}`;
     if (key !== this.lastProgram) {
       this.lastProgram = key;
       this.scheduledUntil = hostNow;

@@ -131,8 +131,15 @@ export function channelFor(pos: Point | null, spread: boolean): Channel {
   return pos.x < 0.5 ? 'left' : 'right';
 }
 
-/** 25 MB: about 25 minutes of a 128 kbps MP3, and small enough for every phone to hold and decode. */
+/** 25 MB: a long song at high quality, and a sane amount to send to every phone over the room's own link. */
 export const MAX_TRACK_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Every phone holds the whole song decoded in memory, about 10 MB a minute (stereo, 32-bit
+ * float at 44.1 kHz), however small the file. Past 12 minutes (about 120 MB) older phones
+ * start to fail, so a longer track is refused, using the duration the host's probe reads.
+ */
+export const MAX_TRACK_SECONDS = 12 * 60;
 
 const AUDIO_EXT = /\.(mp3|m4a|wav|ogg)$/i;
 
@@ -141,8 +148,14 @@ export function audioFileProblem(name: string, type: string, size: number): stri
   if (!AUDIO_EXT.test(name) && !type.startsWith('audio/')) return 'Pick an audio file: MP3, M4A, WAV or OGG.';
   if (size === 0) return 'That file is empty.';
   if (size > MAX_TRACK_BYTES)
-    return `That file is ${(size / 1024 / 1024).toFixed(1)} MB. The limit is 25 MB, so every phone can hold it: try a shorter track or a lower-bitrate MP3.`;
+    return `That file is ${(size / 1024 / 1024).toFixed(1)} MB. The limit is 25 MB, so it reaches every phone quickly: try a lower-bitrate MP3.`;
   return null;
+}
+
+/** Why a track is too long to play on every phone, or null if it fits. */
+export function durationProblem(seconds: number): string | null {
+  if (seconds <= MAX_TRACK_SECONDS) return null;
+  return `That track is ${clockTime(seconds)} long. The limit is ${MAX_TRACK_SECONDS / 60} minutes, because every phone holds the whole song unpacked in memory: pick one song rather than a mix.`;
 }
 
 /** 65 -> "1:05". */

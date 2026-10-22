@@ -93,7 +93,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   requestAnimationFrame(loop);
   // While rAF is running it has painted moments ago, so the interval only steps in once rAF stalls.
   setInterval(() => performance.now() - lastPaint > 25 && paint(), 30);
-  setInterval(() => speaker.pump(client.program, client.pos, client.aspect, client.hostNow()), 200);
+  setInterval(() => speaker.pump(client.program, client.programSeq, client.pos, client.aspect, client.hostNow()), 200);
 
   screen.addEventListener('pointerdown', (e) => {
     if (!frame.tappable || (e.target as HTMLElement).closest('.overlay')) return;

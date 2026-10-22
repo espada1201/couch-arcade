@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioFileProblem, channelFor, clockTime, MAX_TRACK_BYTES, PAUSED, positionAt, reconcile, schedule, segments, type Timeline } from '../src/core/speaker';
+import { audioFileProblem, channelFor, clockTime, durationProblem, MAX_TRACK_BYTES, MAX_TRACK_SECONDS, PAUSED, positionAt, reconcile, schedule, segments, type Timeline } from '../src/core/speaker';
 
 const DUR = 100; // seconds
 
@@ -116,6 +116,13 @@ describe('track files', () => {
   it('refuses files over 25 MB, saying how big this one is', () => {
     expect(audioFileProblem('ok.mp3', '', MAX_TRACK_BYTES)).toBeNull();
     expect(audioFileProblem('big.wav', '', 52_000_000)).toMatch(/49\.6 MB.*25 MB/);
+  });
+
+  it('refuses tracks over 12 minutes, because every phone holds the whole song unpacked', () => {
+    expect(MAX_TRACK_SECONDS).toBe(12 * 60);
+    expect(durationProblem(12 * 60)).toBeNull();
+    expect(durationProblem(3 * 60 + 30)).toBeNull();
+    expect(durationProblem(15 * 60 + 20)).toMatch(/15:20.*12 minutes/);
   });
 
   it('formats track times as m:ss', () => {

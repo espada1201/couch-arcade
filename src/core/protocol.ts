@@ -1,5 +1,6 @@
 import type { Program } from './effects';
 import type { Point } from './layout';
+import type { Track } from './speaker';
 import { MAX_OPTIONS } from './poll';
 import type { ChunkMsg } from '../net/chunks';
 
@@ -21,6 +22,8 @@ export type HostMsg =
   | { t: 'pong'; c0: number; h1: number; h2: number }
   | { t: 'program'; program: Program }
   | { t: 'pos'; pos: Point | null; aspect: number }
+  /** A song to fetch and get ready in the background, whatever the room is doing (null: none). */
+  | { t: 'offer'; track: Track | null }
   | ChunkMsg;
 
 function isObj(v: unknown): v is Record<string, unknown> {

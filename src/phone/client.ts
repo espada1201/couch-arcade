@@ -4,6 +4,7 @@
 import { ClockEstimator, sampleFrom } from '../core/clock';
 import type { Program } from '../core/effects';
 import type { Point } from '../core/layout';
+import type { Track } from '../core/speaker';
 import type { HostMsg, PhoneMsg } from '../core/protocol';
 import type { ChunkMsg } from '../net/chunks';
 import type { Link, Transport } from '../net/transport';
@@ -19,6 +20,10 @@ export class PhoneClient {
   pos: Point | null = null;
   aspect = 1;
   program: Program = { kind: 'lobby' };
+  /** Counts programs as they arrive, so a player can tell a new one from a resend of the same. */
+  programSeq = 0;
+  /** A song the host wants every phone to have ready, whatever is running now. */
+  offer: Track | null = null;
   status: Status = 'connecting';
   error = '';
   readonly clock = new ClockEstimator();
@@ -131,6 +136,10 @@ export class PhoneClient {
         break;
       case 'program':
         this.program = m.program;
+        this.programSeq++;
+        break;
+      case 'offer':
+        this.offer = m.track;
         break;
     }
     this.onChange();

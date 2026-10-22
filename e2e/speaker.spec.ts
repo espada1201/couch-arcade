@@ -61,6 +61,8 @@ test('party speaker: a song reaches every phone and plays in step, late joiners 
   for (const p of phones) {
     await expect(p.locator('.nowplaying')).toHaveAttribute('data-state', 'ready');
     await expect(p.locator('.np-title')).toHaveText('Test Tone');
+    // Picking the song fetched it in the background; the phones' screens are untouched until Play.
+    await expect(p.locator('.nowplaying')).toBeHidden();
   }
   await host.screenshot({ path: 'test-results/host-speaker.png' });
 
