@@ -29,6 +29,8 @@ export interface Seat {
   awaiting: number;
   /** The newest frame, held until the phone confirms the one in flight. */
   held: ProgramMsg | null;
+  /** When the phone's link last closed (0 if never, or before a reload). */
+  left: number;
 }
 
 type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
@@ -113,7 +115,7 @@ export class HostSession {
       s.sourceAspect = saved.sourceAspect ?? s.sourceAspect;
       s.roomAspect = saved.roomAspect ?? 1;
       s.perspective = saved.perspective ?? null;
-      for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null });
+      for (const x of saved.seats) s.seats.set(x.seat, { ...x, link: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null, left: 0 });
       s.relayout(false);
     }
     return s;
@@ -362,6 +364,7 @@ export class HostSession {
       this.conns.delete(conn);
       if (me && me.link === link) {
         me.link = null;
+        me.left = this.now();
         this.changed();
       }
     });
@@ -399,13 +402,23 @@ export class HostSession {
         s.held = null;
         return s;
       }
-    for (let seat = 0; seat < MAX_IDS; seat++)
-      if (!this.seats.has(seat)) {
-        const s: Seat = { seat, token, link, raw: null, source: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null };
-        this.seats.set(seat, s);
-        return s;
-      }
-    return null;
+    const seat = this.freeSeat();
+    if (seat === null) return null;
+    this.gridEntries.delete(seat);
+    const s: Seat = { seat, token, link, raw: null, source: null, sync: Infinity, lastTap: 0, awaiting: 0, held: null, left: 0 };
+    this.seats.set(seat, s);
+    return s;
+  }
+
+  /**
+   * A seat for a new phone: an unused one, or once all are taken (a long evening of phones coming
+   * and going), the one held longest by a phone that left without ever being placed.
+   */
+  private freeSeat(): number | null {
+    for (let seat = 0; seat < MAX_IDS; seat++) if (!this.seats.has(seat)) return seat;
+    let oldest: Seat | null = null;
+    for (const s of this.seats.values()) if (!s.link && !s.raw && (!oldest || s.left < oldest.left)) oldest = s;
+    return oldest?.seat ?? null;
   }
 
   private changed(): void {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MAX_IDS } from '../src/core/blinkcode';
 import { HostSession } from '../src/host/session';
 import { BasicLink } from '../src/net/transport';
 import { MAX_MESSAGE_BYTES, fits, type HostMsg } from '../src/core/protocol';
@@ -224,6 +225,39 @@ describe('untrusted phones', () => {
     next.say({ t: 'hello', token: 'bbb' });
     expect(next.inbox[0]).toMatchObject({ t: 'welcome' });
     expect(session.online).toHaveLength(2);
+  });
+});
+
+describe('a full room', () => {
+  it('gives a new phone the seat held longest by one that left unplaced, never a placed one', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const phones = Array.from({ length: MAX_IDS }, (_, i) => {
+      const p = phone();
+      p.say({ t: 'hello', token: `t${i}` });
+      return p;
+    });
+    expect(session.seats.size).toBe(MAX_IDS);
+    session.setRaw(new Map([[5, { x: 0.5, y: 0.5 }]]), 'camera');
+    tick(10);
+    phones[5].drop(); // placed: keeps its seat for when it comes back
+    tick(10);
+    phones[9].drop();
+    tick(10);
+    phones[7].drop();
+    const late = phone();
+    late.say({ t: 'hello', token: 'late' });
+    expect(late.inbox[0]).toEqual({ t: 'welcome', seat: 9, room: 'TEST' });
+    const later = phone();
+    later.say({ t: 'hello', token: 'later' });
+    expect(later.inbox[0]).toMatchObject({ seat: 7 });
+    const full = phone();
+    full.say({ t: 'hello', token: 'full' });
+    expect(full.inbox).toEqual([{ t: 'full' }]);
+    // The placed phone still has its seat when it returns.
+    const back = phone();
+    back.say({ t: 'hello', token: 't5' });
+    expect(back.inbox[0]).toMatchObject({ seat: 5 });
   });
 });
 
