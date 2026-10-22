@@ -90,7 +90,7 @@ describe('host session', () => {
     expect(p.inbox.at(-1)).toMatchObject({ t: 'pong', c0: 5 });
     expect(session.worstSync).toBe(12);
     const taps: number[] = [];
-    session.onTap = (s) => taps.push(s);
+    session.input({ tap: (s) => taps.push(s) });
     p.say({ t: 'tap' });
     p.say({ t: 'tap' });
     tick(50);
@@ -102,7 +102,7 @@ describe('host session', () => {
     const { session, phone } = harness();
     await session.open();
     const votes: [number, number][] = [];
-    session.onVote = (seat, choice) => votes.push([seat, choice]);
+    session.input({ vote: (seat, m) => votes.push([seat, m.choice]) });
     phone().say({ t: 'vote', choice: 1 });
     const p = phone();
     p.say({ t: 'hello', token: 'v' });
@@ -134,7 +134,7 @@ describe('host session', () => {
     const { session, phone } = harness();
     await session.open();
     const seen: [number, unknown][] = [];
-    session.onHave = (seat, m) => seen.push([seat, m]);
+    session.input({ have: (seat, m) => seen.push([seat, m]) });
     const a = phone();
     a.say({ t: 'have', id: 'trk', next: 0, got: 0 }); // not seated yet
     a.say({ t: 'hello', token: 'aaa' });

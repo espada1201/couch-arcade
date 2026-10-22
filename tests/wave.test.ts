@@ -20,11 +20,18 @@ function fakeSession() {
   return { session, sent, tick: (ms: number) => (clock += ms) };
 }
 
+/** Start a wave the way the director does: send the run's program. */
+function begin(session: HostSession, wave: ReturnType<typeof liveWave>) {
+  const run = wave.start(WAVE_DEFAULTS, 400);
+  session.setProgram(run.program!);
+  return run;
+}
+
 describe('a live wave', () => {
   it('changes speed mid-roll without the band jumping', () => {
     const { session, sent, tick } = fakeSession();
     const wave = liveWave(session);
-    wave.start(WAVE_DEFAULTS, 400);
+    begin(session, wave);
     tick(400 + 900);
     vi.advanceTimersByTime(200);
     wave.retune({ ...WAVE_DEFAULTS, period: WAVE_DEFAULTS.period / 2 });
@@ -37,7 +44,7 @@ describe('a live wave', () => {
   it('sends at most one edit per 150 ms, keeping the last', () => {
     const { session, sent } = fakeSession();
     const wave = liveWave(session);
-    wave.start(WAVE_DEFAULTS, 400);
+    begin(session, wave);
     wave.retune({ ...WAVE_DEFAULTS, width: 0.2 });
     wave.retune({ ...WAVE_DEFAULTS, width: 0.3 });
     expect(sent).toHaveLength(1);
@@ -50,10 +57,23 @@ describe('a live wave', () => {
     const { session, sent } = fakeSession();
     const wave = liveWave(session);
     wave.retune(WAVE_DEFAULTS);
-    wave.start(WAVE_DEFAULTS, 400);
+    const run = begin(session, wave);
     wave.retune({ ...WAVE_DEFAULTS, width: 0.2 });
-    wave.stop();
+    run.stop!();
     vi.advanceTimersByTime(500);
     expect(sent).toHaveLength(1);
+  });
+
+  it('restarting keeps the new wave live, even though the old run is stopped after it starts', () => {
+    const { session, sent } = fakeSession();
+    const wave = liveWave(session);
+    const old = begin(session, wave);
+    vi.advanceTimersByTime(200);
+    const next = wave.start(WAVE_DEFAULTS, 400);
+    old.stop!();
+    session.setProgram(next.program!);
+    vi.advanceTimersByTime(200);
+    wave.retune({ ...WAVE_DEFAULTS, width: 0.25 });
+    expect(sent.at(-1)!.width).toBe(0.25);
   });
 });

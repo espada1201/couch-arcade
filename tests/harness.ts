@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { Program } from '../src/core/effects';
 import type { HostMsg, PhoneMsg } from '../src/core/protocol';
+import { Director } from '../src/host/director';
 import { HostSession } from '../src/host/session';
 import { BasicLink, type HostEnd, type Link, type Transport } from '../src/net/transport';
 
@@ -28,7 +29,9 @@ export async function room(xs: number[]) {
   const phones = xs.map((_, i) => join(`p${i}`));
   session.setRaw(new Map(xs.map((x, i) => [i, { x, y: 0.5 }])), 'camera');
   const say = vi.fn();
-  return { session, phones, join, say, tick: (ms: number) => (clock += ms), director: { take: vi.fn() } };
+  const director = new Director(session, { onPick: null });
+  vi.spyOn(director, 'run');
+  return { session, phones, join, say, tick: (ms: number) => (clock += ms), director };
 }
 
 /** The last program of `kind` a phone was sent. */

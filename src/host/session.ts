@@ -11,6 +11,10 @@ import { forget, loadJson, saveJson } from '../storage';
 
 export type Source = 'camera' | 'grid' | 'manual';
 
+/** What a phone sends that a running feature acts on (taps, votes, file acks). */
+export type PhoneInput = Extract<PhoneMsg, { t: 'tap' | 'vote' | 'have' }>;
+export type InputHandlers = { [K in PhoneInput['t']]?: (seat: number, m: Extract<PhoneInput, { t: K }>) => void };
+
 export interface Seat {
   seat: number;
   token: string;
@@ -61,10 +65,7 @@ export class HostSession {
   perspective: Perspective | null = null;
   private frame: Frame = 'source';
   private roomAspect = 1;
-  onTap: (seat: number) => void = () => {};
-  onVote: (seat: number, choice: number) => void = () => {};
-  /** A phone's progress on a file the host is sending it. */
-  onHave: (seat: number, m: Extract<PhoneMsg, { t: 'have' }>) => void = () => {};
+  private inputs = new Set<InputHandlers>();
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
@@ -135,6 +136,12 @@ export class HostSession {
     // Programs change many times a second (live screen, games); they are not roster changes,
     // so no persistence or listener churn here. The stage reads programOf() every frame.
     for (const s of this.online) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
+  }
+
+  /** Hear phone input until the returned function is called. */
+  input(handlers: InputHandlers): () => void {
+    this.inputs.add(handlers);
+    return () => this.inputs.delete(handlers);
   }
 
   /** The program a seat is running (for the host's live mirror of the crowd). */
@@ -266,9 +273,8 @@ export class HostSession {
         const now = this.now();
         if (now - me.lastTap < 40) return;
         me.lastTap = now;
-        this.onTap(me.seat);
-      } else if (m.t === 'vote') this.onVote(me.seat, m.choice);
-      else if (m.t === 'have') this.onHave(me.seat, m);
+        this.heard(me.seat, m);
+      } else if (m.t === 'vote' || m.t === 'have') this.heard(me.seat, m);
       else {
         this.gridEntries.set(me.seat, { row: m.row, seat: m.seat });
         this.changed();
@@ -280,6 +286,10 @@ export class HostSession {
         this.changed();
       }
     });
+  }
+
+  private heard(seat: number, m: PhoneInput): void {
+    for (const h of this.inputs) (h[m.t] as ((seat: number, m: PhoneInput) => void) | undefined)?.(seat, m);
   }
 
   private claim(token: string, link: Link): Seat | null {

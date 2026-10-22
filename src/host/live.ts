@@ -175,14 +175,14 @@ function spreadPanel(session: HostSession, director: Director): HTMLElement {
 
   const start = async () => {
     if (!requirePlaced(session, say)) return;
-    director.take(stop);
+    const hold = director.run({ stop });
     const mine = ++gen;
     live = true;
     goLive.disabled = true;
     const ok = await prepare(mine);
     if (mine !== gen) return;
     goLive.disabled = false;
-    if (!ok) return void (live = false);
+    if (!ok) return hold.end();
     loop = broadcast(session, ctx, draw, fps);
     say(`Broadcasting to ${plural(session.playRoom().positions.size, 'phone')} at ${fps} frames a second.`);
   };

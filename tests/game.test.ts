@@ -47,6 +47,6 @@ describe('crowd games follow who is actually here', () => {
     const r = await room([0.5]);
     runGame<PotatoState>(r.session, r.director, r.say, { ...POTATO_RULES, show: () => {} });
     expect(r.say).toHaveBeenCalledWith('Hot Potato needs at least 2 connected, placed phones.');
-    expect(r.director.take).not.toHaveBeenCalled();
+    expect(r.director.run).not.toHaveBeenCalled();
   });
 });

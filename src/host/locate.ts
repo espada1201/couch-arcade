@@ -7,7 +7,7 @@ import { validCorners } from '../core/homography';
 import { localize, type GrayFrame, type LocalizeResult } from '../core/localize';
 import { h, plural } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
-import type { Director } from './director';
+import type { Director, Hold } from './director';
 import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -134,11 +134,13 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       scanning = false;
     };
     // Something else took the crowd mid-scan: drop the burst rather than decode it and blank the screens.
-    director.take(() => {
-      if (!scanning || cancelled) return;
-      cancelled = true;
-      finish();
-      result.textContent = 'Scan stopped.';
+    const hold = director.run({
+      stop: () => {
+        if (!scanning || cancelled) return;
+        cancelled = true;
+        finish();
+        result.textContent = 'Scan stopped.';
+      },
     });
     // Phones flash on the shared clock, so give late joiners a moment to lock on first.
     for (let i = 0; i < 30 && session.worstSync > 40; i++) {
@@ -178,7 +180,6 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     for (const s of session.seats.values()) if (!found.has(s.seat) && s.source !== 'camera') updates.set(s.seat, null);
     session.mirror = mirror.checked;
     session.setRaw(updates, 'camera');
-    session.setProgram({ kind: 'lobby' });
     const missing = online.filter((s) => !found.has(s.seat)).map((s) => s.seat + 1);
     result.textContent =
       found.size === 0
@@ -186,6 +187,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
         : `Placed ${found.size} of ${plural(online.length, 'phone')}.` + (missing.length ? ` Not seen: ${missing.join(', ')}. Scan again, or drag them onto the map.` : '');
     if (shaky.length && missing.length) result.textContent += ` Phones ${shaky.join(', ')} had a weak connection during the scan.`;
     finish();
+    hold.end();
     drawOverlay();
   });
 
@@ -240,9 +242,9 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
 
   identify.addEventListener('click', () => {
     const on = identify.getAttribute('aria-pressed') !== 'true';
-    director.take(on ? () => identify.setAttribute('aria-pressed', 'false') : undefined);
+    if (on) director.run({ stop: () => identify.setAttribute('aria-pressed', 'false'), program: { kind: 'identify' } });
+    else director.idle();
     identify.setAttribute('aria-pressed', String(on));
-    session.setProgram({ kind: on ? 'identify' : 'lobby' });
   });
 
   // No-camera fallback: everyone types their row and seat.
@@ -250,19 +252,20 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
   const seats = h('input', { type: 'number', min: 1, max: 60, value: 6, id: 'grid-seats' });
   const answered = h('p.note', { role: 'status' });
   const useBtn = h('button.btn.primary', { type: 'button', disabled: true }, 'Use typed seats');
-  let asking = false;
+  let asking: Hold | null = null;
   const askBtn = h(
     'button.btn',
     {
       type: 'button',
       onclick: () => {
-        director.take(() => {
-          asking = false;
-          useBtn.disabled = true;
-        });
         session.gridEntries.clear();
-        asking = true;
-        session.setProgram({ kind: 'grid', rows: Number(rows.value) || 1, seats: Number(seats.value) || 1 });
+        asking = director.run({
+          stop: () => {
+            asking = null;
+            useBtn.disabled = true;
+          },
+          program: { kind: 'grid', rows: Number(rows.value) || 1, seats: Number(seats.value) || 1 },
+        });
         useBtn.disabled = false;
       },
     },
@@ -278,9 +281,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     session.sourceAspect = r > 1 && s > 1 ? (s - 1) / (r - 1) : 1;
     session.mirror = false;
     session.setRaw(updates, 'grid');
-    session.setProgram({ kind: 'lobby' });
-    asking = false;
-    useBtn.disabled = true;
+    asking?.end();
   });
   session.subscribe(() => {
     if (asking) answered.textContent = `${session.gridEntries.size} of ${plural(session.online.length, 'phone')} ${session.gridEntries.size === 1 ? 'has' : 'have'} answered.`;

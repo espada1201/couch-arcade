@@ -12,7 +12,7 @@ describe('room poll on the host', () => {
     const r = await room([0, 0.5, 1]);
     const seen = vi.fn();
     const poll = runPoll(r.session, r.director, 'Pizza or tacos?', ['Pizza', 'Tacos'], seen);
-    expect(r.director.take).toHaveBeenCalled();
+    expect(r.director.run).toHaveBeenCalled();
     expect(ballot(r.phones[2].inbox)).toMatchObject({ question: 'Pizza or tacos?', options: ['Pizza', 'Tacos'], phase: 'open', mine: null, result: null });
     r.phones[0].say({ t: 'vote', choice: 1 });
     r.phones[1].say({ t: 'vote', choice: 0 });
@@ -57,8 +57,8 @@ describe('room poll on the host', () => {
   it('stopping hands the phones back and ignores later votes', async () => {
     const r = await room([0, 1]);
     const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {});
-    const stop = r.director.take.mock.calls[0][0] as () => void;
-    stop();
+    r.director.idle();
+    expect(r.phones[0].inbox.at(-1)).toEqual({ t: 'program', program: { kind: 'lobby' } });
     r.phones[0].say({ t: 'vote', choice: 0 });
     expect(poll.counts()).toEqual([0, 0]);
   });

@@ -126,7 +126,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   const takeOver = (): boolean => {
     if (!requirePlaced(session, say)) return false;
     say('');
-    director.take(halt);
+    director.run({ stop: halt });
     release = keepScreenOn();
     return true;
   };

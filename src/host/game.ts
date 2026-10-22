@@ -22,7 +22,7 @@ export interface GameRules<S extends { phase: 'playing' | 'over' }> {
   show(s: S, prev: S | null, room: Room): void;
 }
 
-export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSession, director: Pick<Director, 'take'>, say: (text: string) => void, rules: GameRules<S>): void {
+export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSession, director: Pick<Director, 'run'>, say: (text: string) => void, rules: GameRules<S>): void {
   // Who is in this game is fixed at the start; where they are and whether they are still here is not.
   const players = session.playRoom();
   if (players.positions.size < 2) return say(`${rules.name} needs at least 2 connected, placed phones.`);
@@ -34,11 +34,6 @@ export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSe
   let state: S | null = null;
   let timer = 0;
   let last = -Infinity;
-  director.take(() => {
-    clearInterval(timer);
-    session.onTap = () => {};
-    state = null;
-  });
   say('');
   const send = (s: S, at: number) => {
     last = at;
@@ -52,8 +47,18 @@ export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSe
     rules.show(s, prev, room());
     if (s.phase === 'over') clearInterval(timer);
   };
-  push(rules.start(players, session.now()));
-  session.onTap = (seat) => state && push(rules.tap(state, room(), seat, session.now()));
+  const first = rules.start(players, session.now());
+  director.run({
+    stop: () => {
+      clearInterval(timer);
+      state = null;
+    },
+    program: rules.program(first),
+    onInput: { tap: (seat) => state && push(rules.tap(state, room(), seat, session.now())) },
+  });
+  last = performance.now();
+  state = first;
+  rules.show(first, null, room());
   timer = window.setInterval(() => {
     if (!state) return;
     const next = rules.tick(state, room(), session.now());

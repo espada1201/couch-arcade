@@ -7,7 +7,7 @@ import { MAX_MESSAGE_BYTES, messageBytes, type HostMsg } from '../core/protocol'
 import { canvas2d } from '../ui/canvas';
 import { h, plural, segmented, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
-import type { Director } from './director';
+import type { Director, Hold } from './director';
 import { panel, stopButton } from './panel';
 import type { HostSession } from './session';
 import { every, type Broadcast } from './ticker';
@@ -96,6 +96,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   let seq = 0;
   // Bumped by every start and stop, so a permission prompt that resolves late is dropped.
   let gen = 0;
+  let hold: Hold | null = null;
 
   /** Send a view to every phone (and to late joiners when they arrive) and mirror it here. */
   const show = (view: FollowView) => {
@@ -197,7 +198,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
           : await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 } }, audio: false });
     } catch {
       if (mine === gen) {
-        stop();
+        hold?.end();
         say(kind === 'screen' ? 'Screen sharing was cancelled or is not allowed in this browser.' : 'The camera could not be opened. Allow it in the address bar.');
       }
       return;
@@ -210,13 +211,13 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     // Stopping from the browser's own "Stop sharing" bar ends the broadcast too.
     s.getVideoTracks()[0]?.addEventListener('ended', () => {
       if (mine !== gen) return;
-      director.idle();
+      hold?.end();
       say(kind === 'screen' ? 'Screen sharing ended.' : 'The camera stopped.');
     });
     try {
       await video.play();
     } catch {
-      if (mine === gen) stop(), say('The picture could not be played.');
+      if (mine === gen) hold?.end(), say('The picture could not be played.');
       return;
     }
     if (mine !== gen) return;
@@ -247,7 +248,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       if (e.error === 'no-speech' || e.error === 'aborted') return;
       fatal = true;
       if (mine !== gen) return;
-      stop();
+      hold?.end();
       say(
         e.error === 'not-allowed' || e.error === 'service-not-allowed'
           ? 'The microphone is blocked. Allow it in the address bar and try again.'
@@ -266,28 +267,31 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       }
     };
     recognition = r;
-    show({ show: 'captions', lines: [], interim: false });
-    r.start();
+    try {
+      r.start();
+    } catch {
+      hold?.end();
+      return say('Captions could not start. Check the microphone and the internet connection.');
+    }
     say(`Captioning to ${phones()}. Phones that join later see the captions too.`);
   };
 
   const start = () => {
-    director.take(stop);
+    // Nothing to show: say so before taking the room, so whatever runs keeps running.
+    const card = cardView();
+    if (source === 'cards' && !card) return say('Type at least one line first.');
+    const first: FollowView | null =
+      source === 'cards' ? card : source === 'captions' ? { show: 'captions', lines: [], interim: false } : { show: 'wait', text: source === 'screen' ? 'The host is about to share their screen…' : 'The camera is starting…' };
+    hold = director.run({ stop, program: first ? { kind: 'follow', view: first } : undefined });
     const mine = ++gen;
     running = source;
+    if (first) preview.show(first);
     if (source === 'cards') {
-      const v = cardView();
-      if (!v) {
-        stop();
-        return say('Type at least one line first.');
-      }
-      show(v);
       document.addEventListener('keydown', onKey);
       return say(`Showing card ${deck.at + 1} of ${deck.cards.length} on ${phones()}. Phones that join later see it too.`);
     }
     if (source === 'captions') return startCaptions(mine);
     go.disabled = true;
-    show({ show: 'wait', text: source === 'screen' ? 'The host is about to share their screen…' : 'The camera is starting…' });
     say(source === 'screen' ? 'Pick the screen, window or tab to share.' : 'Starting the camera…');
     void startMedia(mine, source).finally(() => mine === gen && (go.disabled = false));
   };

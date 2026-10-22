@@ -15,7 +15,7 @@ export interface PollRun {
 }
 
 /** Run a poll on the crowd until the director moves on. `show` hears every new state. */
-export function runPoll(session: HostSession, director: Pick<Director, 'take'>, question: string, options: string[], show: (s: PollState) => void): PollRun {
+export function runPoll(session: HostSession, director: Pick<Director, 'run'>, question: string, options: string[], show: (s: PollState) => void): PollRun {
   let state: PollState | null = startPoll(question, options);
   const broadcast = (s: PollState) => {
     const counts = tally(s);
@@ -48,13 +48,14 @@ export function runPoll(session: HostSession, director: Pick<Director, 'take'>, 
     state = s;
     broadcast(s);
   };
-  director.take(() => {
-    state = null;
-    session.onVote = () => {};
-    unsubscribe();
+  director.run({
+    stop: () => {
+      state = null;
+      unsubscribe();
+    },
+    onInput: { vote: (seat, m) => dispatch({ type: 'vote', seat, choice: m.choice }) },
   });
   const unsubscribe = session.subscribe(roster);
-  session.onVote = (seat, choice) => dispatch({ type: 'vote', seat, choice });
   broadcast(state);
   return { dispatch, counts: () => (state ? tally(state) : options.map(() => 0)) };
 }
@@ -119,7 +120,7 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
     if (options.length < MIN_OPTIONS) return say(`Give at least ${MIN_OPTIONS} answers.`), fields[options.length].focus();
     if (session.online.length === 0) return say('No phones yet. Scan the QR code with a phone to join.');
     say('');
-    run = runPoll(session, { take: (stop) => director.take(() => (stop?.(), (run = null), draw(null))) }, q, options, draw);
+    run = runPoll(session, { run: (r = {}) => director.run({ ...r, stop: () => (r.stop?.(), (run = null), draw(null)) }) }, q, options, draw);
     startBtn.textContent = 'Restart with these answers';
   };
   startBtn.addEventListener('click', start);

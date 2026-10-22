@@ -1,15 +1,16 @@
 // Step two: the experiences. Each panel turns the located crowd into something:
 // a picture, a wave of light, sound moving through the room, or a game.
-import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type WaveParams, type WaveProgram, type WaveShape } from '../core/effects';
+import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type Program, type WaveParams, type WaveProgram, type WaveShape } from '../core/effects';
 import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
 import type { PotatoState } from '../core/potato';
 import { teamSizes, type TerritoryState } from '../core/territory';
 import { css, h, plural, segmented, slider } from '../ui/dom';
-import type { Director } from './director';
+import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { MOMENTS, fileStunt, presets, textStunt, type Moment, type Stunt } from './images';
 import { panel, requirePlaced, stopButton } from './panel';
 import { recorder } from './record';
+import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
@@ -17,12 +18,16 @@ import type { Stage } from './stage';
 /** How long the crowd counts down before a card stunt flips. */
 const FLIP_LEAD_MS = 3200;
 
-/** Show `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
-export function flipCards(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): void {
+/** `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
+export function cardProgram(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): (seat: number) => Program {
   // Each phone averages the patch of picture it stands in for.
   const colors = sampleCrowd(image, session.layout, Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, session.layout.positions.size))));
   const at = session.now() + leadMs;
-  session.setProgram((seat) => ({ kind: 'card', rgb: colors.get(seat) ?? BLACK, at }));
+  return (seat) => ({ kind: 'card', rgb: colors.get(seat) ?? BLACK, at });
+}
+
+export function flipCards(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): void {
+  session.setProgram(cardProgram(session, image, leadMs));
 }
 
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
@@ -74,8 +79,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', () => {
     if (!requirePlaced(session, say)) return;
-    director.take(rec?.end);
-    flipCards(session, chosen.image);
+    director.run({ stop: rec?.end, program: cardProgram(session, chosen.image) });
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
     rec?.begin(FLIP_LEAD_MS + 8000);
     const n = session.playRoom().positions.size;
@@ -158,17 +162,22 @@ function waveControls(stage: Stage, initial: Partial<WaveParams>, onChange: (w: 
 /** A wave on the crowd that can be edited while it rolls. */
 export function liveWave(session: HostSession) {
   let wave: WaveProgram | null = null;
-  let sentAt = 0;
-  let pending = 0;
-  const send = () => {
-    pending = 0;
-    sentAt = performance.now();
-    if (wave) session.setProgram({ ...wave });
-  };
+  let gen = 0;
+  const send = throttle(() => wave && session.setProgram({ ...wave }), 150);
   return {
-    start(w: WaveParams, leadMs: number): void {
+    /** The run to hand the director; edits after this go straight to the phones. */
+    start(w: WaveParams, leadMs: number): Run {
+      const mine = ++gen;
       wave = makeWave(session.now() + leadMs, w);
-      send();
+      send.sent();
+      return {
+        program: { ...wave },
+        stop: () => {
+          if (mine !== gen) return;
+          wave = null;
+          send.cancel();
+        },
+      };
     },
     // Live edits keep the wave's phase so the band never jumps and phones keep their audio
     // schedule; a new speed rebases t0 so the band stays where it is (pingpong parity included).
@@ -179,14 +188,7 @@ export function liveWave(session: HostSession) {
       if (w.period !== wave.period && now > t0) t0 = now - (((now - t0) / wave.period) % 2) * w.period;
       wave = makeWave(t0, w);
       // Slider drags fire per pixel; at most one broadcast per 150 ms, trailing edge included.
-      const wait = 150 - (performance.now() - sentAt);
-      if (wait <= 0) send();
-      else pending ||= window.setTimeout(send, wait);
-    },
-    stop(): void {
-      wave = null;
-      clearTimeout(pending);
-      pending = 0;
+      send();
     },
   };
 }
@@ -195,9 +197,8 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
   const wave = liveWave(session);
   const go = (w: WaveParams) => {
     if (!requirePlaced(session, say)) return;
-    director.take(wave.stop);
+    director.run(wave.start(w, 250));
     controls.arm();
-    wave.start(w, 250);
     say('Rolling. Change anything and it updates live.');
   };
   const controls = waveControls(stage, {}, wave.retune, true);
@@ -223,8 +224,7 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
   const params = (): WaveParams => ({ ...WAVE_DEFAULTS, ...current.w, period: current.w.period / tempo });
   const play = () => {
     if (!requirePlaced(session, say)) return;
-    director.take(wave.stop);
-    wave.start(params(), 400);
+    director.run(wave.start(params(), 400));
     say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
   const { el, say } = panel(

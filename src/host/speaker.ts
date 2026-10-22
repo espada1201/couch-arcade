@@ -7,6 +7,7 @@ import { h, plural, slider } from '../ui/dom';
 import type { Director } from './director';
 import { FileShare } from './fileshare';
 import { panel, stopButton } from './panel';
+import { throttle } from './throttle';
 import type { HostSession } from './session';
 
 /** Play starts this far ahead so every phone has the message and its audio scheduled in time. */
@@ -22,38 +23,27 @@ async function probe(data: Uint8Array): Promise<number> {
   return buf.duration;
 }
 
-/** Calls `fn` at most once per `ms`, always ending on the latest call. */
-function throttle(fn: () => void, ms: number): () => void {
-  let last = 0;
-  let pending = 0;
-  return () => {
-    const wait = ms - (performance.now() - last);
-    if (wait <= 0) {
-      last = performance.now();
-      fn();
-    } else
-      pending ||= window.setTimeout(() => {
-        pending = 0;
-        last = performance.now();
-        fn();
-      }, wait);
-  };
-}
-
 export function speakerPanel(session: HostSession, director: Director): HTMLElement {
   let prog: SpeakerProgram = { kind: 'speaker', track: null, tl: PAUSED, volume: 1, spread: false };
   let share: FileShare | null = null;
   let active = false;
-  session.onHave = (seat, m) => share?.have(seat, m);
+  session.input({ have: (seat, m) => share?.have(seat, m) });
 
   const send = () => session.setProgram({ ...prog });
   const sendSoon = throttle(send, 150);
   /** Take the room (stopping whatever else runs) and resume sending the file. */
   const activate = () => {
     if (!active) {
-      director.take(() => {
-        active = false;
-        share?.stop();
+      director.run({
+        // Something else took the room: the song stops here too, so the host never shows "playing" to a silent room.
+        stop: () => {
+          active = false;
+          share?.stop();
+          const t = prog.track;
+          if (t) prog = { ...prog, tl: [{ at: 0, pos: positionAt(prog.tl, session.now(), t.duration), playing: false }] };
+          refresh();
+        },
+        program: { ...prog },
       });
       active = true;
     }
