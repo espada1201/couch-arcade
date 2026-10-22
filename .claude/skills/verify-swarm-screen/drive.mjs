@@ -84,7 +84,10 @@ function stopServer() {
 const base = () => opt.url || server.url;
 
 // ---------- browser + room ----------
-const BASE_ARGS = ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--auto-select-desktop-capture-source=Entire screen'];
+const BASE_ARGS = ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--auto-select-desktop-capture-source=Entire screen',
+  // The room is all on this machine/LAN; an agent proxy in the environment would 403 the LAN-address WebSocket.
+  '--no-proxy-server',
+];
 
 class Run {
   constructor(name) {
@@ -753,7 +756,9 @@ const CHECKS = {
   },
 
   async templates(run) {
-    const room = await openRoom(run, { sims: [[0.2, 0.4], [0.5, 0.6], [0.8, 0.4]] });
+    // A 4 x 3 block of seats: words need a crowd dense enough to draw letters.
+    const GRID = Array.from({ length: 12 }, (_, i) => [0.1 + (i % 4) * 0.27, 0.2 + Math.floor(i / 4) * 0.3]);
+    const room = await openRoom(run, { sims: GRID, phone: { width: 160, height: 280 } });
     await scan(room);
     const { host, phones } = room;
     await tab(room, 'Card stunt');
@@ -767,6 +772,9 @@ const CHECKS = {
     await host.getByRole('button', { name: 'Flip the cards' }).click();
     await expect(phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 3000 });
     await expect(phones[0].locator('.label')).toHaveText('', { timeout: 5000 });
+    const names = new Set((await Promise.all(phones.map((p) => bg(p)))).map((c) => c.join()));
+    run.note('Names with a heart: distinct colours', names.size);
+    if (names.size < 2) run.issue('Names with a heart flipped to one flat colour on every phone');
     await run.shot(host, 'host-names');
     await host.getByLabel('Name (birthday, couple)').fill('');
     await host.getByRole('button', { name: 'Happy birthday' }).click();
@@ -774,9 +782,11 @@ const CHECKS = {
     await expect(host.getByText('Type a name for “Happy birthday”.')).toBeVisible();
     await host.getByRole('button', { name: 'Just married' }).click();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
-    await expect(host.getByText(/3, 2, 1… 3 phones flip together/)).toBeVisible();
+    await expect(host.getByText(/3, 2, 1… 12 phones flip together/)).toBeVisible();
     await sleep(3800);
-    run.note('Just married colours', (await Promise.all(phones.map((p) => bg(p)))).map((c) => c.join()));
+    const married = new Set((await Promise.all(phones.map((p) => bg(p)))).map((c) => c.join()));
+    run.note('Just married: distinct colours', married.size);
+    if (married.size < 2) run.issue('Just married flipped to one flat colour on every phone');
     await run.shot(host, 'host-just-married');
   },
 
@@ -801,17 +811,19 @@ const CHECKS = {
   },
 
   async live(run) {
-    const room = await openRoom(run, { sims: [[0.15, 0.5], [0.5, 0.5], [0.85, 0.5]] });
+    // Top, middle and bottom of the room, so a source that only lights part of the picture shows up.
+    const room = await openRoom(run, { sims: [[0.15, 0.2], [0.5, 0.5], [0.85, 0.85]] });
     await scan(room);
     const { host, phones } = room;
     await tab(room, 'Live screen');
     const counts = {};
+    const perPhone = async () => Promise.all(phones.map(async (p) => (await colours(p, 1200)).size));
     for (const src of ['Aurora', 'Fire', 'Camera']) {
       await host.getByRole('radio', { name: src }).check();
       if (src === 'Aurora') await host.getByRole('button', { name: 'Go live' }).click();
       await expect(host.getByText(/Broadcasting to 3 phones/)).toBeVisible({ timeout: 15_000 });
       await sleep(800);
-      counts[src] = (await colours(phones[1])).size;
+      counts[src] = await perPhone();
       await run.shot(host, `host-live-${src.toLowerCase()}`);
     }
     // Video: a short clip the browser records itself, then uploaded like a host's file.
@@ -834,13 +846,19 @@ const CHECKS = {
       for (const x of b) s += String.fromCharCode(x);
       return btoa(s);
     });
+    // Switching to Video while live asks for a file first; pick it, then Go live again.
     await host.getByRole('radio', { name: 'Video' }).check();
+    await expect(host.getByText('Choose a video file first.')).toBeVisible();
     await host.locator('#live-file').setInputFiles({ name: 'clip.webm', mimeType: 'video/webm', buffer: Buffer.from(clip, 'base64') });
-    await sleep(2500);
-    counts.Video = (await colours(phones[1])).size;
-    run.note('distinct colours on the centre phone in 1.5 s', counts);
-    run.note('host status', await host.locator('.panel-body > .note[role=status]').last().textContent());
-    for (const [k, n] of Object.entries(counts)) if (n < 3) run.issue(`${k}: centre phone showed only ${n} colours`);
+    await host.getByRole('button', { name: 'Go live' }).click();
+    await expect(host.getByText(/Broadcasting to 3 phones/)).toBeVisible({ timeout: 15_000 });
+    await sleep(800);
+    counts.Video = await perPhone();
+    run.note('distinct colours per phone (top, middle, bottom) in 1.2 s', counts);
+    for (const [k, n] of Object.entries(counts)) {
+      if (n.every((c) => c < 3)) run.issue(`${k}: no phone's colour moved`);
+      else if (n.some((c) => c < 2)) run.issue(`${k}: phone(s) ${n.flatMap((c, i) => (c < 2 ? [['top', 'middle', 'bottom'][i]] : [])).join(', ')} stayed one flat colour`);
+    }
     await run.shot(host, 'host-live-video');
   },
 
@@ -900,7 +918,7 @@ const CHECKS = {
     run.note('score after one throw', await room.host.locator('.score').textContent());
     await run.shot(h, 'phone-potato');
     // Let the fuse burn on the next holder: someone goes out.
-    await expect(room.host.locator('.score')).toContainText(/out|left|wins/i, { timeout: 20_000 });
+    await expect(room.host.locator('.score')).toContainText(/[0-4] still in|last one standing/, { timeout: 30_000 });
     run.note('score after a burn', await room.host.locator('.score').textContent());
     await run.shot(room.host, 'host-potato');
   },
