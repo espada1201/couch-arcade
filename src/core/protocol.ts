@@ -5,7 +5,7 @@ import { MAX_OPTIONS } from './poll';
 import type { ChunkMsg } from '../net/chunks';
 
 export type PhoneMsg =
-  | { t: 'hello'; token: string; sim?: Point }
+  | { t: 'hello'; token: string }
   | { t: 'ping'; c0: number; u?: number }
   | { t: 'tap' }
   | { t: 'seat'; row: number; seat: number }
@@ -37,11 +37,8 @@ const count = (v: unknown): v is number => Number.isInteger(v) && (v as number) 
 export function parsePhoneMsg(v: unknown): PhoneMsg | null {
   if (!isObj(v)) return null;
   switch (v.t) {
-    case 'hello': {
-      if (typeof v.token !== 'string' || v.token.length > 64) return null;
-      const sim = isObj(v.sim) && num(v.sim.x) && num(v.sim.y) ? { x: v.sim.x, y: v.sim.y } : undefined;
-      return { t: 'hello', token: v.token, sim };
-    }
+    case 'hello':
+      return typeof v.token === 'string' && v.token.length <= 64 ? { t: 'hello', token: v.token } : null;
     case 'ping':
       return num(v.c0) ? { t: 'ping', c0: v.c0, u: num(v.u) ? v.u : undefined } : null;
     case 'tap':

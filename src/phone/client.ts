@@ -39,7 +39,7 @@ export class PhoneClient {
   constructor(
     private readonly transport: Transport,
     readonly room: string,
-    private readonly sim?: Point,
+    sim?: Point,
   ) {
     // Simulated phones are tabs of one browser, so each needs its own identity.
     // Kept in localStorage so closing the tab and rescanning the QR code lands in the same seat.
@@ -66,7 +66,7 @@ export class PhoneClient {
       this.clock.reset();
       link.onMessage((m) => this.receive(m as HostMsg));
       link.onClose(() => this.lost());
-      this.send({ t: 'hello', token: this.token, sim: this.sim });
+      this.send({ t: 'hello', token: this.token });
       this.startPinging();
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);

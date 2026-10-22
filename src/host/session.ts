@@ -22,7 +22,6 @@ export interface Seat {
   link: Link | null;
   raw: Point | null;
   source: Source | null;
-  sim?: Point;
   /** The phone's own estimate of its clock error (ms); Infinity until it has synced. */
   sync: number;
   lastTap: number;
@@ -109,10 +108,6 @@ export class HostSession {
     });
     // Saved now, not at the first join, so reloading an empty new room keeps its code.
     this.save();
-  }
-
-  close(): void {
-    this.end?.close();
   }
 
   subscribe(cb: () => void): () => void {
@@ -279,7 +274,6 @@ export class HostSession {
           link.send({ t: 'full' } satisfies HostMsg);
           return;
         }
-        if (m.sim) me.sim = m.sim;
         this.sendTo(me, { t: 'welcome', seat: me.seat, room: this.room });
         this.sendPos(me);
         this.sendTo(me, { t: 'program', program: this.programFor(me.seat) });

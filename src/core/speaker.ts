@@ -115,10 +115,10 @@ export interface Decision {
  * (measured through its own audio clock). Audio clocks drift against the system clock, and the
  * clock offset estimate moves too; once the error passes the tolerance the source is replaced.
  */
-export function reconcile(tl: Timeline, duration: number, now: number, sounding: { anchor: number } | null, tolerance = DRIFT_TOLERANCE_MS): Decision {
+export function reconcile(tl: Timeline, duration: number, now: number, sounding: { anchor: number } | null): Decision {
   const segs = segments(tl, duration, now);
   const first = segs[0];
-  if (sounding && first && first.from <= now && Math.abs(sounding.anchor - first.anchor) <= tolerance) return { keep: first, start: segs.slice(1) };
+  if (sounding && first && first.from <= now && Math.abs(sounding.anchor - first.anchor) <= DRIFT_TOLERANCE_MS) return { keep: first, start: segs.slice(1) };
   return { keep: null, start: segs };
 }
 

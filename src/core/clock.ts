@@ -4,6 +4,8 @@
 // only the fastest round trips and take the median of those.
 import { median } from './math';
 
+const KEEP = 40;
+
 export interface ClockSample {
   offset: number;
   rtt: number;
@@ -18,12 +20,10 @@ export class ClockEstimator {
   private off = 0;
   private unc = Infinity;
 
-  constructor(private readonly keep = 40) {}
-
   add(s: ClockSample): void {
     if (!Number.isFinite(s.offset) || s.rtt < 0) return;
     this.samples.push(s);
-    if (this.samples.length > this.keep) this.samples.shift();
+    if (this.samples.length > KEEP) this.samples.shift();
     // Queueing only ever adds delay, so trust the fastest quarter of round trips.
     const sorted = [...this.samples].sort((a, b) => a.rtt - b.rtt);
     const best = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 4)));

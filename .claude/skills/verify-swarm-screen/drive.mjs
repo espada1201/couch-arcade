@@ -627,7 +627,6 @@ const CHECKS = {
     }
     await room.context.browser().close();
     // 2) Same path with the browser recogniser replaced at its boundary: phones must show the words.
-    run.allowErrors = /$^/;
     room = await openRoom(run, {
       sims: [[0.1, 0.5], [0.2, 0.5]],
       init: () => {

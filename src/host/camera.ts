@@ -17,6 +17,10 @@ export interface FrameSource {
 // Enough resolution that a phone across a large room still covers a handful of pixels.
 const W = 320;
 
+// The synthetic camera lags and drops frames like a real one.
+const LATENCY_MS = 70;
+const DROP = 0.08;
+
 function toGray(rgba: Uint8ClampedArray, n: number): Uint8Array {
   const g = new Uint8Array(n);
   for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = (rgba[j] * 77 + rgba[j + 1] * 150 + rgba[j + 2] * 29) >> 8;
@@ -107,10 +111,7 @@ export class SyntheticSource implements FrameSource {
   private timer = 0;
   private history = new Map<string, { sim: Optics['sim']; samples: [number, number][] }>();
 
-  constructor(
-    private readonly latencyMs = 70,
-    private readonly drop = 0.08,
-  ) {
+  constructor() {
     this.preview.width = W;
     this.preview.height = W / this.aspect;
     this.preview.setAttribute('aria-label', 'Simulated camera view of the room');
@@ -131,9 +132,9 @@ export class SyntheticSource implements FrameSource {
     const ctx = this.preview.getContext('2d')!;
     const img = ctx.createImageData(w, h);
     this.timer = window.setInterval(() => {
-      if (Math.random() < this.drop) return;
+      if (Math.random() < DROP) return;
       const t = performance.now();
-      const seen = performance.timeOrigin + t - this.latencyMs;
+      const seen = performance.timeOrigin + t - LATENCY_MS;
       const data = new Uint8Array(w * h);
       for (let i = 0; i < data.length; i++) data[i] = 26 + Math.random() * 10;
       for (const ph of this.history.values()) {
