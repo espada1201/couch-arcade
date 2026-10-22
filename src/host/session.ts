@@ -338,7 +338,8 @@ export class HostSession {
         this.sendTo(me, { t: 'welcome', seat: me.seat, room: this.room });
         this.sendPos(me);
         this.sendTo(me, { t: 'program', program: this.programFor(me.seat) });
-        if (this.offered) this.sendTo(me, { t: 'offer', track: this.offered });
+        // Always, even none: a phone still holding an offer from before the host page reloaded drops it.
+        this.sendTo(me, { t: 'offer', track: this.offered });
         this.changed();
         return;
       }

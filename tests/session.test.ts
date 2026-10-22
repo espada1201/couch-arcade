@@ -227,6 +227,16 @@ describe('untrusted phones', () => {
   });
 });
 
+describe('song offers', () => {
+  it('tells a joining phone there is no song, so one from before the host reloaded is dropped', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    a.say({ t: 'hello', token: 'aaa' });
+    expect(a.inbox).toContainEqual({ t: 'offer', track: null });
+  });
+});
+
 describe('message size', () => {
   it('never hands a link a message over the limit, whatever sends it', async () => {
     const { session, phone } = harness();

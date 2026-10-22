@@ -56,6 +56,28 @@ describe('sharing a file with the room', () => {
     share.stop();
   });
 
+  it('runs its resend timer only while a phone is still fetching', async () => {
+    const r = await room([0]);
+    const share = new FileShare(r.session, 'song', new Uint8Array(CHUNK_BYTES * 3));
+    share.start();
+    r.session.input({ have: (seat, m) => share.have(seat, m) });
+    // The session's own sweep timer is the baseline.
+    const base = vi.getTimerCount();
+    r.phones[0].say({ t: 'have', id: 'song', next: 0, got: 0 });
+    expect(vi.getTimerCount()).toBe(base + 1);
+    r.phones[0].say({ t: 'have', id: 'song', next: 3, got: 3, state: 'ready' });
+    expect(vi.getTimerCount()).toBe(base);
+    expect(share.progress()).toEqual([{ seat: 0, progress: 1, state: 'ready' }]);
+    // A phone that drops mid-download is forgotten at the next tick, and the timer stops with it.
+    const late = r.join('late');
+    late.say({ t: 'have', id: 'song', next: 0, got: 0 });
+    expect(vi.getTimerCount()).toBe(base + 1);
+    late.drop();
+    vi.advanceTimersByTime(300);
+    expect(vi.getTimerCount()).toBe(base);
+    share.stop();
+  });
+
   it('keeps answering acks while another feature holds the room', async () => {
     const r = await room([0]);
     const share = new FileShare(r.session, 'song', new Uint8Array(10));

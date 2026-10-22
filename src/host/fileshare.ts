@@ -28,6 +28,8 @@ interface Peer {
 export class FileShare {
   readonly n: number;
   private peers = new Map<number, Peer>();
+  private live = false;
+  /** Re-sends stalled chunks; runs only while some phone is still fetching. */
   private timer = 0;
   /** Each chunk is base64-encoded once and the same message goes to every phone. */
   private chunks: ChunkMsg[] = [];
@@ -42,23 +44,25 @@ export class FileShare {
 
   /** Begin answering acks and re-sending stalled chunks. */
   start(): void {
-    if (!this.timer) this.timer = window.setInterval(() => this.pumpAll(), 300);
+    this.live = true;
   }
 
   stop(): void {
-    clearInterval(this.timer);
-    this.timer = 0;
+    this.live = false;
+    this.peers.clear();
+    this.keepPumping();
   }
 
   have(seat: number, m: Extract<PhoneMsg, { t: 'have' }>): void {
     const link = this.session.seats.get(seat)?.link;
-    if (!this.timer || m.id !== this.id || !link) return;
+    if (!this.live || m.id !== this.id || !link) return;
     let peer = this.peers.get(seat);
     // A new link means a reconnect: whatever was in flight on the old one is gone.
     if (!peer || peer.link !== link) this.peers.set(seat, (peer = { link, sender: new ChunkSender(this.n) }));
     peer.sender.ack(m.next, m.got, performance.now());
     peer.state = m.state;
     this.pump(seat, peer);
+    this.keepPumping();
   }
 
   /** Progress of every connected phone that has asked for the file. */
@@ -71,9 +75,21 @@ export class FileShare {
 
   private pumpAll(): void {
     for (const [seat, peer] of this.peers) this.pump(seat, peer);
+    this.keepPumping();
+  }
+
+  /** The timer runs exactly while a connected phone still lacks part of the file. */
+  private keepPumping(): void {
+    const busy = [...this.peers.values()].some((p) => !p.sender.done);
+    if (busy && !this.timer) this.timer = window.setInterval(() => this.pumpAll(), 300);
+    else if (!busy && this.timer) {
+      clearInterval(this.timer);
+      this.timer = 0;
+    }
   }
 
   private pump(seat: number, peer: Peer): void {
+    // Gone or back on a new link: forget it (a new link acks again and starts afresh).
     if (this.session.seats.get(seat)?.link !== peer.link) return void this.peers.delete(seat);
     const now = performance.now();
     while (peer.link.buffered() < CHUNK_BACKLOG) {

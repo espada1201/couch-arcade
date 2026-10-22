@@ -32,7 +32,8 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
   session.input({ have: (seat, m) => share?.have(seat, m) });
 
   const send = () => session.setProgram({ ...prog });
-  const sendSoon = throttle(send, 150);
+  // Something else may have taken the room while the volume change waited its turn.
+  const sendSoon = throttle(() => active() && send(), 150);
 
   const load = async (f: File) => {
     const problem = audioFileProblem(f.name, f.type, f.size);
@@ -52,6 +53,7 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     const id = randomId(8);
     share = new FileShare(session, id, data);
     share.start();
+    tick();
     const track: Track = { id, name: f.name.replace(/\.[^.]+$/, '').slice(0, 80), size: f.size, n: share.n, duration };
     prog = { ...prog, track, tl: PAUSED };
     // Picking a song doesn't take over the room: phones fetch it quietly until Play.
@@ -161,7 +163,9 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
       ),
     );
   };
-  setInterval(() => el.isConnected && refresh(), 400);
+  // The clock and per-phone progress tick once there is a song, and redraw only while the panel shows.
+  let ticking = 0;
+  const tick = () => (ticking ||= window.setInterval(() => el.isConnected && refresh(), 400));
 
   const { el, say } = panel(
     'No speaker? Every phone in the room plays your song at the same moment on the shared clock, so the song fills the room. In our tests the phones played within 10 ms of each other, and the header shows how closely your room agrees (in sync to ±N ms). A Bluetooth speaker or headphones on a phone add their own delay. Nothing to install on the phones. You need the song as a file (MP3 or M4A): music in streaming apps can’t be shared this way.',
