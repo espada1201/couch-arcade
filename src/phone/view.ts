@@ -29,7 +29,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       {},
       h('p.eyebrow', {}, 'Room'),
       h('p.room-code', {}, room),
-      h('p.gate-copy', {}, 'Your phone is about to become one pixel and one speaker in something much bigger. Turn the brightness all the way up, sound on, and keep this page open.'),
+      h('p.gate-copy', {}, 'This phone becomes part of the room’s screen and speaker. Turn the brightness all the way up, turn the sound on, and keep this page open.'),
       'wakeLock' in navigator ? null : h('p.gate-copy', {}, 'This phone can’t be kept awake from here, so set Auto-Lock (screen timeout) to Never for the show.'),
       joinBtn,
     ),

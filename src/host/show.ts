@@ -196,7 +196,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   };
 
   const { el, say } = panel(
-    'Press one button and walk away. The show loops through your title, waves of light and sound, live animation and pictures, timed for the whole crowd. Or play one event moment on its own.',
+    'Press one button and walk away. The show loops through your title, waves of light and sound, live animation and pictures on every phone, until you press Stop. Or play one event moment on its own.',
     h('div.row', {}, h('label.grow', { for: 'show-title' }, 'Title on the crowd', title)),
     h('label.check', { for: 'show-sound' }, sound, h('span', {}, 'With sound')),
     list,

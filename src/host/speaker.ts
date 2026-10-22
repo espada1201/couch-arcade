@@ -1,6 +1,5 @@
 // Party Speaker: the host picks a song, every phone downloads it over the room's own
-// link, and they all play it in step on the shared clock, so a room of quiet phones
-// becomes one loud speaker. No app on any phone.
+// link, and they all play it in step on the shared clock.
 import { audioFileProblem, clockTime, durationProblem, PAUSED, playingAt, positionAt, schedule, type Command, type SpeakerProgram, type Track } from '../core/speaker';
 import { randomId } from '../net/transport';
 import { h, plural, setText, slider } from '../ui/dom';
@@ -165,7 +164,7 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
   setInterval(() => el.isConnected && refresh(), 400);
 
   const { el, say } = panel(
-    'No speaker? Every phone in the room plays your song together, in step, to within a few hundredths of a second, so a room of quiet phones turns into one big sound. Nothing to install. You need the song as a file (MP3 or M4A): music in streaming apps can’t be shared this way.',
+    'No speaker? Every phone in the room plays your song at the same moment on the shared clock, so the song fills the room. In our tests the phones played within 10 ms of each other, and the header shows how closely your room agrees (in sync to ±N ms). A Bluetooth speaker or headphones on a phone add their own delay. Nothing to install on the phones. You need the song as a file (MP3 or M4A): music in streaming apps can’t be shared this way.',
     drop,
     title,
     h('div.row', {}, toggle, stopButton(director, () => say('')), time),

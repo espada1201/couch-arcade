@@ -76,7 +76,7 @@ export function landing(app: HTMLElement, params: URLSearchParams): void {
         h(
           'p.lede',
           {},
-          'Everyone scans a QR code and their phone joins in seconds. Play a song in step on every phone, put words and pictures on every screen, flip a card stunt for a wedding or a birthday, count down to midnight together, ask the room a question and watch the answer light up the crowd, or play icebreaker games that need no TV.',
+          'Everyone scans a QR code and their phone joins in seconds. Then play a song on every phone at once, put words and pictures on every screen, or count down to midnight together. Flip a card stunt for a wedding or a birthday, ask the room a question and see the answer light up the crowd, or play icebreaker games that need no TV.',
         ),
         h(
           'div.landing-actions',
@@ -88,7 +88,7 @@ export function landing(app: HTMLElement, params: URLSearchParams): void {
             h('label', { for: 'code' }, 'Joining? Enter the room code'),
             h('div.join-row', {}, code, h('button.btn', { type: 'submit' }, 'Join')),
             error,
-            h('small', { id: 'code-hint' }, 'Or just scan the QR code on the host screen.'),
+            h('small', { id: 'code-hint' }, 'Or scan the QR code on the host screen.'),
           ),
         ),
       ),

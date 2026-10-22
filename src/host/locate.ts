@@ -282,7 +282,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
   return h(
     'div.panel-body',
     {},
-    h('p.panel-intro', {}, 'Every phone flashes a unique code for about ten seconds. The camera watches, decodes each flash and pins every phone to the map.'),
+    h('p.panel-intro', {}, 'Every phone flashes a unique code for about ten seconds. The camera watches, decodes each flash and pins each phone it sees to the map.'),
     h('div.row', {}, startBtn, devices),
     camMsg,
     view,

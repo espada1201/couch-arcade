@@ -305,7 +305,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const boxes: Record<FollowSource, HTMLElement> = { cards: cardsBox, screen: mediaBox, camera: mediaBox, captions: captionsBox };
 
   const { el, say } = panel(
-    'A big screen in every hand. Share your screen to put your slides on every phone, type song lyrics or an agenda as big text cards, show live captions of what you say, or the camera. For rooms where not everyone can see the screen, or there is no screen at all.',
+    'Every phone shows the whole picture. Share your screen to put your slides on every phone, type song lyrics or an agenda as big text cards, show live captions of what you say, or show the camera. For rooms where not everyone can see the screen, or there is no screen at all.',
     segmented<FollowSource>('Show', sources, source, (v) => {
       source = v;
       for (const box of new Set(Object.values(boxes))) box.hidden = box !== boxes[v];

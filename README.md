@@ -1,13 +1,13 @@
 # Swarm Screen
 
-Turn a room full of phones into one machine. Everyone scans a QR code; the host computer's
-camera watches every phone flash a unique blink code and works out where each one physically
-sits. Then the crowd is a giant display and speaker array.
+Turn a room full of phones into one screen and one speaker. Everyone scans a QR code; the host
+computer's camera watches every phone flash a unique blink code and works out where each one
+physically sits. Then the crowd is a giant display and speaker array.
 
 - **Music**: Party speaker plays a song file (MP3/M4A) on every phone in step; spatial tones send notes seat to seat.
 - **Big screen**: every phone shows the whole picture: shared slides, lyrics or an agenda as text cards, live captions, the camera.
 - **Poll**: a ballot on every phone, and on Reveal the room itself becomes the chart.
-- **Show**: one button runs a looping choreography: title card, waves with sound, live aurora and fire, pictures. Plus event moments: a New Year countdown (optionally to midnight) and a first-dance wash.
+- **Show**: one button loops a title card, waves with sound, live aurora and fire, and pictures. Event moments run on their own: a New Year countdown (optionally to midnight) and a first-dance wash.
 - **Card stunt**: any picture, your own words or an event template, split across the crowd, flipping on a 3-2-1.
 - **Live screen**: the host camera, a video, or a generated animation, one pixel per phone.
 - **Wave**: light sweeping, ping-ponging or rippling through real space.
@@ -26,8 +26,9 @@ floor plan. The host header shows how tightly phones are synced ("in sync to ±N
 4. Run `npm install && npm start`.
 5. Open the printed `http://localhost:4321/` link and click **Host a room**. Phones on the same Wi-Fi scan the QR code.
 
-`npm start` serves the app plus a tiny Wi-Fi relay, so it works with no internet at all. It uses
-plain http, so phones can't keep their screens awake: set Auto-Lock to Never, or use the online version.
+`npm start` serves the app plus a tiny Wi-Fi relay, so the room works with no internet. Live
+captions are the exception: the browser sends speech to its maker's online service. It uses plain
+http, so phones can't keep their screens awake: set Auto-Lock to Never, or use the online version.
 
 ## Hosting it online
 
@@ -47,6 +48,10 @@ step is skipped. (The repo name `couch-arcade` is a leftover; feel free to renam
 
 ## Develop
 
-`npm run dev`, `npm test` (unit), `npm run e2e` (Playwright: a host and up to six phone tabs filmed by the synthetic camera, plus an "outside judge" that renders a room video with perspective, blur, glare and rolling shutter and feeds it to Chrome's fake camera, so the real camera path must place 12 phones), `npm run typecheck`.
+`npm run dev` starts the dev server. `npm test` runs the unit tests and `npm run typecheck` checks
+types. `npm run e2e` runs Playwright: a host and up to six phone tabs filmed by the synthetic camera.
+It also runs an "outside judge", which renders a room video with perspective, blur, glare and
+rolling shutter and plays it through Chrome's fake camera, so the real camera path must place 12
+phones.
 
 MIT licence.
