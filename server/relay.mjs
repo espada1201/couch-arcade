@@ -6,7 +6,6 @@ import { networkInterfaces } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { skipForSlowPhone } from './backpressure.mjs';
 
 const PORT = Number(process.env.PORT) || 4321;
 const ROOT = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -71,7 +70,10 @@ const MAX_PHONES = 200;
 const ROOM = /^[A-Z0-9]{3,12}$/;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
-/** room -> { host: WebSocket, key: string, phones: Map<id, WebSocket> }; exists only while a host is attached. */
+/**
+ * room -> { host: WebSocket, key: string, phones: Map<id, Phone> }; exists only while a host is attached.
+ * Phone: { ws, written, since }: messages written to the phone's socket, and chars since the last `drain`.
+ */
 const rooms = new Map();
 let nextId = 1;
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
@@ -114,6 +116,23 @@ function admit(room, role, key) {
   return r.phones.size >= MAX_PHONES ? '503 Service Unavailable' : null;
 }
 
+/** Chars written to a phone between two `drain` reports to its host. */
+const REPORT_CHARS = 4096;
+
+/**
+ * Write `s` to a phone and, once enough has gone out, tell the host how many messages the phone's
+ * socket has taken: that is how the host sees each phone's own backlog through its one socket.
+ */
+function forward(r, id, p, s) {
+  p.ws.send(s, () => {
+    p.written++;
+    p.since += s.length;
+    if (p.since < REPORT_CHARS) return;
+    p.since = 0;
+    r.host.send(JSON.stringify({ t: 'drain', id, n: p.written }));
+  });
+}
+
 /** JSON from a socket, or undefined when it does not parse (JSON itself has no undefined). */
 function parse(raw) {
   try {
@@ -131,23 +150,32 @@ function attachHost(ws, room, key) {
   for (const id of r.phones.keys()) ws.send(JSON.stringify({ t: 'open', id }));
   ws.on('message', (raw) => {
     const m = parse(raw);
-    if (m === undefined) return;
-    const phone = m && typeof m === 'object' ? r.phones.get(m.id) : undefined;
-    if (!phone) return;
-    if (m.t === 'msg') {
-      if (!skipForSlowPhone(m.data, phone.bufferedAmount)) phone.send(JSON.stringify(m.data ?? null));
-    } else if (m.t === 'close') phone.close(1000);
+    if (!m || typeof m !== 'object') return;
+    // One copy from the host, the same string to every phone it names.
+    if (m.t === 'all') {
+      if (!Array.isArray(m.ids)) return;
+      const s = JSON.stringify(m.data ?? null);
+      for (const id of m.ids) {
+        const p = r.phones.get(id);
+        if (p) forward(r, id, p, s);
+      }
+      return;
+    }
+    const p = r.phones.get(m.id);
+    if (!p) return;
+    if (m.t === 'msg') forward(r, m.id, p, JSON.stringify(m.data ?? null));
+    else if (m.t === 'close') p.ws.close(1000);
   });
   ws.on('close', () => {
     if (r.host !== ws) return;
-    for (const p of r.phones.values()) p.close(1001, 'host left');
+    for (const p of r.phones.values()) p.ws.close(1001, 'host left');
     rooms.delete(room);
   });
 }
 
 function attachPhone(ws, r) {
   const id = String(nextId++);
-  r.phones.set(id, ws);
+  r.phones.set(id, { ws, written: 0, since: 0 });
   r.host.send(JSON.stringify({ t: 'open', id }));
   ws.on('message', (raw) => {
     const data = parse(raw);

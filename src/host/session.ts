@@ -7,7 +7,7 @@ import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
-import { randomId, type HostEnd, type Link, type Transport } from '../net/transport';
+import { randomId, type HostEnd, type Link, type SendOptions, type Transport } from '../net/transport';
 import { forget, loadJson, saveJson } from '../storage';
 
 export type Source = 'camera' | 'grid' | 'manual';
@@ -135,14 +135,15 @@ export class HostSession {
   }
 
   /**
-   * Set what every phone runs. With `maxBuffered`, a phone whose link already holds more than
-   * that many bytes is skipped this time (a picture frame it would only receive late anyway).
+   * Set what every phone runs. `latest`: each one replaces the last (a picture frame), so a phone
+   * whose link is backed up skips to the newest once it catches up instead of queueing them all.
    */
-  setProgram(p: Program | ((seat: number) => Program), { maxBuffered = Infinity } = {}): void {
+  setProgram(p: Program | ((seat: number) => Program), { latest = false } = {}): void {
     this.programFor = typeof p === 'function' ? p : () => p;
     // Programs change many times a second (live screen, games); they are not roster changes,
     // so no persistence or listener churn here. The stage reads programOf() every frame.
-    for (const s of this.online) if (s.link!.buffered() <= maxBuffered) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
+    if (typeof p === 'function') for (const s of this.online) this.sendTo(s, { t: 'program', program: p(s.seat) }, { latest });
+    else this.end?.broadcast(this.online.map((s) => s.link!), { t: 'program', program: p } satisfies HostMsg, { latest });
   }
 
   /** Offer every phone, late joiners too, a song to fetch in the background. */
@@ -243,8 +244,8 @@ export class HostSession {
     this.sendTo(s, { t: 'pos', pos: this.layout.positions.get(s.seat) ?? null, aspect: this.layout.aspect });
   }
 
-  private sendTo(s: Seat, m: HostMsg): void {
-    s.link?.send(m);
+  private sendTo(s: Seat, m: HostMsg, opts?: SendOptions): void {
+    s.link?.send(m, opts);
   }
 
   /** Send one phone a message of its own (file chunks); false when it is offline. */

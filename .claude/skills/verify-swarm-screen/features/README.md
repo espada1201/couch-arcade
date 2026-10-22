@@ -21,7 +21,7 @@ H1 and one paragraph, then four H2s: `Sub-features`, `How to get to it (user POV
 - [LAN relay](./lan-relay.md): `lan`, `doctor`
 - [Locate](./locate.md): `scan`, `real-camera`, `seat-grid`, `drag`
 - [Music](./music.md): `play-song [file]`, `tones`
-- [Big screen](./big-screen.md): `cards`, `camera`, `screen-share`, `captions`
+- [Big screen](./big-screen.md): `cards`, `camera`, `big-room`, `screen-share`, `captions`
 - [Poll](./poll.md): `poll`
 - [Show](./show.md): `show`, `countdown`, `first-dance`
 - [Card stunt](./card-stunt.md): `stunt`, `templates`, `record`

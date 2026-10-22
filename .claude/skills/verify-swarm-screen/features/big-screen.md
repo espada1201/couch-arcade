@@ -6,6 +6,7 @@ Every phone shows the whole picture: typed text cards, the host camera, the host
 
 - `cards` empty deck refused; cards shown on every phone; Next, ArrowRight, PageUp step; late joiner sees the current card; Stop returns phones to the lobby.
 - `camera` phones show JPEG frames under 60 KB with real picture content.
+- `big-room` eight phones on the relay, camera frames near 50 KB each: every phone keeps getting frames.
 - `screen-share` same, from `getDisplayMedia`.
 - `captions` phones show the words the recogniser hears.
 
@@ -19,6 +20,7 @@ Preconditions: none (phones need not be placed).
 
 - **Cards.** `drive.mjs cards`. Phones' `.follow-text` matches each step; reading `phone font px`; `phone-card.png`.
 - **Camera / screen.** `drive.mjs camera`, `drive.mjs screen-share`. Readings per phone `{type: image/jpeg, kb, spread}`; host status "Showing … on 2 phones".
+- **Big room.** `drive.mjs big-room`. Chrome's fake camera plays a noise video (`noise.y4m` in the evidence dir) that JPEG can't shrink, so frames sit near the budget. Reading `frames per phone in 10 s` `[{frames, kb}]` for all eight phones; ISSUES if any phone got fewer than 5; `last-phone-picture.png`.
 - **Captions.** `drive.mjs captions`. Part 1 uses the real recogniser and is INCONCLUSIVE headless (reading shows the host's error, e.g. `audio-capture`). Part 2 replaces only the browser recogniser and must show the words on every phone (`phone-captions-stub.png`).
 
 ## Gotchas

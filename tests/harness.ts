@@ -4,7 +4,7 @@ import { normalize, type Point } from '../src/core/layout';
 import type { HostMsg, PhoneMsg } from '../src/core/protocol';
 import { Director } from '../src/host/director';
 import { HostSession } from '../src/host/session';
-import { BasicLink, type HostEnd, type Link, type Transport } from '../src/net/transport';
+import { BasicLink, sendEach, type HostEnd, type Link, type Transport } from '../src/net/transport';
 
 /** In-memory transport: `accept` hands the host a new link, `server` reports the relay up or down. */
 export function testTransport() {
@@ -12,7 +12,7 @@ export function testTransport() {
   let server: (up: boolean) => void = () => {};
   const transport: Transport = {
     name: 'test',
-    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), close: () => {} }),
+    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), broadcast: sendEach, close: () => {} }),
     join: async () => {
       throw new Error('unused');
     },

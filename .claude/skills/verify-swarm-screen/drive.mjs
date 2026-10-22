@@ -271,6 +271,19 @@ function renderRoomVideo(path) {
   writeFileSync(path, Buffer.concat(parts));
 }
 
+/** A camera video of coloured noise, which JPEG can't shrink: every frame lands near the 60 KB budget. */
+function renderNoiseVideo(path, W = 640, H = 480, frames = 12) {
+  const parts = [Buffer.from(`YUV4MPEG2 W${W} H${H} F4:1 Ip A1:1 C420jpeg\n`)];
+  let seed = 11;
+  const rand = () => (seed = (seed * 16807) % 2147483647) & 0xff;
+  for (let f = 0; f < frames; f++) {
+    const frame = Buffer.alloc((W * H * 3) / 2);
+    for (let i = 0; i < frame.length; i++) frame[i] = rand();
+    parts.push(Buffer.from('FRAME\n'), frame);
+  }
+  writeFileSync(path, Buffer.concat(parts));
+}
+
 const CHECKS = {
   async landing(run) {
     const ctx = await run.browser();
@@ -584,6 +597,43 @@ const CHECKS = {
 
   async camera(run) {
     await followPicture(run, 'Camera', /Showing the camera on 2 phones/, 20);
+  },
+
+  async 'big-room'(run) {
+    // Eight phones on the relay, each frame near 50 KB: every phone must keep getting the picture.
+    const video = resolve(run.dir, 'noise.y4m');
+    renderNoiseVideo(video);
+    const sims = Array.from({ length: 8 }, (_, i) => [0.1 + i * 0.1, 0.5]);
+    const room = await openRoom(run, { sims, args: [`--use-file-for-fake-video-capture=${video}`] });
+    const { host, phones } = room;
+    await tab(room, 'Big screen');
+    await host.getByRole('radio', { name: 'Camera' }).check();
+    await host.getByRole('button', { name: 'Show on phones' }).click();
+    await expect(host.getByText(/Showing the camera on 8 phones/)).toBeVisible({ timeout: 15_000 });
+    await Promise.all(
+      phones.map((p) =>
+        p.evaluate(() => {
+          window.__frames = [];
+          const img = document.querySelector('.follow-picture');
+          const log = () => img.getAttribute('src') && window.__frames.push(img.getAttribute('src').length);
+          new MutationObserver(log).observe(img, { attributes: true, attributeFilter: ['src'] });
+          log();
+        }),
+      ),
+    );
+    await sleep(10_000);
+    const got = await Promise.all(phones.map((p) => p.evaluate(() => window.__frames)));
+    const perPhone = got.map((f) => ({ frames: f.length, kb: f.length ? Math.round(f.at(-1) / 1024) : 0 }));
+    run.note('frames per phone in 10 s', perPhone);
+    run.note('host status', await host.getByText(/Showing the camera/).textContent());
+    await run.shot(phones.at(-1), 'last-phone-picture');
+    await run.shot(host, 'host-picture');
+    const starved = perPhone.flatMap((p, i) => (p.frames < 5 ? [i] : []));
+    if (starved.length) run.issue(`phones ${starved.join(', ')} got fewer than 5 frames in 10 s`);
+    const small = perPhone.filter((p) => p.kb < 40);
+    if (small.length === perPhone.length) run.issue('frames were under 40 KB, so this did not test big frames');
+    await host.getByRole('button', { name: 'Stop' }).last().click();
+    await expect(phones[0].locator('.follow')).toBeHidden();
   },
 
   async 'screen-share'(run) {

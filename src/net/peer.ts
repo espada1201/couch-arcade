@@ -1,7 +1,7 @@
 // Internet transport: WebRTC data channels brokered by the free public PeerJS server.
 // Only signalling goes through the broker; everything after that is phone <-> host.
 import type { DataConnection, Peer as PeerType } from 'peerjs';
-import { BasicLink, backoff, type HostEnd, type Link, type Transport } from './transport';
+import { BasicLink, LATEST_BACKLOG, backoff, sendEach, type HostEnd, type Link, type Transport } from './transport';
 
 const PREFIX = 'swarmscreen-v1-';
 
@@ -46,6 +46,11 @@ async function makePeer(id?: string): Promise<PeerType> {
 function wrap(conn: DataConnection): BasicLink {
   const link = new BasicLink((m) => conn.send(m), () => conn.close(), () => conn.dataChannel?.bufferedAmount ?? 0);
   conn.on('data', (d) => link.deliver(d));
+  const dc = conn.dataChannel;
+  if (dc) {
+    dc.bufferedAmountLowThreshold = LATEST_BACKLOG / 2;
+    dc.addEventListener('bufferedamountlow', () => link.drained());
+  }
   conn.on('close', () => link.ended());
   conn.on('error', () => link.ended());
   return link;
@@ -75,7 +80,7 @@ export class PeerTransport implements Transport {
       if (tries) onServer(true);
       tries = 0;
     });
-    return { onLink: (cb) => (onLink = cb), onServer: (cb) => (onServer = cb), close: () => peer.destroy() };
+    return { onLink: (cb) => (onLink = cb), onServer: (cb) => (onServer = cb), broadcast: sendEach, close: () => peer.destroy() };
   }
 
   async join(room: string): Promise<Link> {

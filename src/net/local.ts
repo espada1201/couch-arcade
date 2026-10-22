@@ -1,6 +1,6 @@
 // Same-machine transport over BroadcastChannel: every tab of this origin is in the
 // room. Used by the end-to-end tests and for trying the app with several tabs.
-import { BasicLink, randomId, type HostEnd, type Link, type Transport } from './transport';
+import { BasicLink, randomId, sendEach, type HostEnd, type Link, type Transport } from './transport';
 
 type Wire =
   | { t: 'open'; id: string }
@@ -36,6 +36,7 @@ export class LocalTransport implements Transport {
       onLink: (cb) => (onLink = cb),
       // Same-browser channel: there is no server to lose.
       onServer: () => {},
+      broadcast: sendEach,
       close: () => {
         for (const l of links.values()) l.close();
         ch.close();

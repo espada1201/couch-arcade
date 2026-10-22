@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HostSession } from '../src/host/session';
-import { BasicLink } from '../src/net/transport';
+import { BasicLink, LATEST_BACKLOG } from '../src/net/transport';
 import type { HostMsg } from '../src/core/protocol';
 import { memoryStorage, testTransport } from './harness';
 
@@ -164,14 +164,14 @@ describe('backpressure', () => {
     const { transport, accept } = testTransport();
     const session = new HostSession(transport, 'TEST', () => 0);
     await session.open();
-    const phones = [0, 500_000].map((backlog, i) => {
+    const phones = [0, LATEST_BACKLOG + 1].map((backlog, i) => {
       const inbox: HostMsg[] = [];
       const link = new BasicLink((m) => inbox.push(m as HostMsg), () => {}, () => backlog);
       accept(link);
       link.deliver({ t: 'hello', token: `t${i}` });
       return inbox;
     });
-    session.setProgram({ kind: 'identify' }, { maxBuffered: 100_000 });
+    session.setProgram({ kind: 'identify' }, { latest: true });
     expect(phones[0].at(-1)).toEqual({ t: 'program', program: { kind: 'identify' } });
     expect(phones[1].at(-1)).not.toEqual({ t: 'program', program: { kind: 'identify' } });
     // Without the limit everyone gets it.
