@@ -5,7 +5,7 @@ import type { Program } from '../core/effects';
 import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
-import { parsePhoneMsg, type HostMsg } from '../core/protocol';
+import { parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
 import { randomId, type HostEnd, type Link, type Transport } from '../net/transport';
 import { forget, loadJson, saveJson } from '../storage';
 
@@ -62,6 +62,8 @@ export class HostSession {
   private frame: Frame = 'source';
   private roomAspect = 1;
   onTap: (seat: number) => void = () => {};
+  /** A phone's progress on a file the host is sending it. */
+  onHave: (seat: number, m: Extract<PhoneMsg, { t: 'have' }>) => void = () => {};
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
@@ -224,6 +226,14 @@ export class HostSession {
     s.link?.send(m);
   }
 
+  /** Send one phone a message of its own (file chunks); false when it is offline. */
+  send(seat: number, m: HostMsg): boolean {
+    const s = this.seats.get(seat);
+    if (!s?.link) return false;
+    s.link.send(m);
+    return true;
+  }
+
   private accept(link: Link): void {
     let me: Seat | null = null;
     link.onMessage((raw) => {
@@ -256,7 +266,8 @@ export class HostSession {
         if (now - me.lastTap < 40) return;
         me.lastTap = now;
         this.onTap(me.seat);
-      } else {
+      } else if (m.t === 'have') this.onHave(me.seat, m);
+      else {
         this.gridEntries.set(me.seat, { row: m.row, seat: m.seat });
         this.changed();
       }

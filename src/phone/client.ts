@@ -5,6 +5,7 @@ import { ClockEstimator, sampleFrom } from '../core/clock';
 import type { Program } from '../core/effects';
 import type { Point } from '../core/layout';
 import type { HostMsg, PhoneMsg } from '../core/protocol';
+import type { ChunkMsg } from '../net/chunks';
 import type { Link, Transport } from '../net/transport';
 import { stableId } from '../storage';
 
@@ -23,6 +24,8 @@ export class PhoneClient {
   readonly clock = new ClockEstimator();
   readonly token: string;
   onChange: () => void = () => {};
+  /** A piece of a file the host is sending (not a state change, so no onChange). */
+  onChunk: (m: ChunkMsg) => void = () => {};
   private link: Link | null = null;
   private pingTimer = 0;
   private retries = 0;
@@ -74,6 +77,11 @@ export class PhoneClient {
     this.send({ t: 'seat', row, seat });
   }
 
+  /** Tell the host how much of a file this phone holds. */
+  have(m: Extract<PhoneMsg, { t: 'have' }>): void {
+    this.send(m);
+  }
+
   private send(m: PhoneMsg): void {
     this.link?.send(m);
   }
@@ -95,6 +103,8 @@ export class PhoneClient {
 
   private receive(m: HostMsg): void {
     switch (m.t) {
+      case 'chunk':
+        return this.onChunk(m);
       case 'pong':
         this.lastPong = performance.now();
         this.clock.add(sampleFrom(m.c0, m.h1, m.h2, performance.now()));
