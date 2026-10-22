@@ -166,6 +166,22 @@ describe('phones are untrusted', () => {
 });
 
 describe('a room whose host dropped', () => {
+  it('is not held when no phone ever joined and the host was gone within 5 s', async () => {
+    const tPort = await freePort();
+    const relay = await startRelay(tPort);
+    const ws = (q: string) => new WebSocket(`ws://127.0.0.1:${tPort}/relay?${q}`);
+    const probe = async (q: string) => (await fetch(`http://127.0.0.1:${tPort}/relay?${q}`)).status;
+    try {
+      const host = ws('room=BLINK&role=host&key=ownerkey123');
+      await new Promise((r) => (host.onopen = r));
+      host.close();
+      await new Promise((r) => (host.onclose = r));
+      expect(await probe('room=BLINK&role=host&key=otherkey123')).toBe(204);
+    } finally {
+      relay.kill();
+    }
+  });
+
   it('is kept for its host for a while: another key gets 409, the same key gets back in', async () => {
     const tPort = await freePort();
     const relay = await startRelay(tPort, { RELAY_TOMB_MS: '1500' });
@@ -175,6 +191,9 @@ describe('a room whose host dropped', () => {
       const host = ws('room=TOMB&role=host&key=ownerkey123');
       await new Promise((r) => (host.onopen = r));
       expect(await probe('room=TOMB&role=host&key=thiefkey123')).toBe(409);
+      // A phone has been in the room, so there is someone to come back for.
+      const phone = ws('room=TOMB&role=phone');
+      await new Promise((r) => (phone.onopen = r));
       host.close();
       await new Promise((r) => (host.onclose = r));
       // Gone, but its code is held for it: a squatter is refused, and says so to a probe.
@@ -251,6 +270,8 @@ describe('a full relay', () => {
     try {
       const owner = ws('room=OWNED&role=host&key=ownerkey123');
       await opened(owner);
+      const guest = ws('room=OWNED&role=phone');
+      await opened(guest);
       const others = Array.from({ length: 63 }, (_, i) => ws(`room=FILL${i}&role=host&key=fillkey12${i}`));
       await Promise.all(others.map(opened));
       owner.close();

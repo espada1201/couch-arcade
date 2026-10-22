@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { deviceLedger } from './devices.mjs';
 import { serveStatic } from './static.mjs';
+import { tombstones } from './tombs.mjs';
 import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../src/net/limits.js';
 
 const PORT = Number(process.env.PORT) || 4321;
@@ -62,12 +63,12 @@ const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
  * A host that dropped (a reload, a laptop asleep, a Wi-Fi blip) gets this long to come back for its
- * room before another host may take the code: room -> { key, until }.
+ * room before another host may take the code. A room that never had a phone and lasted under 5 s
+ * is not held, and no more than MAX_ROOMS are, so churning room codes cannot grow the list.
  */
-const TOMB_MS = Number(process.env.RELAY_TOMB_MS) || 10 * 60_000;
-const tombs = new Map();
+const tombs = tombstones({ max: MAX_ROOMS, holdMs: Number(process.env.RELAY_TOMB_MS) || 10 * 60_000, minLifeMs: 5000 });
 
-/** room -> { host: WebSocket, key: string, phones: Map<id, WebSocket> }; exists only while a host is attached. */
+/** room -> { host: WebSocket, key: string, born: ms, hadPhone: boolean, phones: Map<id, WebSocket> }; exists only while a host is attached. */
 const rooms = new Map();
 let nextId = 1;
 // Hosts send frames and song chunks of up to 60 KB; phones send only small control messages.
@@ -110,12 +111,11 @@ function admit(room, role, key, addr) {
   if (role === 'host') {
     if (!KEY.test(key)) return '400 Bad Request';
     if (r) return r.key === key ? null : '409 Conflict';
-    const tomb = tombs.get(room);
-    const live = tomb && tomb.until > Date.now();
-    if (live && tomb.key !== key) return '409 Conflict';
+    const holder = tombs.heldFor(room);
+    if (holder && holder !== key) return '409 Conflict';
     if (crowded) return '429 Too Many Requests';
     // A host back for the code held for it gets in even when the relay is full: the code was its own.
-    return rooms.size >= MAX_ROOMS && !live ? '503 Service Unavailable' : null;
+    return rooms.size >= MAX_ROOMS && !holder ? '503 Service Unavailable' : null;
   }
   if (!r) return '404 Not Found';
   if (crowded) return '429 Too Many Requests';
@@ -156,8 +156,8 @@ function attachHost(ws, room, key) {
     r.host.close(1000, 'replaced');
     for (const p of r.phones.values()) p.close(1012, 'host moved');
     r.phones.clear();
-  } else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
-  tombs.delete(room);
+  } else rooms.set(room, (r = { host: ws, key, born: Date.now(), hadPhone: false, phones: new Map() }));
+  tombs.release(room);
   r.host = ws;
   ws.on('message', (raw) => {
     const env = envelope(String(raw));
@@ -175,13 +175,14 @@ function attachHost(ws, room, key) {
     if (r.host !== ws) return;
     for (const p of r.phones.values()) p.close(1001, 'host left');
     rooms.delete(room);
-    tombs.set(room, { key: r.key, until: Date.now() + TOMB_MS });
+    tombs.hold(room, r.key, r);
   });
 }
 
 function attachPhone(ws, r) {
   const id = String(nextId++);
   r.phones.set(id, ws);
+  r.hadPhone = true;
   r.host.send(JSON.stringify({ t: 'open', id }));
   // The outer wall: the host enforces the same limit on every transport.
   const wall = tokenBucket(PHONE_LIMIT, Date.now());
@@ -206,7 +207,7 @@ function attachPhone(ws, r) {
 // song chunks, so the whole window decides, not one round.
 const HEARTBEAT_MS = Number(process.env.RELAY_HEARTBEAT_MS) || 15_000;
 setInterval(() => {
-  for (const [room, tomb] of tombs) if (tomb.until <= Date.now()) tombs.delete(room);
+  tombs.sweep();
   for (const ws of [...servers.host.clients, ...servers.phone.clients]) {
     if (Date.now() - ws.answered > HEARTBEAT_MS) ws.terminate();
     else ws.ping();
