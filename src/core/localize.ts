@@ -135,7 +135,8 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
   if (active.length === 0) return { lagMs: 0, detections: [], activePixels: 0 };
 
   const pix = Int32Array.from(active);
-  // Coarse lag search on a subsample: score = summed confidence of pixels whose code checks out.
+  // Lag search on a subsample: a coarse sweep over every possible delay, then a refine around the
+  // winner. score = summed confidence of pixels whose code checks out.
   const stride = Math.max(1, Math.floor(active.length / 1500));
   const sample = Int32Array.from(active.filter((_, i) => i % stride === 0));
   const bits = new Array<number>(BITS_PER_CODE);
@@ -149,7 +150,6 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
       if (decodePixel(acc, i, hi[sample[i]] - lo[sample[i]], bits) >= 0 && decodedConf >= minConfidence) total += decodedConf;
     return total;
   };
-  // Coarse sweep over every possible delay, then refine around the winner.
   let bestLag = lagMinMs;
   let bestScore = -1;
   const coarse = lagStepMs * 2;

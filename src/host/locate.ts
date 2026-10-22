@@ -187,7 +187,6 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
 
   mirror.addEventListener('change', () => session.setMirror(mirror.checked));
 
-  // Perspective: click the seating area's corners on the camera picture.
   const perspectiveMsg = h('p.note', { role: 'status' });
   const areaW = h('input', { type: 'number', min: 1, max: 200, step: 0.5, value: session.perspective?.width ?? 6, id: 'area-w' });
   const areaD = h('input', { type: 'number', min: 1, max: 200, step: 0.5, value: session.perspective?.depth ?? 6, id: 'area-d' });
@@ -241,7 +240,6 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     identify.setAttribute('aria-pressed', String(on));
   });
 
-  // No-camera fallback: everyone types their row and seat.
   const rows = h('input', { type: 'number', min: 1, max: 60, value: 3, id: 'grid-rows' });
   const seats = h('input', { type: 'number', min: 1, max: 60, value: 6, id: 'grid-seats' });
   const answered = h('p.note', { role: 'status' });

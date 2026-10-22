@@ -66,7 +66,6 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     if (bg !== lastCss) screen.style.backgroundColor = lastCss = bg;
     const text = frame.label ?? '';
     setText(label, text);
-    // Celebrate once, the moment this phone shows WIN.
     const win = text === 'WIN';
     if (win && !won) {
       navigator.vibrate?.([80, 60, 80, 60, 200]);

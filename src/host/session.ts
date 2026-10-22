@@ -334,7 +334,6 @@ export class HostSession {
   }
 
   private save(): void {
-    // If storage is unavailable the room still works, it just won't survive a refresh.
     saveJson(STORE, {
       room: this.room,
       mirror: this.mirror,

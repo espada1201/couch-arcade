@@ -20,7 +20,6 @@ const FLIP_LEAD_MS = 3200;
 
 /** `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
 export function cardProgram(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): (seat: number) => Program {
-  // Each phone averages the patch of picture it stands in for.
   const colors = sampleCrowd(image, session.layout, Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, session.layout.positions.size))));
   const at = session.now() + leadMs;
   return (seat) => ({ kind: 'card', rgb: colors.get(seat) ?? BLACK, at });
@@ -254,7 +253,6 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
     }),
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: play }, 'Play'), stopButton(director, () => say(''))),
   );
-  // Two modes: your music on every phone, or the spatial tones above.
   const party = speakerPanel(session, director);
   el.hidden = true;
   const mode = segmented<'party' | 'tones'>('Mode', [['party', 'Party speaker'], ['tones', 'Spatial tones']], 'party', (v) => {

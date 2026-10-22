@@ -201,7 +201,6 @@ export class Stage {
     const hh = w / a;
     this.box = { x: (c.width - w) / 2, y: (c.height - hh) / 2, w, h: hh };
 
-    // Floor grid.
     ctx.strokeStyle = 'rgba(242, 234, 216, 0.06)';
     ctx.lineWidth = dpr;
     for (let i = 0; i <= 10; i++) {

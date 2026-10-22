@@ -17,7 +17,6 @@ import { POLL_COLORS } from '../../../src/core/poll.ts';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const PORTS = [4550, 4560];
 
-// ---------- options ----------
 const argv = process.argv.slice(2);
 const opt = { transport: 'lan', out: resolve(process.env.VERIFY_OUT ?? '/tmp/verify-swarm-screen'), headed: false, port: 0, url: '' };
 const queue = [];
@@ -33,7 +32,6 @@ for (let i = 0; i < argv.length; i++) {
 mkdirSync(opt.out, { recursive: true });
 const log = (...m) => console.log(`[drive] ${m.join(' ')}`);
 
-// ---------- server ----------
 const canListen = (port) =>
   new Promise((res) => {
     const s = createServer();
@@ -83,7 +81,6 @@ function stopServer() {
 
 const base = () => opt.url || server.url;
 
-// ---------- browser + room ----------
 const BASE_ARGS = ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--auto-select-desktop-capture-source=Entire screen',
   // The room is all on this machine/LAN; an agent proxy in the environment would 403 the LAN-address WebSocket.
   '--no-proxy-server',
@@ -223,7 +220,7 @@ async function colours(p, ms = 1500, step = 150) {
   return seen;
 }
 
-// ---------- real-camera room video (Chrome's fake camera plays it) ----------
+// The room video Chrome's fake camera plays for the real-camera check.
 const CAM = { W: 480, H: 360, FPS: 25, HALF_MS: DEFAULT_HALF_MS, HEIGHT: 1.9, TILT: (16 * Math.PI) / 180, F: 360 };
 const CAM_PHONES = Array.from({ length: 9 }, (_, id) => ({ id, x: -1.5 + (id % 3) * 1.5, z: 3 + Math.floor(id / 3) * 2.8 }));
 function project(x, y, z) {
@@ -274,7 +271,6 @@ function renderRoomVideo(path) {
   writeFileSync(path, Buffer.concat(parts));
 }
 
-// ---------- checks ----------
 const CHECKS = {
   async landing(run) {
     const ctx = await run.browser();
@@ -1077,7 +1073,6 @@ async function followPicture(run, source, ok, minSpread) {
   await expect(phones[0].locator('.follow')).toBeHidden();
 }
 
-// ---------- doctor / serve / main ----------
 async function doctor() {
   const url = base();
   const out = { url, commit: execSync('git rev-parse --short HEAD', { cwd: REPO }).toString().trim() };

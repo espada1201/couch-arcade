@@ -12,17 +12,13 @@ export function loadJson<T>(key: string): T | null {
 export function saveJson(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage unavailable.
-  }
+  } catch {}
 }
 
 export function forget(key: string): void {
   try {
     localStorage.removeItem(key);
-  } catch {
-    // Nothing saved to clear.
-  }
+  } catch {}
 }
 
 /** A random id kept under `key` across reloads (for this page only if storage is blocked). */
@@ -30,14 +26,10 @@ export function stableId(key: string, len: number): string {
   try {
     const saved = localStorage.getItem(key);
     if (saved) return saved;
-  } catch {
-    // Storage blocked: make one up below.
-  }
+  } catch {}
   const id = randomId(len);
   try {
     localStorage.setItem(key, id);
-  } catch {
-    // As above.
-  }
+  } catch {}
   return id;
 }

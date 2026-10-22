@@ -111,7 +111,6 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
 
   const phones = () => plural(session.online.length, 'phone');
 
-  // ---- Text cards ----
   const cardsInput = h('textarea.follow-cards', {
     id: 'follow-cards',
     rows: 6,
@@ -155,7 +154,6 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     h('p.note', {}, 'Arrow keys or a presenter clicker step through the cards while they are showing.'),
   );
 
-  // ---- Screen and camera ----
   const mediaBox = h(
     'div.follow-source',
     { hidden: true },
@@ -165,7 +163,6 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     }),
   );
 
-  // ---- Captions ----
   const captionsBox = h(
     'div.follow-source',
     { hidden: true },
