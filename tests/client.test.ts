@@ -75,6 +75,22 @@ describe('phone client', () => {
     expect(client.status).toBe('live');
   });
 
+  it('sends a quick run of file acks as the newest, at most one per 40 ms', async () => {
+    const sent: { t: string; next?: number }[] = [];
+    const transport: Transport = {
+      name: 'test',
+      host: async () => {
+        throw new Error('unused');
+      },
+      join: async () => new BasicLink((m) => sent.push(m as { t: string })),
+    };
+    const client = new PhoneClient(transport, 'ABCD');
+    await client.connect();
+    for (let i = 1; i <= 10; i++) client.have({ t: 'have', id: 'song', next: i, got: i });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sent.filter((m) => m.t === 'have').map((m) => m.next)).toEqual([1, 10]);
+  });
+
   it('a seated phone keeps reconnecting through a long relay restart and gets its seat back', async () => {
     const host = silentHost();
     const client = new PhoneClient(host.transport, 'ABCD');

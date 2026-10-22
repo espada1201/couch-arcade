@@ -9,6 +9,7 @@
 - `relay-qr` the QR code and join link use the LAN address.
 - `relay-join` a phone opening the join link talks through `ws://<lan>/relay?room=…&role=phone`.
 - `relay-guard` a second host without the room key gets 409; a phone for an unhosted room gets 404.
+- `relay-untrusted` a phone socket that sends over 2 KB in one message (1009) or floods past 30 messages a second (1008) is closed; the real phones are untouched.
 - `relay-host-left` closing the host page drops its phones into reconnecting.
 - `relay-host-moved` opening the same room in a second host tab moves every phone to it; the first tab says "This room moved to another tab".
 
@@ -21,7 +22,7 @@
 Preconditions: Doctor healthy (it already proves the 404 refusal).
 
 - **Run.** `drive.mjs lan`; `drive.mjs host-moved` for a second host tab.
-- **Proof.** Readings `relay.json lanUrl`, `join url` (starts with lanUrl), `phone websockets` (relay URL with frames received), `second host, wrong key = 409`, `phone, unknown room = 404`; `host-lan.png`, `phone-lan.png`, `phone-host-left.png`. host-moved: `phones in the new tab after ms`, `old tab says`, every phone shows the new tab's card.
+- **Proof.** Readings `relay.json lanUrl`, `join url` (starts with lanUrl), `phone websockets` (relay URL with frames received), `second host, wrong key = 409`, `phone, unknown room = 404`, `phone sends 3 KB: close code` (1009), `phone sends 200 taps at once: close code` (1008); `host-lan.png`, `phone-lan.png`, `phone-host-left.png`. host-moved: `phones in the new tab after ms`, `old tab says`, every phone shows the new tab's card.
 
 ## Gotchas
 

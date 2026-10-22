@@ -395,6 +395,19 @@ const CHECKS = {
     run.note('phone, unknown room', await status('relay?room=ZZZZ9&role=phone'));
     expect(run.readings['second host, wrong key']).toBe(409);
     expect(run.readings['phone, unknown room']).toBe(404);
+    // Phones are untrusted: an oversized message or a flood closes that socket, and the real phone is untouched.
+    const closeCode = (send) =>
+      new Promise((res) => {
+        const ws = new WebSocket(`${base().replace('http', 'ws')}relay?room=${room.code}&role=phone`);
+        ws.on('open', () => send(ws));
+        ws.on('close', (code) => res(code));
+      });
+    run.note('phone sends 3 KB: close code', await closeCode((ws) => ws.send(JSON.stringify({ t: 'tap', pad: 'x'.repeat(3000) }))));
+    run.note('phone sends 200 taps at once: close code', await closeCode((ws) => { for (let i = 0; i < 200; i++) ws.send('{"t":"tap"}'); }));
+    expect(run.readings['phone sends 3 KB: close code']).toBe(1009);
+    expect(run.readings['phone sends 200 taps at once: close code']).toBe(1008);
+    await expect(host.locator('.count')).toHaveText(/^1 phone /);
+    await expect(phone.locator('.status')).toContainText('Seat');
     // Host leaves: the relay drops the room and the phone says it is reconnecting.
     run.allowErrors = /WebSocket|relay/;
     await host.close();

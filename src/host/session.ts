@@ -43,6 +43,10 @@ interface Conn {
 const SILENT_MS = 15_000;
 /** A link that hasn't said hello by now never will. */
 const HELLO_MS = 10_000;
+/** Links open at once without a seat yet; more than this are refused. */
+const MAX_UNSEATED = 32;
+
+const clampInt = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(v)));
 
 /**
  * 'source': raw positions are camera or seat-grid coordinates, stretched to fill the room.
@@ -304,6 +308,8 @@ export class HostSession {
   }
 
   private accept(link: Link): void {
+    // Links say hello at once, so a pile of unseated ones is someone opening sockets to fill the room.
+    if ([...this.conns].filter((c) => !c.seat).length >= MAX_UNSEATED) return link.close();
     const conn: Conn = { link, heard: this.now(), seat: null };
     this.conns.add(conn);
     let me: Seat | null = null;
@@ -339,10 +345,7 @@ export class HostSession {
         this.heard(me.seat, m);
       } else if (m.t === 'ack') this.acked(me, m.n);
       else if (m.t === 'vote' || m.t === 'have') this.heard(me.seat, m);
-      else {
-        this.gridEntries.set(me.seat, { row: m.row, seat: m.seat });
-        this.changed();
-      }
+      else this.enterSeat(me, m.row, m.seat);
     });
     link.onClose(() => {
       this.conns.delete(conn);
@@ -351,6 +354,17 @@ export class HostSession {
         this.changed();
       }
     });
+  }
+
+  /** A phone typed its row and seat: kept only while the seat grid is asking, inside its size. */
+  private enterSeat(me: Seat, row: number, seat: number): void {
+    const grid = this.programFor(me.seat);
+    if (grid.kind !== 'grid') return;
+    const entry = { row: clampInt(row, 1, grid.rows), seat: clampInt(seat, 1, grid.seats) };
+    const was = this.gridEntries.get(me.seat);
+    if (was?.row === entry.row && was.seat === entry.seat) return;
+    this.gridEntries.set(me.seat, entry);
+    this.changed();
   }
 
   private heard(seat: number, m: PhoneInput): void {

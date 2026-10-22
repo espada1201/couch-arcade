@@ -191,6 +191,42 @@ describe('links that go quiet', () => {
   });
 });
 
+describe('untrusted phones', () => {
+  it('takes a typed seat only while the seat grid asks, inside its size, and ignores repeats', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    a.say({ t: 'hello', token: 'aaa' });
+    a.say({ t: 'seat', row: 2, seat: 3 });
+    expect(session.gridEntries.size).toBe(0);
+    session.setProgram({ kind: 'grid', rows: 4, seats: 10 });
+    let changes = 0;
+    session.subscribe(() => changes++);
+    a.say({ t: 'seat', row: 99, seat: -5.4 });
+    expect(session.gridEntries.get(0)).toEqual({ row: 4, seat: 1 });
+    a.say({ t: 'seat', row: 99, seat: -5.4 });
+    a.say({ t: 'seat', row: 4, seat: 1 });
+    expect(changes).toBe(1);
+    a.say({ t: 'seat', row: 2.4, seat: 7 });
+    expect(session.gridEntries.get(0)).toEqual({ row: 2, seat: 7 });
+  });
+
+  it('refuses new links while 32 are open without a seat', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const idle = Array.from({ length: 32 }, () => phone());
+    const extra = phone();
+    extra.say({ t: 'hello', token: 'xxx' });
+    expect(extra.inbox).toEqual([]);
+    // One of them takes a seat, which frees a place.
+    idle[0].say({ t: 'hello', token: 'aaa' });
+    const next = phone();
+    next.say({ t: 'hello', token: 'bbb' });
+    expect(next.inbox[0]).toMatchObject({ t: 'welcome' });
+    expect(session.online).toHaveLength(2);
+  });
+});
+
 describe('room server outage', () => {
   it('tells listeners while the room server is down, and when it is back', async () => {
     const { session, server } = harness();

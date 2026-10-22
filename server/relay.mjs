@@ -76,7 +76,11 @@ const KEY = /^[A-Za-z0-9_-]{8,64}$/;
  */
 const rooms = new Map();
 let nextId = 1;
-const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+// Hosts send frames and song chunks of up to 60 KB; phones send only small control messages.
+const servers = { host: new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }), phone: new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 }) };
+/** A phone may send this many messages a second on average, in bursts of up to BURST. */
+const PHONE_RATE = 30;
+const PHONE_BURST = 60;
 
 // Refusing before the upgrade makes the browser's WebSocket fail to open, so join() rejects instead of retrying.
 function refuse(socket, status) {
@@ -94,7 +98,7 @@ server.on('upgrade', (req, socket, head) => {
   const key = q.get('key') ?? '';
   const status = admit(room, role, key);
   if (status) return refuse(socket, status);
-  wss.handleUpgrade(req, socket, head, (ws) => {
+  servers[role].handleUpgrade(req, socket, head, (ws) => {
     ws.on('error', () => ws.terminate());
     ws.on('pong', () => (ws.missed = false));
     // Re-check: the room may have changed while the handshake completed.
@@ -193,7 +197,13 @@ function attachPhone(ws, r) {
   const id = String(nextId++);
   r.phones.set(id, { ws, written: 0, since: 0 });
   r.host.send(JSON.stringify({ t: 'open', id }));
+  let tokens = PHONE_BURST;
+  let at = Date.now();
   ws.on('message', (raw) => {
+    const now = Date.now();
+    tokens = Math.min(PHONE_BURST, tokens + ((now - at) * PHONE_RATE) / 1000) - 1;
+    at = now;
+    if (tokens < 0) return ws.close(1008, 'too many messages');
     const data = parse(raw);
     if (data === undefined || r.phones.get(id)?.ws !== ws) return;
     r.host.send(JSON.stringify({ t: 'msg', id, data }));
@@ -211,7 +221,7 @@ function attachPhone(ws, r) {
 // (or the phones, if it was the host) know.
 const HEARTBEAT_MS = Number(process.env.RELAY_HEARTBEAT_MS) || 15_000;
 setInterval(() => {
-  for (const ws of wss.clients) {
+  for (const ws of [...servers.host.clients, ...servers.phone.clients]) {
     if (ws.missed) ws.terminate();
     else {
       ws.missed = true;

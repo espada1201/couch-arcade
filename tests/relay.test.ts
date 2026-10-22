@@ -105,3 +105,39 @@ describe('relay heartbeat', () => {
     }
   });
 });
+
+describe('phones are untrusted', () => {
+  const room = async (code: string) => {
+    const host = new WebSocket(`ws://127.0.0.1:${port}/relay?room=${code}&role=host&key=floodkey123`);
+    const got: string[] = [];
+    host.onmessage = (e) => got.push(String(e.data));
+    await new Promise((r) => (host.onopen = r));
+    const phone = new WebSocket(`ws://127.0.0.1:${port}/relay?room=${code}&role=phone`);
+    await new Promise((r) => (phone.onopen = r));
+    const closed = new Promise<number>((r) => (phone.onclose = (e) => r(e.code)));
+    return { host, phone, got, closed };
+  };
+
+  it('closes a phone that sends a message over 2 KB', async () => {
+    const { host, phone, closed } = await room('BIGMSG');
+    phone.send(JSON.stringify({ t: 'tap', pad: 'x'.repeat(3000) }));
+    expect(await closed).toBe(1009);
+    host.close();
+  });
+
+  it('closes a phone that floods, and keeps one that sends at a normal pace', async () => {
+    const a = await room('FLOOD');
+    for (let i = 0; i < 200; i++) a.phone.send('{"t":"tap"}');
+    expect(await a.closed).toBe(1008);
+    a.host.close();
+    const b = await room('CALM');
+    for (let i = 0; i < 60; i++) {
+      b.phone.send('{"t":"ping","c0":1}');
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(b.phone.readyState).toBe(WebSocket.OPEN);
+    expect(b.got.filter((m) => m.includes('"ping"'))).toHaveLength(60);
+    b.phone.close();
+    b.host.close();
+  });
+});

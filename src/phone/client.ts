@@ -10,11 +10,14 @@ import type { ChunkMsg } from '../net/chunks';
 import { backoff, type Link, type Transport } from '../net/transport';
 import { stableId } from '../storage';
 import { errorText } from '../ui/dom';
+import { throttle } from '../host/throttle';
 
 export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
 
 /** A host that hasn't sent anything (a pong, a chunk, a program) for this long is gone, even if the link never said so. */
 const SILENT_MS = 6000;
+/** Shortest gap between two file acks (25 a second, under the relay's 30 messages a second). */
+const HAVE_MS = 40;
 
 export class PhoneClient {
   seat = -1;
@@ -38,6 +41,12 @@ export class PhoneClient {
   private pingTimer = 0;
   private retries = 0;
   private lastHeard = 0;
+  private pendingHave: Extract<PhoneMsg, { t: 'have' }> | null = null;
+  private readonly sendHave = throttle(() => {
+    const m = this.pendingHave;
+    this.pendingHave = null;
+    if (m) this.send(m);
+  }, HAVE_MS);
 
   constructor(
     private readonly transport: Transport,
@@ -89,9 +98,14 @@ export class PhoneClient {
     this.send({ t: 'seat', row, seat });
   }
 
-  /** Tell the host how much of a file this phone holds. */
+  /**
+   * Tell the host how much of a file this phone holds. Each ack sums up all before it, so a quick
+   * run of them goes as the newest, at most every HAVE_MS: on fast Wi-Fi chunks land faster than
+   * the relay lets a phone send.
+   */
   have(m: Extract<PhoneMsg, { t: 'have' }>): void {
-    this.send(m);
+    this.pendingHave = m;
+    this.sendHave();
   }
 
   private send(m: PhoneMsg): void {
