@@ -435,14 +435,14 @@ const CHECKS = {
     expect(run.readings['phone sends 200 taps at once: close code']).toBe(1008);
     await expect(host.locator('.count')).toHaveText(/^1 phone /);
     await expect(phone.locator('.status')).toContainText('Seat');
-    // One guest device can't crowd out the rest: the lan phone above holds one of its four sockets.
+    // One guest device can't crowd out the rest: the lan phone above holds one of its sixteen sockets.
     const lan = `${info.lanUrl.replace('http', 'ws')}relay?room=${room.code}&role=phone`;
     const crowd = [];
-    for (let i = 0; i < 3; i++) crowd.push(new WebSocket(lan));
+    for (let i = 0; i < 15; i++) crowd.push(new WebSocket(lan));
     await Promise.all(crowd.map((ws) => new Promise((res) => ws.on('open', res))));
-    run.note('fifth phone socket from one device', await wsStatus(lan));
+    run.note('seventeenth phone socket from one device', await wsStatus(lan));
     for (const ws of crowd) ws.close();
-    expect(run.readings['fifth phone socket from one device']).toBe(429);
+    expect(run.readings['seventeenth phone socket from one device']).toBe(429);
     // Host leaves: the relay drops the room and the phone says it is reconnecting.
     run.allowErrors = /WebSocket|relay/;
     await host.close();

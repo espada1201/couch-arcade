@@ -206,22 +206,38 @@ describe('one guest cannot crowd out the rest', () => {
       ws.onopen = () => resolve('open');
       ws.onerror = () => resolve(0);
     });
-  const status = async (host: string, q: string) => (await fetch(`http://${host}:${port}/relay?${q}`)).status;
 
-  it.skipIf(!lanAddress)('lets one device open at most 4 phone sockets and host at most 4 rooms; the computer itself is not capped', async () => {
-    const host = new WebSocket(`ws://127.0.0.1:${port}/relay?room=CROWD&role=host&key=crowdkey123`);
+  /** Fills the room CROWD from this machine's LAN address until the relay says no, then checks the computer itself is not capped. */
+  const crowd = async (tPort: number, cap: number) => {
+    const url = (q: string, h = lanAddress) => `ws://${h}:${tPort}/relay?${q}`;
+    const probe = async (q: string) => (await fetch(`http://${lanAddress}:${tPort}/relay?${q}`)).status;
+    const host = new WebSocket(url('room=CROWD&role=host&key=crowdkey123', '127.0.0.1'));
     await new Promise((r) => (host.onopen = r));
-    const phones = await Promise.all(Array.from({ length: 4 }, () => open(`ws://${lanAddress}:${port}/relay?room=CROWD&role=phone`)));
-    expect(phones).toEqual(Array(4).fill('open'));
-    expect(await status(lanAddress!, 'room=CROWD&role=phone')).toBe(429);
-    expect(await open(`ws://${lanAddress}:${port}/relay?room=CROWD&role=phone`)).toBe(0);
+    const phones = await Promise.all(Array.from({ length: cap }, () => open(url('room=CROWD&role=phone'))));
+    expect(phones).toEqual(Array(cap).fill('open'));
+    expect(await probe('room=CROWD&role=phone')).toBe(429);
+    expect(await open(url('room=CROWD&role=phone'))).toBe(0);
     // Tabs on the host computer (and anything behind a proxy on it) are not one guest.
-    const local = await Promise.all(Array.from({ length: 6 }, () => open(`ws://127.0.0.1:${port}/relay?room=CROWD&role=phone`)));
-    expect(local).toEqual(Array(6).fill('open'));
-    const rooms = await Promise.all(Array.from({ length: 4 }, (_, i) => open(`ws://${lanAddress}:${port}/relay?room=CROWD${i}&role=host&key=crowdkey12${i}`)));
-    expect(rooms).toEqual(Array(4).fill('open'));
-    expect(await status(lanAddress!, 'room=CROWD9&role=host&key=crowdkey129')).toBe(429);
+    const local = await Promise.all(Array.from({ length: cap + 2 }, () => open(url('room=CROWD&role=phone', '127.0.0.1'))));
+    expect(local).toEqual(Array(cap + 2).fill('open'));
+    const rooms = await Promise.all(Array.from({ length: cap }, (_, i) => open(url(`room=CROWD${i}&role=host&key=crowdkey12${i}`))));
+    expect(rooms).toEqual(Array(cap).fill('open'));
+    expect(await probe('room=CROWDX&role=host&key=crowdkeyxxx')).toBe(429);
     host.close();
+  };
+
+  it.skipIf(!lanAddress)('lets one device open 16 phone sockets and host 16 rooms by default; the computer itself is not capped', async () => {
+    await crowd(port, 16);
+  });
+
+  it.skipIf(!lanAddress)('takes the cap from RELAY_PER_DEVICE', async () => {
+    const tPort = await freePort();
+    const relay = await startRelay(tPort, { RELAY_PER_DEVICE: '3' });
+    try {
+      await crowd(tPort, 3);
+    } finally {
+      relay.kill();
+    }
   });
 });
 

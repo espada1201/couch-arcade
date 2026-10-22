@@ -11,7 +11,7 @@
 - `relay-guard` a second host without the room key gets 409; a phone for an unhosted room gets 404.
 - `relay-room-held` when the host tab closes, its room code is held for it for ten minutes (another host gets 409) and a reopened host tab gets its room and phones back, even when the relay is full of other rooms; if the relay restarts and another host takes the code first, the host says "Another host took this room code…" instead of reconnecting forever.
 - `relay-untrusted` a phone socket that sends over 2 KB in one message (1009) or floods past 50 messages a second, twice an honest phone's own budget of 25 (1008) is closed; the real phones are untouched.
-- `relay-crowd` one device on the Wi-Fi may hold 4 phone sockets and host 4 rooms (the fifth gets 429); the computer running the relay is not capped.
+- `relay-crowd` one device on the Wi-Fi may hold 16 phone sockets and host 16 rooms (the seventeenth gets 429; `RELAY_PER_DEVICE` changes the 16, and an IPv6 device counts by its /64); the computer running the relay is not capped.
 - `relay-squat` 40 sockets that ping but never say hello: a real phone still gets a seat at once, and the host closes every squatter about 10 s after it opened (the oldest first when more keep coming).
 - `relay-host-left` closing the host page drops its phones into reconnecting.
 - `relay-host-moved` opening the same room in a second host tab moves every phone to it; the first tab says "This room moved to another tab".

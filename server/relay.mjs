@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { deviceLedger } from './devices.mjs';
 import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../src/net/limits.js';
 
 const PORT = Number(process.env.PORT) || 4321;
@@ -77,25 +78,8 @@ const server = createServer((req, res) => {
 
 const MAX_ROOMS = 64;
 const MAX_PHONES = 200;
-/**
- * Phone sockets and hosted rooms one device on the Wi-Fi may hold, so one guest can't fill the
- * relay. The computer running it is not capped: its own tabs, or a proxy in front of the relay.
- */
-const PER_DEVICE = 4;
-const LOOPBACK = /^(::ffff:)?127\.|^::1$/;
-/** address -> { phones, hosts } open from it now. */
-const devices = new Map();
-const held = (addr) => devices.get(addr) ?? { phones: 0, hosts: 0 };
-/** Count a socket from `addr` while it stays open. */
-function track(ws, addr, role) {
-  const k = `${role}s`;
-  devices.set(addr, { ...held(addr), [k]: held(addr)[k] + 1 });
-  ws.on('close', () => {
-    const d = { ...held(addr), [k]: held(addr)[k] - 1 };
-    if (d.phones || d.hosts) devices.set(addr, d);
-    else devices.delete(addr);
-  });
-}
+/** Per device on the Wi-Fi. 16 because one address can be many phones: double NAT, an extender, Docker or WSL, a family's tabs. */
+const devices = deviceLedger(Number(process.env.RELAY_PER_DEVICE) || 16);
 const ROOM = /^[A-Z0-9]{3,12}$/;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -135,7 +119,7 @@ server.on('upgrade', (req, socket, head) => {
     ws.on('pong', () => (ws.answered = Date.now()));
     // Re-check: the room may have changed while the handshake completed.
     if (admit(room, role, key, addr)) return ws.close(1013, 'refused');
-    if (!LOOPBACK.test(addr)) track(ws, addr, role);
+    devices.track(ws, addr, role);
     if (role === 'host') attachHost(ws, room, key);
     else attachPhone(ws, rooms.get(room));
   });
@@ -145,7 +129,7 @@ server.on('upgrade', (req, socket, head) => {
 function admit(room, role, key, addr) {
   if (!ROOM.test(room)) return '400 Bad Request';
   const r = rooms.get(room);
-  const crowded = !LOOPBACK.test(addr) && held(addr)[`${role}s`] >= PER_DEVICE;
+  const crowded = devices.crowded(addr, role);
   if (role === 'host') {
     if (!KEY.test(key)) return '400 Bad Request';
     if (r) return r.key === key ? null : '409 Conflict';
