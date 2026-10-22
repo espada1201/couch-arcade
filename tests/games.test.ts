@@ -88,6 +88,18 @@ describe('hot potato', () => {
     expect(s.out).not.toContain(s.winner);
   });
 
+  it('the fuse gets shorter on a burnout throw too, down to the minimum', () => {
+    let s = startPotato(ROOM, 0, rng(9))!;
+    const fuses = [s.fuse];
+    while (s.phase === 'playing') {
+      s = potatoTick(s, ROOM, s.deadline + 1);
+      if (s.phase === 'playing') fuses.push(s.fuse);
+    }
+    expect(fuses[1]).toBeLessThan(FIRST_FUSE);
+    expect(Math.min(...fuses)).toBeGreaterThanOrEqual(MIN_FUSE);
+    expect(fuses.every((f, i) => i === 0 || f < fuses[i - 1] || f === MIN_FUSE)).toBe(true);
+  });
+
   it('the fuse never drops below the minimum', () => {
     const r = rng(2);
     let s = startPotato(ROOM, 0, r)!;

@@ -27,6 +27,9 @@ export function flightTime(a: Point, b: Point, aspect: number): number {
   return Math.round(250 + 700 * Math.min(1.5, distance(a, b, aspect)));
 }
 
+/** Every throw, caught or burnt, gets a shorter fuse. */
+const shorter = (fuse: number) => Math.max(MIN_FUSE, Math.round(fuse * FUSE_DECAY));
+
 function alive(s: { out: number[] }, room: Room): number[] {
   return [...room.positions.keys()].filter((seat) => !s.out.includes(seat));
 }
@@ -69,7 +72,7 @@ export function potatoTap(s: PotatoState, room: Room, seat: number, now: number,
   if (options.length === 0) options = nearest(seat, room, NEIGHBOURS, exclude);
   if (options.length === 0) return s;
   const next = options[Math.floor(rand() * options.length)];
-  return { ...throwTo(s, room, next, now, Math.max(MIN_FUSE, Math.round(s.fuse * FUSE_DECAY))), passes: s.passes + 1 };
+  return { ...throwTo(s, room, next, now, shorter(s.fuse)), passes: s.passes + 1 };
 }
 
 export function potatoTick(s: PotatoState, room: Room, now: number): PotatoState {
@@ -78,7 +81,7 @@ export function potatoTick(s: PotatoState, room: Room, now: number): PotatoState
   const left = alive(burnt, room);
   if (left.length <= 1) return { ...burnt, phase: 'over', winner: left[0] ?? null };
   const next = nearest(s.holder, room, 1, new Set(burnt.out))[0] ?? left[0];
-  return throwTo(burnt, room, next, now, Math.max(MIN_FUSE, s.fuse));
+  return throwTo(burnt, room, next, now, shorter(s.fuse));
 }
 
 /** Where the ball is at time t (it sits on the holder once it lands). */
