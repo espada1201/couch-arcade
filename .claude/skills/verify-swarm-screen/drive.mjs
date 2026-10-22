@@ -10,11 +10,11 @@ import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 import WebSocket from 'ws';
-import { SIMS, bg, png, scan } from '../../../e2e/room.ts';
-import { HALVES_PER_CODE, encodeHalves } from '../../../src/core/blinkcode.ts';
+import { CHROME_PATH, QUADRANTS_PNG, QUADRANT_COLOURS_BY_SIM, SIMS, bg, pictureSpread, scan, wav } from '../../../e2e/room.ts';
+import { DEFAULT_HALF_MS, HALVES_PER_CODE, encodeHalves } from '../../../src/core/blinkcode.ts';
+import { POLL_COLORS } from '../../../src/core/poll.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const PORTS = [4550, 4560];
 
 // ---------- options ----------
@@ -49,8 +49,8 @@ async function freePort() {
 let server = null; // { pid, port, url }
 
 /** `npm start` on a free port; ready = startup line printed AND / and /relay.json answer. */
-async function launch() {
-  const port = opt.port || (await freePort());
+async function launch(fixed = 0) {
+  const port = fixed || opt.port || (await freePort());
   const logFile = resolve(opt.out, 'server.log');
   writeFileSync(logFile, '');
   const child = spawn('npm', ['start'], { cwd: REPO, env: { ...process.env, PORT: String(port) }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -123,7 +123,7 @@ class Run {
     page.on('pageerror', (e) => this.errors.push(`${page.url()}: ${e.message}`));
   }
   async browser(args = [], init) {
-    const b = await chromium.launch({ headless: !opt.headed, executablePath: existsSync(CHROME) ? CHROME : undefined, args: [...BASE_ARGS, ...args] });
+    const b = await chromium.launch({ headless: !opt.headed, executablePath: CHROME_PATH, args: [...BASE_ARGS, ...args] });
     this.browsers.push(b);
     const context = await b.newContext({ baseURL: base(), permissions: ['camera', 'microphone'], acceptDownloads: true });
     if (init) await context.addInitScript(init);
@@ -136,6 +136,14 @@ class Run {
 
 const q = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v !== null && v !== undefined)).toString();
 const seatOf = async (p) => Number((await p.locator('.status').textContent()).match(/Seat (\d+)/)[1]) - 1;
+/** How the relay answers a WebSocket to `url`: the refusal's HTTP status, 'open', or the error. */
+const wsStatus = (url) =>
+  new Promise((res) => {
+    const ws = new WebSocket(url);
+    ws.on('unexpected-response', (_req, r) => res(r.statusCode));
+    ws.on('open', () => (ws.close(), res('open')));
+    ws.on('error', (e) => res(`error ${e.message}`));
+  });
 
 /**
  * A host tab and one phone tab per `sims` entry, all joined. `camera: 'synthetic'` films the
@@ -179,25 +187,6 @@ const AUDIO_TAP = () => {
   };
 };
 
-function wav(seconds, rate = 22050) {
-  const n = Math.round(seconds * rate);
-  const b = Buffer.alloc(44 + n * 2);
-  b.write('RIFF', 0);
-  b.writeUInt32LE(36 + n * 2, 4);
-  b.write('WAVEfmt ', 8);
-  b.writeUInt32LE(16, 16);
-  b.writeUInt16LE(1, 20);
-  b.writeUInt16LE(1, 22);
-  b.writeUInt32LE(rate, 24);
-  b.writeUInt32LE(rate * 2, 28);
-  b.writeUInt16LE(2, 32);
-  b.writeUInt16LE(16, 34);
-  b.write('data', 36);
-  b.writeUInt32LE(n * 2, 40);
-  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 3000), 44 + i * 2);
-  return b;
-}
-
 /** Start logging every change of a phone's colour and label, in wall-clock ms. */
 const watchScreens = (phones) =>
   Promise.all(
@@ -235,7 +224,7 @@ async function colours(p, ms = 1500, step = 150) {
 }
 
 // ---------- real-camera room video (Chrome's fake camera plays it) ----------
-const CAM = { W: 480, H: 360, FPS: 25, HALF_MS: 120, HEIGHT: 1.9, TILT: (16 * Math.PI) / 180, F: 360 };
+const CAM = { W: 480, H: 360, FPS: 25, HALF_MS: DEFAULT_HALF_MS, HEIGHT: 1.9, TILT: (16 * Math.PI) / 180, F: 360 };
 const CAM_PHONES = Array.from({ length: 9 }, (_, id) => ({ id, x: -1.5 + (id % 3) * 1.5, z: 3 + Math.floor(id / 3) * 2.8 }));
 function project(x, y, z) {
   const dy = y - CAM.HEIGHT;
@@ -343,13 +332,7 @@ const CHECKS = {
     await run.shot(host, 'host-lan');
     await run.shot(phone, 'phone-lan');
     // The relay refuses a second host without the room's key, and phones for a room nobody hosts.
-    const status = (path) =>
-      new Promise((res) => {
-        const ws = new WebSocket(`${base().replace('http', 'ws')}${path}`);
-        ws.on('unexpected-response', (_req, r) => res(r.statusCode));
-        ws.on('open', () => (ws.close(), res('open')));
-        ws.on('error', () => res('error'));
-      });
+    const status = (path) => wsStatus(`${base().replace('http', 'ws')}${path}`);
     run.note('second host, wrong key', await status(`relay?room=${room.code}&role=host&key=wrongkey123`));
     run.note('phone, unknown room', await status('relay?room=ZZZZ9&role=phone'));
     expect(run.readings['second host, wrong key']).toBe(409);
@@ -670,8 +653,8 @@ const CHECKS = {
     await host.getByRole('button', { name: 'Close voting' }).click();
     await expect(phones[2].getByRole('button', { name: /Tacos/ })).toBeDisabled();
     await host.getByRole('button', { name: 'Reveal' }).click();
-    await expect.poll(() => bg(phones[0])).toEqual([255, 176, 0]);
-    await expect.poll(() => bg(phones[2])).toEqual([86, 180, 233]);
+    await expect.poll(() => bg(phones[0])).toEqual(POLL_COLORS[0]);
+    await expect.poll(() => bg(phones[2])).toEqual(POLL_COLORS[1]);
     await expect(phones[2].locator('.you-voted')).toHaveText('You voted A');
     run.note('reveal labels', await Promise.all(phones.map((p) => p.locator('.label').textContent())));
     await run.shot(host, 'host-reveal');
@@ -765,7 +748,7 @@ const CHECKS = {
     await host.locator('#stunt-file').setInputFiles({
       name: 'quadrants.png',
       mimeType: 'image/png',
-      buffer: png(64, 64, (x, y) => (y < 32 ? (x < 32 ? [255, 0, 0] : [0, 255, 0]) : x < 32 ? [0, 0, 255] : [255, 255, 0])),
+      buffer: QUADRANTS_PNG,
     });
     await watchScreens(phones);
     await host.getByRole('button', { name: 'Flip the cards' }).click();
@@ -775,7 +758,7 @@ const CHECKS = {
     if (flips.includes(null) || Math.max(...flips) > 150) run.issue(`phones did not flip together: ${flips.join(', ')}`);
     const got = await Promise.all(phones.map((p) => bg(p)));
     run.note('phone colours', got.map((c) => c.join(',')));
-    expect(got).toEqual([[255, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 255, 0]]);
+    expect(got).toEqual(QUADRANT_COLOURS_BY_SIM);
     await run.shot(host, 'host-picture');
     await host.locator('#stunt-words').fill('GO');
     await host.getByRole('button', { name: 'Use words' }).click();
@@ -1044,9 +1027,7 @@ const CHECKS = {
       await run.shot(host, 'host-relay-down');
       if (!warned) run.issue('while the relay is down the host shows no warning');
       await sleep(1500);
-      opt.port = port;
-      await launch();
-      opt.port = 0;
+      await launch(port);
       const t = Date.now();
       let back = false;
       try {
@@ -1083,20 +1064,7 @@ async function followPicture(run, source, ok, minSpread) {
     const img = p.locator('.follow-picture');
     await expect.poll(() => img.evaluate((i) => i.naturalWidth)).toBeGreaterThan(100);
     const src = await img.getAttribute('src');
-    const spread = await img.evaluate((i) => {
-      const c = Object.assign(document.createElement('canvas'), { width: 64, height: 36 });
-      const g = c.getContext('2d');
-      g.drawImage(i, 0, 0, 64, 36);
-      const d = g.getImageData(0, 0, 64, 36).data;
-      let lo = 255;
-      let hi = 0;
-      for (let k = 0; k < d.length; k += 4) {
-        const y = (d[k] + d[k + 1] + d[k + 2]) / 3;
-        lo = Math.min(lo, y);
-        hi = Math.max(hi, y);
-      }
-      return hi - lo;
-    });
+    const spread = await pictureSpread(img);
     run.note(`phone ${phones.indexOf(p)} frame`, { type: src.slice(5, 15), kb: Math.round(src.length / 1024), spread });
     expect(src.startsWith('data:image/jpeg;base64,')).toBe(true);
     expect(src.length).toBeLessThan(60 * 1024);
@@ -1127,12 +1095,8 @@ async function doctor() {
   out.page = page.ok ? `${page.status} ${(await page.text()).match(/<title>(.*?)<\/title>/)?.[1]}` : `DOWN ${page.status}`;
   const relay = await fetch(`${url}relay.json`).then((r) => r.json()).catch(() => null);
   out.relayJson = relay?.lanUrl ?? 'missing (not npm start?)';
-  out.relaySocket = await new Promise((res) => {
-    const ws = new WebSocket(`${url.replace('http', 'ws')}relay?room=ZZZZ9&role=phone`);
-    ws.on('unexpected-response', (_q, r) => res(r.statusCode === 404 ? '404 for an unhosted room (relay answering)' : `unexpected ${r.statusCode}`));
-    ws.on('open', () => (ws.close(), res('opened?!')));
-    ws.on('error', (e) => res(`error ${e.message}`));
-  });
+  const socket = await wsStatus(`${url.replace('http', 'ws')}relay?room=ZZZZ9&role=phone`);
+  out.relaySocket = socket === 404 ? '404 for an unhosted room (relay answering)' : typeof socket === 'number' ? `unexpected ${socket}` : socket === 'open' ? 'opened?!' : socket;
   const dist = resolve(REPO, 'dist/index.html');
   out.build = existsSync(dist) ? `dist built ${statSync(dist).mtime.toISOString()}` : 'dist missing';
   out.healthy = page.ok && !!relay && out.relaySocket.startsWith('404');

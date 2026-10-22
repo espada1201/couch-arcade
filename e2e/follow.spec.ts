@@ -1,41 +1,19 @@
-import { existsSync } from 'node:fs';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-
-const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+import { CHROME_PATH, FAKE_MEDIA, joinPhone, openHost, pictureSpread } from './room';
 
 test.use({
   launchOptions: {
-    executablePath: existsSync(CHROME) ? CHROME : undefined,
+    executablePath: CHROME_PATH,
     // A fake camera, and screen capture that picks the whole screen without asking.
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--auto-select-desktop-capture-source=Entire screen', '--autoplay-policy=no-user-gesture-required'],
+    args: [...FAKE_MEDIA, '--auto-select-desktop-capture-source=Entire screen'],
   },
   permissions: ['camera'],
 });
 
 // Follow mode: every phone shows the whole picture. Phones need not be placed for it.
 
-function watchErrors(page: Page, errors: string[]) {
-  page.on('console', (m) => m.type() === 'error' && errors.push(`${page.url()}: ${m.text()}`));
-  page.on('pageerror', (e) => errors.push(`${page.url()}: ${e.message}`));
-}
-
-async function joinPhone(context: BrowserContext, code: string, i: number, errors: string[]): Promise<Page> {
-  const p = await context.newPage();
-  watchErrors(p, errors);
-  await p.setViewportSize({ width: 390, height: 844 });
-  // A distinct sim spot gives each tab its own identity (and seat).
-  await p.goto(`./?room=${code}&transport=local&sim=0.${i + 1},0.5`);
-  await p.getByRole('button', { name: 'Join the swarm' }).click();
-  await expect(p.locator('.status')).toContainText('Seat');
-  return p;
-}
-
 async function openRoom(context: BrowserContext, errors: string[], phones: number) {
-  const host = await context.newPage();
-  watchErrors(host, errors);
-  await host.setViewportSize({ width: 1440, height: 900 });
-  await host.goto('./?host=1&transport=local&fresh=1');
-  const code = (await host.locator('[data-room]').getAttribute('data-room'))!;
+  const { host, code } = await openHost(context, errors);
   const list: Page[] = [];
   for (let i = 0; i < phones; i++) list.push(await joinPhone(context, code, i, errors));
   await expect(host.locator('.count')).toContainText(`${phones} phones`);
@@ -46,26 +24,6 @@ async function openRoom(context: BrowserContext, errors: string[], phones: numbe
   await expect(host.getByRole('tab', { name: /Live screen/ })).toHaveAttribute('aria-selected', 'false');
   await expect(host.locator('.panel-intro')).toContainText('slides');
   return { host, phones: list, code };
-}
-
-/** Spread of grey levels in the phone's picture: 0 for a blank (flat) image. */
-async function pictureSpread(p: Page): Promise<number> {
-  return p.locator('.follow-picture').evaluate((img: HTMLImageElement) => {
-    const c = document.createElement('canvas');
-    c.width = 64;
-    c.height = 36;
-    const ctx = c.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    const d = ctx.getImageData(0, 0, c.width, c.height).data;
-    let lo = 255;
-    let hi = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const y = (d[i] + d[i + 1] + d[i + 2]) / 3;
-      lo = Math.min(lo, y);
-      hi = Math.max(hi, y);
-    }
-    return hi - lo;
-  });
 }
 
 test('text cards: every phone shows the card, Next and the arrow keys step, a late joiner catches up', async ({ context }) => {
@@ -122,7 +80,7 @@ test('camera: every phone shows the picture as a JPEG under the message limit', 
     const src = (await img.getAttribute('src'))!;
     expect(src.startsWith('data:image/jpeg;base64,')).toBe(true);
     expect(src.length).toBeLessThan(60 * 1024);
-    expect(await pictureSpread(p)).toBeGreaterThan(20);
+    expect(await pictureSpread(p.locator('.follow-picture'))).toBeGreaterThan(20);
     // Letterboxed, never cropped: the picture box is the whole screen.
     const box = (await img.boundingBox())!;
     expect(box.width).toBeCloseTo(390, -1);
@@ -140,7 +98,7 @@ test('share my screen: every phone shows the captured screen', async ({ context 
   await expect(host.getByText(/Showing your screen on 2 phones/)).toBeVisible({ timeout: 15_000 });
   for (const p of phones) {
     await expect.poll(() => p.locator('.follow-picture').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(100);
-    expect(await pictureSpread(p)).toBeGreaterThan(0);
+    expect(await pictureSpread(p.locator('.follow-picture'))).toBeGreaterThan(0);
   }
   await host.getByRole('button', { name: 'Stop' }).last().click();
   expect(errors).toEqual([]);

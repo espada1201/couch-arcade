@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { POLL_COLORS } from '../src/core/poll';
 import { bg, openRoom, scan } from './room';
 
-// The poll's colours for answers A and B (src/core/poll.ts).
-const A = [255, 176, 0];
-const B = [86, 180, 233];
+const [A, B] = POLL_COLORS;
 
 test('three phones vote, the host counts them, and Reveal turns the room into the chart', async ({ context }) => {
   const errors: string[] = [];

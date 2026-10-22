@@ -1,14 +1,11 @@
-import { existsSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { bg, openRoom, scan } from './room';
-
-const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+import { CHROME_PATH, FAKE_MEDIA, bg, openRoom, scan } from './room';
 
 // Chrome's built-in fake camera and microphone stand in for the host's, so the keepsake can be recorded.
 test.use({
   launchOptions: {
-    executablePath: existsSync(CHROME) ? CHROME : undefined,
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    executablePath: CHROME_PATH,
+    args: FAKE_MEDIA,
   },
   permissions: ['camera', 'microphone'],
 });

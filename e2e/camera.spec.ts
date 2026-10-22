@@ -3,17 +3,17 @@
 // video of a room rendered here with the things real cameras do: perspective, defocus
 // blur, screen glare, rolling shutter, sensor noise, vignetting, a flickering lamp and
 // auto-exposure drift. Phones far from the camera are only a few pixels tall.
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { HALVES_PER_CODE, encodeHalves } from '../src/core/blinkcode';
+import { DEFAULT_HALF_MS as HALF_MS, HALVES_PER_CODE, encodeHalves } from '../src/core/blinkcode';
+import { CHROME_PATH, FAKE_MEDIA, openHost } from './room';
 
-const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const W = 480;
 const H = 360;
 const FPS = 25;
-const HALF_MS = 120; // must match the app's DEFAULT_HALF_MS: one loop = 84 frames exactly
+// One blink loop is 84 frames exactly.
 const FRAMES = (HALVES_PER_CODE * HALF_MS * FPS) / 1000;
 
 interface Phone {
@@ -121,8 +121,8 @@ renderVideo(video);
 
 test.use({
   launchOptions: {
-    executablePath: existsSync(CHROME) ? CHROME : undefined,
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${video}`, '--autoplay-policy=no-user-gesture-required'],
+    executablePath: CHROME_PATH,
+    args: [...FAKE_MEDIA, `--use-file-for-fake-video-capture=${video}`],
   },
   permissions: ['camera'],
 });
@@ -130,12 +130,7 @@ test.use({
 test('the real camera pipeline locates 12 phones in a rendered room', async ({ context }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
-  const host = await context.newPage();
-  host.on('pageerror', (e) => errors.push(e.message));
-  host.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await host.setViewportSize({ width: 1440, height: 900 });
-  await host.goto('./?host=1&transport=local&fresh=1');
-  const code = (await host.locator('[data-room]').getAttribute('data-room'))!;
+  const { host, code } = await openHost(context, errors);
   // Twelve phones join so seats 0-11 exist; the video is what the camera sees.
   for (const p of PHONES) {
     const ph = await context.newPage();

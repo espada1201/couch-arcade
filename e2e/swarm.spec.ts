@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { BLUE, GREEN, RED, SIMS, YELLOW, bg, openRoom, png, scan } from './room';
+import { QUADRANTS_PNG, QUADRANT_COLOURS_BY_SIM, SIMS, bg, openRoom, scan } from './room';
 
 test('the camera finds every phone, then the crowd shows a card stunt', async ({ context }) => {
   const errors: string[] = [];
@@ -31,13 +31,12 @@ test('the camera finds every phone, then the crowd shows a card stunt', async ({
   await room.host.locator('#stunt-file').setInputFiles({
     name: 'quadrants.png',
     mimeType: 'image/png',
-    buffer: png(64, 64, (x, y) => (y < 32 ? (x < 32 ? [255, 0, 0] : [0, 255, 0]) : x < 32 ? [0, 0, 255] : [255, 255, 0])),
+    buffer: QUADRANTS_PNG,
   });
   await room.host.getByRole('button', { name: 'Flip the cards' }).click();
   await expect(room.phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 3000 });
   await room.phones[0].waitForTimeout(3600);
-  const expected = [RED, RED, GREEN, BLUE, YELLOW, YELLOW];
-  for (let i = 0; i < SIMS.length; i++) expect(await bg(room.phones[i]), `phone ${i}`).toEqual(expected[i]);
+  for (let i = 0; i < SIMS.length; i++) expect(await bg(room.phones[i]), `phone ${i}`).toEqual(QUADRANT_COLOURS_BY_SIM[i]);
   await room.host.screenshot({ path: 'test-results/host-card.png' });
   await room.phones[2].screenshot({ path: 'test-results/phone-card.png' });
   expect(errors).toEqual([]);
