@@ -1,6 +1,6 @@
 // What a first-time host runs into: messages they can't miss, controls that say why they're off, and a page a screen reader can navigate.
 import { expect, test, type Page } from '@playwright/test';
-import { joinPhone, openHost, wav } from './room';
+import { joinPhone, openHost, png, wav } from './room';
 
 const inViewport = (page: Page, selector: string) =>
   page.locator(selector).evaluate((el) => {
@@ -446,4 +446,43 @@ test('help and secondary text on the host console is at least 15 px', async ({ c
     expect(await small(), String(tab)).toEqual([]);
   }
   expect(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('a picked picture says it is ready and brings Flip into view; each tab opens at its top', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.locator('#stunt-file').setInputFiles({ name: 'beach.png', mimeType: 'image/png', buffer: png(60, 40, (x) => (x < 30 ? [80, 160, 240] : [230, 210, 150])) });
+  await expect(host.getByText('Your picture is ready. Press Flip the cards.')).toBeVisible();
+  expect(await host.getByRole('button', { name: 'Flip the cards' }).evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
+  await host.getByRole('tab', { name: /Music/ }).click();
+  expect(await host.locator('.panel').evaluate((el) => el.scrollTop)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('a song file brings Play into view, and the picker names WAV too', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.getByRole('tab', { name: /Music/ }).click();
+  await expect(host.locator('.drop-hint')).toContainText('MP3, M4A or WAV');
+  await host.locator('#speaker-file').setInputFiles({ name: 'tune.wav', mimeType: 'audio/wav', buffer: wav(3) });
+  await expect(host.locator('.np-host-title')).toHaveText('tune');
+  const play = host.getByRole('button', { name: 'Play', exact: true });
+  await expect(play).toBeEnabled();
+  expect(await play.evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('keyboard: Enter on a tray number then Enter on the map puts that phone on the map', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  for (let i = 0; i < 2; i++) await joinPhone(context, code, i, errors);
+  await expect(host.locator('.tray .chip')).toHaveCount(2);
+  await host.locator('.tray .chip').first().focus();
+  await host.keyboard.press('Enter');
+  await expect(host.locator('.stage-canvas')).toBeFocused();
+  await host.keyboard.press('Enter');
+  await expect(host.locator('.tray .chip')).toHaveCount(1);
+  await expect(host.getByRole('status').filter({ hasText: 'is on the map. Arrows move it.' })).toBeAttached();
+  expect(errors).toEqual([]);
 });

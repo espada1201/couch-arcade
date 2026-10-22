@@ -74,7 +74,9 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     if (!f) return;
     try {
       pick(await fileStunt(f));
-      say('');
+      say('Your picture is ready. Press Flip the cards.');
+      // Straight to Flip, for the mouse and the keyboard alike: no hunt past every design.
+      flip.focus();
     } catch {
       fail('That file could not be read as a picture.');
     }
@@ -92,7 +94,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   });
   show();
   const { el, say, fail } = panel(
-    'Spread your photo, or your words, across the phones. Each phone shows one piece of it, then every phone flips together on a 3, 2, 1 countdown.',
+    'Turn your photo, or your words, into a stadium card stunt: each phone becomes one card of the picture, and every phone flips together on a 3, 2, 1 countdown.',
     placementNote(session, 'Card stunt needs phones on the map.'),
     h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
     h('p.note', {}, 'Or pick one of these ready-made designs:'),

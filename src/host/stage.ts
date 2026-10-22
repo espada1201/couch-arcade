@@ -62,7 +62,7 @@ export class Stage {
 
   set onPick(cb: ((p: Point) => void) | null) {
     this.pick = cb;
-    this.hint.textContent = `Keys: [ ] pick a phone, arrows move it, Shift for big steps, Esc lets go${cb ? '. With no phone picked, arrows aim the ripple and Enter sets it' : ''}.`;
+    this.hint.textContent = `Keys: Enter puts a phone picked from the list on the map, [ ] pick a placed phone, arrows move it, Shift for big steps, Esc lets go${cb ? '. With no phone picked, arrows aim the ripple and Enter sets it' : ''}.`;
   }
 
   private sync(): void {
@@ -187,7 +187,12 @@ export class Stage {
       const n = placed.length;
       this.select(placed[e.key === ']' ? (i + 1) % n : i < 0 ? n - 1 : (i - 1 + n) % n]);
     } else if (e.key === 'Escape' && seat !== null) this.select(null);
-    else if (e.key === 'Enter' && seat === null && this.pick) {
+    else if ((e.key === 'Enter' || e.key === ' ') && seat !== null && !this.session.layout.positions.has(seat)) {
+      // A phone picked from the tray goes on the map at the next spot along a line; arrows then move it.
+      const k = this.session.layout.positions.size;
+      this.session.placeManually(seat, { x: Math.min(0.9, 0.1 + k * 0.2), y: 0.5 });
+      this.said.textContent = `Phone ${seat + 1} is on the map. Arrows move it.`;
+    } else if (e.key === 'Enter' && seat === null && this.pick) {
       this.pick({ ...this.aim });
       this.said.textContent = `Ripple centre set at ${Math.round(this.aim.x * 100)}% across, ${Math.round(this.aim.y * 100)}% deep`;
     } else {
