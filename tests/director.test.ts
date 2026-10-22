@@ -53,6 +53,24 @@ describe('the director owns what the phones run', () => {
     expect(() => r.director.run({})).toThrow(/started another run/);
   });
 
+  it('in production that bug stops the stray run and logs, so the click that got there still works', async () => {
+    vi.stubEnv('DEV', false);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const r = await room([0]);
+      const strayStop = vi.fn();
+      r.director.run({ stop: () => void r.director.run({ program: { kind: 'identify' }, stop: strayStop }) });
+      const next = r.director.run({ program: { kind: 'grid', rows: 2, seats: 2 } });
+      expect(strayStop).toHaveBeenCalledTimes(1);
+      expect(next.active).toBe(true);
+      expect(r.phones[0].inbox.at(-1)).toMatchObject({ program: { kind: 'grid' } });
+      expect(error).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      error.mockRestore();
+    }
+  });
+
   it('room-wide state registered for handovers is cleared whenever the room changes hands', async () => {
     const r = await room([0]);
     const handover = vi.fn();

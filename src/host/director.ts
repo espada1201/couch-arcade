@@ -62,6 +62,13 @@ export class Director {
     for (const clear of this.handovers) clear();
     stop?.();
     // A run started from a stop would be replaced as soon as this returns, its own stop never called.
-    if (this.current) throw new Error('A run’s stop started another run');
+    // That is a bug: in development it throws; for a host mid-party it is stopped and logged, so the
+    // click that got here still works.
+    const stray = this.current as (() => void) | null;
+    if (!stray) return;
+    if (import.meta.env.DEV) throw new Error('A run’s stop started another run');
+    console.error('A run’s stop started another run; it was stopped.');
+    this.current = null;
+    stray();
   }
 }
