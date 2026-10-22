@@ -144,7 +144,11 @@ export class SyntheticSource implements FrameSource {
         for (let y = Math.max(0, y0); y < Math.min(h, y0 + 12); y++)
           for (let x = Math.max(0, x0); x < Math.min(w, x0 + 9); x++) data[y * w + x] = v + Math.random() * 8;
       }
-      for (let i = 0; i < data.length; i++) img.data.set([data[i], data[i], data[i], 255], i * 4);
+      const px = img.data;
+      for (let i = 0, j = 0; i < data.length; i++, j += 4) {
+        px[j] = px[j + 1] = px[j + 2] = data[i];
+        px[j + 3] = 255;
+      }
       ctx.putImageData(img, 0, 0);
       this.onFrame?.({ t, w, h, data });
     }, 1000 / 30);

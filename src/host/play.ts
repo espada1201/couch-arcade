@@ -1,6 +1,6 @@
 // Step two: the experiences. Each panel turns the located crowd into something:
 // a picture, a wave of light, sound moving through the room, or a game.
-import { AMBER, EMBER, TEAL, WHITE, type Voice, type WaveProgram, type WaveShape } from '../core/effects';
+import { AMBER, BLACK, EMBER, TEAL, WHITE, type Voice, type WaveProgram, type WaveShape } from '../core/effects';
 import { sampleCover, type Image, type Point, type RGB } from '../core/layout';
 import { startPotato, potatoTap, potatoTick, type PotatoState } from '../core/potato';
 import { startTerritory, teamSizes, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
@@ -26,7 +26,7 @@ export function flipCards(session: HostSession, image: Image, leadMs = 3200): vo
   const colors = new Map<number, RGB>();
   for (const [seat, p] of positions) colors.set(seat, sampleCover(image, p, aspect, patch));
   const at = session.now() + leadMs;
-  session.setProgram((seat) => ({ kind: 'card', rgb: colors.get(seat) ?? [0, 0, 0], at }));
+  session.setProgram((seat) => ({ kind: 'card', rgb: colors.get(seat) ?? BLACK, at }));
 }
 
 export function cardPanel(session: HostSession, director: Director): HTMLElement {

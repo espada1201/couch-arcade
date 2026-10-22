@@ -49,6 +49,8 @@ export interface Frame {
 }
 
 export const BLACK: RGB = [0, 0, 0];
+/** The resting glow of an idle phone: not quite off, so the crowd can see it is in. */
+export const DIM: RGB = [14, 13, 11];
 export const WHITE: RGB = [255, 255, 255];
 export const AMBER: RGB = [255, 176, 0];
 export const TEAL: RGB = [0, 196, 180];
@@ -63,6 +65,16 @@ const CORNERS: Point[] = [
 
 export function scale(c: RGB, k: number): RGB {
   return [Math.round(c[0] * k), Math.round(c[1] * k), Math.round(c[2] * k)];
+}
+
+/** Perceived brightness, 0..255. */
+export function luma(c: RGB): number {
+  return c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+}
+
+/** CSS colour with every channel lifted to at least `min`, so dark phones stay visible on a map. */
+export function cssFloor(c: RGB, min: number): string {
+  return `rgb(${Math.max(c[0], min)}, ${Math.max(c[1], min)}, ${Math.max(c[2], min)})`;
 }
 
 export function mix(a: RGB, b: RGB, k: number): RGB {
@@ -125,17 +137,17 @@ export function noteFor(p: Point): number {
 export function render(prog: Program, me: Me, t: number): Frame {
   switch (prog.kind) {
     case 'lobby':
-      return { rgb: [14, 13, 11], label: String(me.seat + 1) };
+      return { rgb: DIM, label: String(me.seat + 1) };
     case 'identify':
       return { rgb: AMBER, label: String(me.seat + 1) };
     case 'blink':
       return { rgb: litAt(me.seat, prog.schedule, t) ? WHITE : BLACK };
     case 'grid':
-      return { rgb: [14, 13, 11] };
+      return { rgb: DIM };
     case 'card': {
       if (t >= prog.at) return { rgb: prog.rgb };
       const left = Math.ceil((prog.at - t) / 1000);
-      return { rgb: [14, 13, 11], label: left <= 3 ? String(left) : undefined };
+      return { rgb: DIM, label: left <= 3 ? String(left) : undefined };
     }
     case 'live':
       // Every phone swaps to the new frame at the same synced instant: no tearing across the crowd.
@@ -147,7 +159,7 @@ export function render(prog: Program, me: Me, t: number): Frame {
     }
     case 'territory': {
       const s = prog.state;
-      if (!me.pos) return { rgb: [14, 13, 11] };
+      if (!me.pos) return { rgb: DIM };
       const team = teamOf(s, me.pos.x);
       const base = prog.colors[team];
       if (s.phase === 'over') {

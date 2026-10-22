@@ -1,4 +1,4 @@
-import { render, type Frame } from '../core/effects';
+import { DIM, luma, render, type Frame } from '../core/effects';
 import { pickTransport } from '../net/pick';
 import { OPTICS_CHANNEL, type Optics } from '../core/protocol';
 import { css, h } from '../ui/dom';
@@ -50,19 +50,24 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const screen = h('div.screen', {}, label, status, overlay);
   app.replaceChildren(screen);
 
-  let frame: Frame = { rgb: [14, 13, 11] };
+  let frame: Frame = { rgb: DIM };
   let lastLum = -1;
   let lastPost = 0;
+  let lastPaint = -Infinity;
+  let lastCss = '';
   const optics = sim ? new BroadcastChannel(OPTICS_CHANNEL) : null;
 
   const paint = () => {
+    lastPaint = performance.now();
     frame = render(client.program, { seat: client.seat, pos: client.pos, aspect: client.aspect }, client.hostNow());
-    screen.style.backgroundColor = css(frame.rgb);
+    const bg = css(frame.rgb);
+    if (bg !== lastCss) screen.style.backgroundColor = lastCss = bg;
     const text = frame.label ?? '';
     if (label.textContent !== text) label.textContent = text;
-    screen.classList.toggle('light', frame.rgb[0] * 0.3 + frame.rgb[1] * 0.59 + frame.rgb[2] * 0.11 > 150);
+    const y = luma(frame.rgb);
+    screen.classList.toggle('light', y > 150);
     if (optics && client.seat >= 0) {
-      const lum = Math.round(frame.rgb[0] * 0.3 + frame.rgb[1] * 0.59 + frame.rgb[2] * 0.11);
+      const lum = Math.round(y);
       const at = performance.timeOrigin + performance.now();
       if (lum !== lastLum || at - lastPost > 200) {
         optics.postMessage({ key: client.token, sim: sim!, lum, at } satisfies Optics);
@@ -77,7 +82,8 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
-  setInterval(paint, 30);
+  // While rAF is running it has painted moments ago, so the interval only steps in once rAF stalls.
+  setInterval(() => performance.now() - lastPaint > 25 && paint(), 30);
   setInterval(() => speaker.pump(client.program, client.pos, client.aspect, client.hostNow()), 200);
 
   screen.addEventListener('pointerdown', (e) => {

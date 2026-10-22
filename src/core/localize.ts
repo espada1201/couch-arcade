@@ -6,6 +6,7 @@
 // camera delay up to a whole loop: webcams, phones used as webcams and capture cards
 // with seconds of lag all work without calibration.
 import { BITS_PER_CODE, HALVES_PER_CODE, SYNC, cycleMs, decodeBits, isSync, type BlinkSchedule } from './blinkcode';
+import { median } from './math';
 
 export interface GrayFrame {
   /** Host-clock time the frame was delivered (ms). Includes unknown camera latency. */
@@ -43,6 +44,8 @@ export interface LocalizeOptions {
 interface Accum {
   sums: Float32Array;
   weights: Float32Array;
+  /** Every half-slot got at least one frame; without that no pixel can decode at this lag. */
+  full: boolean;
 }
 
 /**
@@ -56,10 +59,12 @@ function frameLevel(d: Uint8Array, still: Int32Array): number {
   return sum / still.length;
 }
 
-function accumulate(frames: GrayFrame[], levels: number[], s: BlinkSchedule, lag: number, pix: Int32Array): Accum {
+/** Fills `acc` (reused across calls, sized for the largest `pix`) with this lag's half-slot sums. */
+function accumulate(acc: Accum, frames: GrayFrame[], levels: number[], s: BlinkSchedule, lag: number, pix: Int32Array): Accum {
   const H = HALVES_PER_CODE;
-  const sums = new Float32Array(pix.length * H);
-  const weights = new Float32Array(H);
+  const { sums, weights } = acc;
+  sums.fill(0, 0, pix.length * H);
+  weights.fill(0);
   for (let fi = 0; fi < frames.length; fi++) {
     const f = frames[fi];
     const level = levels[fi];
@@ -73,15 +78,23 @@ function accumulate(frames: GrayFrame[], levels: number[], s: BlinkSchedule, lag
     const d = f.data;
     for (let i = 0; i < pix.length; i++) sums[i * H + h] += w * (d[pix[i]] - level);
   }
-  return { sums, weights };
+  acc.full = weights.every((w) => w !== 0);
+  return acc;
 }
 
-function decodePixel(acc: Accum, i: number, range: number, bits: number[]): { id: number; conf: number } {
+/** Confidence of the last decodePixel call (a scratch slot, so decoding allocates nothing). */
+let decodedConf = 0;
+const syncLevels = new Float64Array(SYNC.length);
+
+/** The id pixel `i` spells out, or -1; its confidence is left in `decodedConf`. */
+function decodePixel(acc: Accum, i: number, range: number, bits: number[]): number {
   const H = HALVES_PER_CODE;
   const { sums, weights } = acc;
-  for (let k = 0; k < H; k++) if (weights[k] === 0) return { id: -1, conf: 0 };
-  const sync = SYNC.map((_, k) => sums[i * H + k] / weights[k]);
-  if (!isSync(sync)) return { id: -1, conf: 0 };
+  decodedConf = 0;
+  if (!acc.full) return -1;
+  const sync = syncLevels;
+  for (let k = 0; k < SYNC.length; k++) sync[k] = sums[i * H + k] / weights[k];
+  if (!isSync(sync)) return -1;
   let conf = (Math.min(sync[0], sync[1], sync[2]) - Math.max(sync[3], sync[4], sync[5])) / range;
   const off = SYNC.length;
   for (let j = 0; j < BITS_PER_CODE; j++) {
@@ -90,13 +103,8 @@ function decodePixel(acc: Accum, i: number, range: number, bits: number[]): { id
     bits[j] = diff > 0 ? 1 : 0;
     conf = Math.min(conf, Math.abs(diff) / range);
   }
-  return { id: decodeBits(bits), conf };
-}
-
-function median(values: number[]): number {
-  const v = [...values].sort((a, b) => a - b);
-  const m = v.length >> 1;
-  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  decodedConf = conf;
+  return decodeBits(bits);
 }
 
 export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOptions = {}): LocalizeResult {
@@ -122,7 +130,8 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
   // A fixed floor, not a fraction of the brightest phone, so distant dim phones still count.
   // Noise that sneaks past it is rejected by the sync mark, the CRC and the contrast check.
   const active: number[] = [];
-  for (let p = 0; p < n; p++) if (hi[p] - lo[p] >= minRange) active.push(p);
+  const quiet: number[] = [];
+  for (let p = 0; p < n; p++) (hi[p] - lo[p] >= minRange ? active : quiet).push(p);
   if (active.length === 0) return { lagMs: 0, detections: [], activePixels: 0 };
 
   const pix = Int32Array.from(active);
@@ -130,17 +139,14 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
   const stride = Math.max(1, Math.floor(active.length / 1500));
   const sample = Int32Array.from(active.filter((_, i) => i % stride === 0));
   const bits = new Array<number>(BITS_PER_CODE);
-  const quiet: number[] = [];
-  for (let p = 0; p < n; p++) if (hi[p] - lo[p] < minRange) quiet.push(p);
   const still = quiet.length < 50 ? new Int32Array(0) : Int32Array.from(quiet.filter((_, i) => i % Math.max(1, Math.floor(quiet.length / 2000)) === 0));
   const levels = window.map((f) => frameLevel(f.data, still));
+  const acc: Accum = { sums: new Float32Array(pix.length * HALVES_PER_CODE), weights: new Float32Array(HALVES_PER_CODE), full: false };
   const score = (lag: number) => {
-    const acc = accumulate(window, levels, s, lag, sample);
+    if (!accumulate(acc, window, levels, s, lag, sample).full) return 0;
     let total = 0;
-    for (let i = 0; i < sample.length; i++) {
-      const r = decodePixel(acc, i, hi[sample[i]] - lo[sample[i]], bits);
-      if (r.id >= 0 && r.conf >= minConfidence) total += r.conf;
-    }
+    for (let i = 0; i < sample.length; i++)
+      if (decodePixel(acc, i, hi[sample[i]] - lo[sample[i]], bits) >= 0 && decodedConf >= minConfidence) total += decodedConf;
     return total;
   };
   // Coarse sweep over every possible delay, then refine around the winner.
@@ -163,20 +169,20 @@ export function localize(frames: GrayFrame[], s: BlinkSchedule, opts: LocalizeOp
   let pending = pix;
   for (const offset of [0, -0.25, 0.25, -0.5, 0.5, -0.75, 0.75]) {
     if (pending.length === 0) break;
-    const acc = accumulate(window, levels, s, bestLag + offset * s.halfMs, pending);
+    accumulate(acc, window, levels, s, bestLag + offset * s.halfMs, pending);
     const failed: number[] = [];
     for (let i = 0; i < pending.length; i++) {
       const p = pending[i];
-      const r = decodePixel(acc, i, hi[p] - lo[p], bits);
-      if (r.id < 0 || r.conf < minConfidence) {
+      const id = decodePixel(acc, i, hi[p] - lo[p], bits);
+      if (id < 0 || decodedConf < minConfidence) {
         failed.push(p);
         continue;
       }
-      let g = groups.get(r.id);
-      if (!g) groups.set(r.id, (g = { xs: [], ys: [], conf: 0 }));
+      let g = groups.get(id);
+      if (!g) groups.set(id, (g = { xs: [], ys: [], conf: 0 }));
       g.xs.push(p % w);
       g.ys.push(Math.floor(p / w));
-      g.conf += r.conf;
+      g.conf += decodedConf;
     }
     pending = Int32Array.from(failed);
   }

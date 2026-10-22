@@ -1,6 +1,7 @@
 // The crowd as a live television. A moving source (the host's camera, a video file,
 // or a generated animation) is sampled several times a second and every phone gets
 // its own pixel, all switching on the same synced instant so the picture never tears.
+import { BLACK } from '../core/effects';
 import { sampleCover, type RGB } from '../core/layout';
 import { h, segmented, slider } from '../ui/dom';
 import type { Director } from './play';
@@ -11,8 +12,17 @@ type SourceKind = 'aurora' | 'fire' | 'camera' | 'video';
 export const W = 96;
 export const H = 72;
 
+// One W x H buffer per canvas, reused every frame (nothing keeps the old pixels).
+const buffers = new WeakMap<CanvasRenderingContext2D, ImageData>();
+function buffer(ctx: CanvasRenderingContext2D): ImageData {
+  let img = buffers.get(ctx);
+  if (!img) buffers.set(ctx, (img = ctx.createImageData(W, H)));
+  return img;
+}
+
 export function aurora(ctx: CanvasRenderingContext2D, t: number) {
-  const img = ctx.createImageData(W, H);
+  const img = buffer(ctx);
+  const px = img.data;
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const u = x / W;
@@ -20,10 +30,10 @@ export function aurora(ctx: CanvasRenderingContext2D, t: number) {
       const a = Math.sin(u * 6 + t * 0.0011) + Math.sin(v * 5 - t * 0.0013) + Math.sin((u + v) * 4 + t * 0.0007);
       const k = (a + 3) / 6;
       const i = (y * W + x) * 4;
-      img.data[i] = 20 + 60 * k * k;
-      img.data[i + 1] = 60 + 180 * k;
-      img.data[i + 2] = 90 + 120 * (1 - k);
-      img.data[i + 3] = 255;
+      px[i] = 20 + 60 * k * k;
+      px[i + 1] = 60 + 180 * k;
+      px[i + 2] = 90 + 120 * (1 - k);
+      px[i + 3] = 255;
     }
   ctx.putImageData(img, 0, 0);
 }
@@ -37,10 +47,14 @@ export function fire(ctx: CanvasRenderingContext2D) {
       const s = heat[b + x] + heat[b + ((x + W - 1) % W)] + heat[b + ((x + 1) % W)] + heat[Math.min(H + 1, y + 2) * W + x];
       heat[y * W + x] = Math.max(0, (s / 4) * 0.985 - 0.004);
     }
-  const img = ctx.createImageData(W, H);
-  for (let i = 0; i < W * H; i++) {
+  const img = buffer(ctx);
+  const px = img.data;
+  for (let i = 0, j = 0; i < W * H; i++, j += 4) {
     const k = Math.min(1, heat[i] * 1.6);
-    img.data.set([255 * Math.min(1, k * 1.6), 200 * k * k, 60 * k * k * k, 255], i * 4);
+    px[j] = 255 * Math.min(1, k * 1.6);
+    px[j + 1] = 200 * k * k;
+    px[j + 2] = 60 * k * k * k;
+    px[j + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
 }
@@ -54,7 +68,7 @@ export function castFrame(session: HostSession, ctx: CanvasRenderingContext2D, p
   for (const [seat, p] of positions) next.set(seat, sampleCover(image, p, aspect, patch));
   // Leave enough headroom for the slowest link before everyone flips.
   const at = session.now() + 140;
-  session.setProgram((seat) => ({ kind: 'live', rgb: next.get(seat) ?? [0, 0, 0], prev: prev.get(seat) ?? [0, 0, 0], at }));
+  session.setProgram((seat) => ({ kind: 'live', rgb: next.get(seat) ?? BLACK, prev: prev.get(seat) ?? BLACK, at }));
   return next;
 }
 

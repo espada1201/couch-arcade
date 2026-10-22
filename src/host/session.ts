@@ -4,6 +4,7 @@ import { MAX_IDS } from '../core/blinkcode';
 import type { Program } from '../core/effects';
 import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
+import { clamp01 } from '../core/math';
 import { parsePhoneMsg, type HostMsg } from '../core/protocol';
 import type { HostEnd, Link, Transport } from '../net/transport';
 
@@ -45,7 +46,6 @@ interface Saved {
 }
 
 const STORE = 'swarm-host';
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function newRoomCode(): string {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

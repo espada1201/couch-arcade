@@ -2,6 +2,7 @@
 // Each ping gives offset = ((t1 - t0) + (t2 - t3)) / 2, which is exact when the
 // two legs take equal time. Queueing delay is what breaks symmetry, so we trust
 // only the fastest round trips and take the median of those.
+import { median } from './math';
 
 export interface ClockSample {
   offset: number;
@@ -14,8 +15,8 @@ export function sampleFrom(t0: number, t1: number, t2: number, t3: number): Cloc
 
 export class ClockEstimator {
   private samples: ClockSample[] = [];
-  /** Offset to use until fresh samples arrive after a reset. */
-  private fallback = 0;
+  private off = 0;
+  private unc = Infinity;
 
   constructor(private readonly keep = 40) {}
 
@@ -23,13 +24,18 @@ export class ClockEstimator {
     if (!Number.isFinite(s.offset) || s.rtt < 0) return;
     this.samples.push(s);
     if (this.samples.length > this.keep) this.samples.shift();
+    // Queueing only ever adds delay, so trust the fastest quarter of round trips.
+    const sorted = [...this.samples].sort((a, b) => a.rtt - b.rtt);
+    const best = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 4)));
+    this.off = median(best.map((b) => b.offset));
+    this.unc = Math.max(...best.map((b) => b.rtt)) / 2;
   }
 
   /** Forget everything: the host's clock may have restarted, or this device slept. */
   reset(): void {
     // Keep showing the last estimate until the first new round trip lands, rather than jumping to 0.
-    this.fallback = this.offset;
     this.samples = [];
+    this.unc = Infinity;
   }
 
   get count(): number {
@@ -38,21 +44,11 @@ export class ClockEstimator {
 
   /** Estimated host - local offset (ms); add it to local time to get host time. */
   get offset(): number {
-    const best = this.fastest();
-    if (best.length === 0) return this.fallback;
-    const v = best.map((s) => s.offset).sort((a, b) => a - b);
-    const m = v.length >> 1;
-    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+    return this.off;
   }
 
   /** Worst-case error bound of the estimate: half the RTT of the samples we trusted. */
   get uncertainty(): number {
-    const best = this.fastest();
-    return best.length ? Math.max(...best.map((s) => s.rtt)) / 2 : Infinity;
-  }
-
-  private fastest(): ClockSample[] {
-    const sorted = [...this.samples].sort((a, b) => a.rtt - b.rtt);
-    return sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 4)));
+    return this.unc;
   }
 }

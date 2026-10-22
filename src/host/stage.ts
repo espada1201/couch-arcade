@@ -1,9 +1,10 @@
 // The host's live mirror of the crowd: every phone drawn where it physically is,
 // showing exactly what it is showing right now (the host runs the same pure renderer
 // the phones do). Phones can be dragged to fix a position or dropped in by hand.
-import { render } from '../core/effects';
-import type { Point } from '../core/layout';
-import { css, h } from '../ui/dom';
+import { cssFloor, luma, render } from '../core/effects';
+import { distance, type Point } from '../core/layout';
+import { clamp01 } from '../core/math';
+import { h } from '../ui/dom';
 import type { HostSession } from './session';
 
 interface Box {
@@ -105,7 +106,7 @@ export class Stage {
     let best: number | null = null;
     let bestD = 0.06;
     for (const [seat, q] of positions) {
-      const d = Math.hypot((q.x - p.x) * aspect, q.y - p.y);
+      const d = distance(q, p, aspect);
       if (d < bestD) [best, bestD] = [seat, d];
     }
     return best;
@@ -128,7 +129,7 @@ export class Stage {
   private up(e: PointerEvent): void {
     const p = this.toRoom(e);
     if (this.drag) {
-      if (Math.hypot(this.drag.start.x - p.x, this.drag.start.y - p.y) > 0.005) this.session.placeManually(this.drag.seat, p);
+      if (distance(this.drag.start, p, 1) > 0.005) this.session.placeManually(this.drag.seat, p);
       this.drag = null;
       return;
     }
@@ -167,8 +168,7 @@ export class Stage {
         const at = this.session.layout.positions.get(seat) ?? { x: 0.5, y: 0.5 };
         this.session.placeManually(seat, { x: at.x + d[0], y: at.y + d[1] });
       } else if (this.onPick) {
-        const clamp = (v: number) => Math.min(1, Math.max(0, v));
-        this.aim = { x: clamp(this.aim.x + d[0]), y: clamp(this.aim.y + d[1]) };
+        this.aim = { x: clamp01(this.aim.x + d[0]), y: clamp01(this.aim.y + d[1]) };
       } else return;
     }
     e.preventDefault();
@@ -244,7 +244,7 @@ export class Stage {
       ctx.beginPath();
       ctx.roundRect(x, y, pw, size, pw * 0.16);
       if (s?.link) {
-        ctx.fillStyle = css(f.rgb.map((v) => Math.max(v, 26)));
+        ctx.fillStyle = cssFloor(f.rgb, 26);
         ctx.fill();
       }
       ctx.lineWidth = (seat === this.selected ? 2.5 : 1) * dpr;
@@ -252,8 +252,7 @@ export class Stage {
       ctx.setLineDash(s?.link ? [] : [3 * dpr, 3 * dpr]);
       ctx.stroke();
       ctx.setLineDash([]);
-      const lum = f.rgb[0] * 0.3 + f.rgb[1] * 0.59 + f.rgb[2] * 0.11;
-      ctx.fillStyle = s?.link && lum > 140 ? '#0e0d0b' : '#f2ead8';
+      ctx.fillStyle = s?.link && luma(f.rgb) > 140 ? '#0e0d0b' : '#f2ead8';
       ctx.font = `600 ${Math.max(9 * dpr, size * 0.3)}px "Archivo Variable", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

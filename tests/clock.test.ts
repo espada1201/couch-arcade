@@ -53,3 +53,17 @@ describe('clock sync', () => {
     expect(est.count).toBe(0);
   });
 });
+
+describe('clock reset', () => {
+  it('keeps showing the last offset until new samples land, with unknown uncertainty', () => {
+    const est = simulate(500, 3);
+    const before = est.offset;
+    est.reset();
+    expect(est.count).toBe(0);
+    expect(est.offset).toBe(before);
+    expect(est.uncertainty).toBe(Infinity);
+    est.add({ offset: 42, rtt: 10 });
+    expect(est.offset).toBe(42);
+    expect(est.uncertainty).toBe(5);
+  });
+});
