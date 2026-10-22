@@ -8,6 +8,7 @@ import { localize, type GrayFrame, type LocalizeResult } from '../core/localize'
 import { errorText, h, plural, setText } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
 import type { Director, Hold } from './director';
+import { notice } from './panel';
 import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -28,10 +29,11 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
 
   const view = h('div.cam-view', { hidden: true });
   const overlay = h('canvas.cam-overlay', { 'aria-hidden': 'true' });
-  const camMsg = h('p.note', { role: 'status' });
+  const camMsg = notice();
   const devices = h('select', { id: 'cam-device', 'aria-label': 'Camera' });
   const startBtn = h('button.btn', { type: 'button' }, synthetic ? 'Start simulated camera' : 'Start camera');
-  const scanBtn = h('button.btn.primary', { type: 'button', disabled: true }, 'Scan the room');
+  const scanBtn = h('button.btn.primary', { type: 'button', disabled: true, 'aria-describedby': 'scan-hint' }, 'Scan the room');
+  const scanHint = h('p.note', { id: 'scan-hint' }, 'Start the camera first.');
   const progress = h('progress', { max: 1, value: 0, hidden: true, 'aria-label': 'Scan progress' });
   const result = h('p.result', { role: 'status', 'aria-live': 'polite' });
   const mirror = h('input', { type: 'checkbox', id: 'mirror', checked: session.mirror });
@@ -95,7 +97,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
 
   startBtn.addEventListener('click', async () => {
     source?.stop();
-    setText(camMsg, 'Starting camera…');
+    camMsg.say('Starting camera…');
     try {
       source = synthetic ? new SyntheticSource() : new CameraSource(devices.value || undefined);
       await source.start();
@@ -103,16 +105,17 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       view.hidden = false;
       perspectiveBtn.disabled = false;
       requestAnimationFrame(drawOverlay);
-      camMsg.textContent = synthetic
-        ? 'Simulated camera: it films phone tabs open on this computer.'
-        : 'Point the camera so every phone screen is in view. Dim the room lights if you can.';
+      camMsg.say(synthetic ? 'Simulated camera: it films phone tabs open on this computer.' : 'Point the camera so every phone screen is in view. Dim the room lights if you can.');
       scanBtn.disabled = false;
+      scanHint.hidden = true;
       startBtn.textContent = 'Restart camera';
       void listCameras();
     } catch (e) {
       source?.stop();
       source = null;
-      setText(camMsg, `${errorText(e)} You can also use typed seat numbers below, or place phones by hand on the map.`);
+      scanBtn.disabled = true;
+      scanHint.hidden = false;
+      camMsg.fail(`${errorText(e)} You can also use typed seat numbers below, or place phones by hand on the map.`);
     }
   });
 
@@ -292,7 +295,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     {},
     h('p.panel-intro', {}, 'Every phone flashes a unique code for about ten seconds. The camera watches, decodes each flash and pins each phone it sees to the map.'),
     h('div.row', {}, startBtn, devices),
-    camMsg,
+    camMsg.el,
     view,
     h('label.check', { for: 'mirror' }, mirror, h('span', {}, 'Camera faces the crowd (flip left and right)')),
     h(
@@ -305,6 +308,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       perspectiveMsg,
     ),
     h('div.row', {}, scanBtn, identify),
+    scanHint,
     progress,
     result,
     h(

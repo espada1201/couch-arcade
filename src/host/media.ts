@@ -13,12 +13,21 @@ export function cameraProblem(e: unknown): string {
 }
 
 /**
+ * What to tell a host whose page is open on a LAN address (http://192.168...): browsers allow the
+ * camera, microphone and screen sharing only on https or localhost. Null when this page qualifies.
+ */
+export function secureOnlyAdvice(port: string = globalThis.location?.port ?? ''): string | null {
+  if (globalThis.isSecureContext !== false) return null;
+  return `The browser blocks the camera, microphone and screen sharing on this address. On this computer, open http://localhost${port ? `:${port}` : ''}/ instead. It starts a new room, so phones scan its QR code.`;
+}
+
+/**
  * This computer's camera; with `audio`, the microphone too when it is allowed (and the
  * camera alone when it isn't). Throws an Error whose message is ready to show.
  */
 export async function openCamera(video: MediaTrackConstraints | true = true, { audio = false } = {}): Promise<MediaStream> {
   const md = navigator.mediaDevices;
-  if (!md?.getUserMedia) throw new Error('This browser cannot use a camera here (it needs https or localhost).');
+  if (!md?.getUserMedia) throw new Error(secureOnlyAdvice() ?? 'This browser cannot use a camera here (it needs https or localhost).');
   if (audio)
     try {
       return await md.getUserMedia({ video, audio: true });

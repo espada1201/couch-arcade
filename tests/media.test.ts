@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cameraProblem, dropVideo, openCamera, stopStream } from '../src/host/media';
+import { cameraProblem, dropVideo, openCamera, secureOnlyAdvice, stopStream } from '../src/host/media';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -60,5 +60,18 @@ describe('letting go of a video', () => {
     dropVideo(v as unknown as HTMLVideoElement);
     expect(revoke).toHaveBeenCalledWith('blob:abc');
     expect(() => dropVideo(null)).not.toThrow();
+  });
+});
+
+describe('a host page opened on a network address', () => {
+  it('tells the host to open localhost on this computer instead, and says nothing on a secure page', async () => {
+    expect(secureOnlyAdvice('4321')).toBeNull();
+    vi.stubGlobal('isSecureContext', true);
+    expect(secureOnlyAdvice('4321')).toBeNull();
+    vi.stubGlobal('isSecureContext', false);
+    expect(secureOnlyAdvice('4321')).toContain('open http://localhost:4321/ instead');
+    expect(secureOnlyAdvice('')).toContain('open http://localhost/ instead');
+    vi.stubGlobal('navigator', {});
+    await expect(openCamera()).rejects.toThrow('http://localhost');
   });
 });
