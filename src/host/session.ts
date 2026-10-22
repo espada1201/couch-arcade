@@ -6,7 +6,8 @@ import type { Track } from '../core/speaker';
 import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
-import { fits, parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
+import { TAP_MS, fits, messageBytes, parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
+import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../net/limits.js';
 import { randomId, type HostEnd, type Link, type ServerState, type Transport } from '../net/transport';
 import { forget, loadJson, saveJson } from '../storage';
 
@@ -333,7 +334,10 @@ export class HostSession {
     const conn: Conn = { link, opened: this.now(), heard: this.now(), greeted: false, seat: null };
     this.conns.add(conn);
     let me: Seat | null = null;
+    const wall = tokenBucket(PHONE_LIMIT, this.now());
     link.onMessage((raw) => {
+      // Phones are untrusted: past the size or rate limit the link closes, on every transport (the relay also checks).
+      if (!wall.take(this.now()) || messageBytes(raw) > PHONE_MESSAGE_BYTES) return link.close();
       conn.heard = this.now();
       const m = parsePhoneMsg(raw);
       if (!m) return;
@@ -362,7 +366,7 @@ export class HostSession {
         if (m.u !== undefined) me.sync = m.u;
       } else if (m.t === 'tap') {
         const now = this.now();
-        if (now - me.lastTap < 40) return;
+        if (now - me.lastTap < TAP_MS) return;
         me.lastTap = now;
         this.heard(me.seat, m);
       } else if (m.t === 'ack') this.acked(me, m.n);

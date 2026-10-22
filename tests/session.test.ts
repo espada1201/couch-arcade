@@ -4,6 +4,7 @@ import { HostSession } from '../src/host/session';
 import { BasicLink } from '../src/net/transport';
 import { MAX_MESSAGE_BYTES, fits, type HostMsg } from '../src/core/protocol';
 import { memoryStorage, testTransport } from './harness';
+import { PHONE_BUDGET, PHONE_MESSAGE_BYTES } from '../src/net/limits.js';
 
 /** Several phones against a real HostSession. */
 function harness() {
@@ -270,6 +271,50 @@ describe('untrusted phones', () => {
     for (const [i, p] of waiting.entries()) p.say({ t: 'hello', token: `new${i}` });
     expect(waiting.map((p) => p.inbox[0]?.t)).toEqual(Array(32).fill('full'));
     expect(turned.some((p) => p.closed())).toBe(false);
+  });
+});
+
+describe('the same limits on every transport', () => {
+  const watched = (p: { onClose: (cb: () => void) => void }) => {
+    let closed = false;
+    p.onClose(() => (closed = true));
+    return () => closed;
+  };
+
+  it('closes a link that sends a message over 2 KB, seated or not', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    const aClosed = watched(a);
+    a.say({ t: 'hello', token: 'aaa' });
+    a.say({ t: 'vote', choice: 1, pad: 'x'.repeat(PHONE_MESSAGE_BYTES - 40) });
+    expect(aClosed()).toBe(false);
+    a.say({ t: 'vote', choice: 1, pad: 'x'.repeat(PHONE_MESSAGE_BYTES) });
+    expect(aClosed()).toBe(true);
+    const b = phone();
+    const bClosed = watched(b);
+    b.say({ t: 'hello', token: 'x'.repeat(PHONE_MESSAGE_BYTES) });
+    expect(bClosed()).toBe(true);
+    expect(session.seats.size).toBe(1);
+  });
+
+  it('closes a link that floods, and keeps one at twice an honest phone’s budget', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const flood = phone();
+    const floodClosed = watched(flood);
+    flood.say({ t: 'hello', token: 'flood' });
+    for (let i = 0; i < 200; i++) flood.say({ t: 'tap' });
+    expect(floodClosed()).toBe(true);
+    const busy = phone();
+    const busyClosed = watched(busy);
+    busy.say({ t: 'hello', token: 'busy' });
+    for (let ms = 0; ms < 10_000; ms += 20) {
+      tick(20);
+      busy.say({ t: 'ping', c0: ms });
+    }
+    expect(1000 / 20).toBe(2 * PHONE_BUDGET.rate);
+    expect(busyClosed()).toBe(false);
   });
 });
 
