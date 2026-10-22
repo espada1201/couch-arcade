@@ -10,6 +10,9 @@ import { stableId } from '../storage';
 
 export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
 
+/** A host that hasn't answered a ping for this long is gone, even if the link never said so. */
+const SILENT_MS = 6000;
+
 export class PhoneClient {
   seat = -1;
   pos: Point | null = null;
@@ -23,6 +26,7 @@ export class PhoneClient {
   private link: Link | null = null;
   private pingTimer = 0;
   private retries = 0;
+  private lastPong = 0;
 
   constructor(
     private readonly transport: Transport,
@@ -76,8 +80,11 @@ export class PhoneClient {
 
   private startPinging(): void {
     clearTimeout(this.pingTimer);
+    this.lastPong = performance.now();
     let n = 0;
     const tick = () => {
+      // Closing runs the usual reconnect path.
+      if (performance.now() - this.lastPong > SILENT_MS) return void this.link?.close();
       const u = this.clock.uncertainty;
       this.send({ t: 'ping', c0: performance.now(), u: Number.isFinite(u) ? Math.round(u) : undefined });
       // A quick burst to lock on, then a slow trickle to track drift.
@@ -89,6 +96,7 @@ export class PhoneClient {
   private receive(m: HostMsg): void {
     switch (m.t) {
       case 'pong':
+        this.lastPong = performance.now();
         this.clock.add(sampleFrom(m.c0, m.h1, m.h2, performance.now()));
         return;
       case 'welcome':
@@ -119,9 +127,11 @@ export class PhoneClient {
     this.link = null;
     if (this.status === 'full' || this.status === 'replaced') return this.onChange();
     this.retries++;
-    this.status = this.retries > 8 ? 'failed' : 'reconnecting';
+    // Never seated: most likely a wrong room code, so say so soon rather than retry for a minute.
+    const joined = this.seat >= 0;
+    this.status = this.retries > (joined ? 8 : 2) ? 'failed' : joined ? 'reconnecting' : 'connecting';
     this.onChange();
-    if (this.status !== 'reconnecting') return;
+    if (this.status === 'failed') return;
     const again = () => {
       // A hidden tab (a second copy, a locked phone) shouldn't fight for the seat.
       if (document.hidden) document.addEventListener('visibilitychange', again, { once: true });
