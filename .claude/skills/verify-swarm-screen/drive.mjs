@@ -198,6 +198,32 @@ function wav(seconds, rate = 22050) {
   return b;
 }
 
+/** Start logging every change of a phone's colour and label, in wall-clock ms. */
+const watchScreens = (phones) =>
+  Promise.all(
+    phones.map((p) =>
+      p.evaluate(() => {
+        window.__screen = [];
+        const s = document.querySelector('.screen');
+        const l = document.querySelector('.label');
+        const log = () => window.__screen.push({ t: performance.timeOrigin + performance.now(), bg: s.style.backgroundColor, label: l.textContent });
+        new MutationObserver(log).observe(s, { attributes: true, attributeFilter: ['style'], subtree: true, childList: true, characterData: true });
+        log();
+      }),
+    ),
+  );
+/** Per phone, when the countdown's last number gave way to the card (ms after the earliest), or null. */
+async function flipMoments(phones) {
+  const logs = await Promise.all(phones.map((p) => p.evaluate(() => window.__screen)));
+  // Phones show their seat number until the countdown starts, so look only after the "3".
+  const at = logs.map((log) => {
+    const start = log.findIndex((e) => e.label === '3');
+    return start < 0 ? null : (log.find((e, i) => i > start && e.label === '' && log[i - 1].label === '1')?.t ?? null);
+  });
+  const t0 = Math.min(...at.filter((x) => x !== null));
+  return at.map((t) => (t === null ? null : Math.round(t - t0)));
+}
+
 /** Distinct colours a phone shows over `ms`. */
 async function colours(p, ms = 1500, step = 150) {
   const seen = new Set();
@@ -662,9 +688,13 @@ const CHECKS = {
     const { host, phones } = room;
     await tab(room, 'Show');
     await host.locator('#show-title').fill('HI');
+    await watchScreens(phones);
     await host.getByRole('button', { name: 'Start the show' }).click();
     await expect(host.locator('.score')).toContainText('Now: Title card');
-    await expect(phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 3000 });
+    await sleep(4000);
+    const flips = await flipMoments(phones);
+    run.note('title card flip per phone, ms after the first', flips);
+    if (flips.includes(null) || Math.max(...flips) > 150) run.issue(`title card did not flip together: ${flips.join(', ')}`);
     await expect(host.locator('.score')).toContainText('Now: Amber sweep', { timeout: 9000 });
     run.note('cue after 6.5 s', await host.locator('.score').textContent());
     await run.shot(host, 'host-show');
@@ -738,9 +768,12 @@ const CHECKS = {
       mimeType: 'image/png',
       buffer: png(64, 64, (x, y) => (y < 32 ? (x < 32 ? [255, 0, 0] : [0, 255, 0]) : x < 32 ? [0, 0, 255] : [255, 255, 0])),
     });
+    await watchScreens(phones);
     await host.getByRole('button', { name: 'Flip the cards' }).click();
-    await expect(phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 3000 });
-    await sleep(3600);
+    await sleep(4500);
+    const flips = await flipMoments(phones);
+    run.note('flip moment per phone, ms after the first', flips);
+    if (flips.includes(null) || Math.max(...flips) > 150) run.issue(`phones did not flip together: ${flips.join(', ')}`);
     const got = await Promise.all(phones.map((p) => bg(p)));
     run.note('phone colours', got.map((c) => c.join(',')));
     expect(got).toEqual([[255, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 255, 0]]);
@@ -769,11 +802,21 @@ const CHECKS = {
     await host.getByLabel('Name (birthday, couple)').fill('Ana');
     await host.getByLabel('Second name (couple)').fill('Ben');
     await host.getByRole('button', { name: 'Names with a heart' }).click();
+    await watchScreens(phones);
     await host.getByRole('button', { name: 'Flip the cards' }).click();
-    await expect(phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 3000 });
-    await expect(phones[0].locator('.label')).toHaveText('', { timeout: 5000 });
-    const names = new Set((await Promise.all(phones.map((p) => bg(p)))).map((c) => c.join()));
+    await sleep(6000);
+    const flips = await flipMoments(phones);
+    run.note('flip moment per phone, ms after the first', flips);
+    if (flips.includes(null)) run.issue(`phone(s) ${flips.flatMap((f, i) => (f === null ? [i + 1] : [])).join(', ')} never counted down to the flip`);
+    else if (Math.max(...flips) > 150) run.issue(`phones flipped up to ${Math.max(...flips)} ms apart`);
+    const nameColours = (await Promise.all(phones.map((p) => bg(p)))).map((c) => c.join());
+    const names = new Set(nameColours);
     run.note('Names with a heart: distinct colours', names.size);
+    run.note('Names with a heart: colours by phone', nameColours);
+    run.note('map x,y by phone', await Promise.all(room.seats.map(async (seat) => { const r = host.locator(`tr[data-seat="${seat}"]`); return [+(+(await r.getAttribute('data-x'))).toFixed(2), +(+(await r.getAttribute('data-y'))).toFixed(2)]; })));
+    // What the host is flipping, next to what the middle row shows.
+    writeFileSync(resolve(run.dir, 'names-picture.png'), Buffer.from((await host.locator('.stunt-preview canvas').evaluate((c) => c.toDataURL())).split(',')[1], 'base64'));
+    await run.shot(phones[5], 'phone-6-names');
     if (names.size < 2) run.issue('Names with a heart flipped to one flat colour on every phone');
     await run.shot(host, 'host-names');
     await host.getByLabel('Name (birthday, couple)').fill('');
@@ -783,7 +826,8 @@ const CHECKS = {
     await host.getByRole('button', { name: 'Just married' }).click();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
     await expect(host.getByText(/3, 2, 1… 12 phones flip together/)).toBeVisible();
-    await sleep(3800);
+    await sleep(1000);
+    for (const p of phones) await expect(p.locator('.label')).toHaveText('', { timeout: 8000 });
     const married = new Set((await Promise.all(phones.map((p) => bg(p)))).map((c) => c.join()));
     run.note('Just married: distinct colours', married.size);
     if (married.size < 2) run.issue('Just married flipped to one flat colour on every phone');
@@ -1089,7 +1133,7 @@ async function main() {
       else todo.push([name]);
     }
     for (const [name, arg] of todo) {
-      const run = new Run(name);
+      const run = new Run(arg ? `${name}-${basename(arg).replace(/\W+/g, '_')}` : name);
       const t0 = Date.now();
       log(`--- ${name}${arg ? ` ${arg}` : ''} (${opt.transport})`);
       try {

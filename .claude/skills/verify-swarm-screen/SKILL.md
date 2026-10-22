@@ -45,7 +45,8 @@ Each check is a function in `drive.mjs` (`CHECKS`), one per feature-map entry. S
 `openRoom(run, { sims, transport, camera, args, init, phone })` joins a host and phones and returns
 `{ host, phones, seats, code, addPhone }`; `scan(room)` from `e2e/room.ts` runs the simulated-camera
 scan; `bg(page)` reads a phone's colour; `png()` makes test pictures; `AUDIO_TAP` records every Web
-Audio note a phone schedules. Handles are ARIA roles and names (`getByRole('tab', { name: /Poll/ })`,
+Audio note a phone schedules; `watchScreens(phones)` + `flipMoments(phones)` time each phone's
+3-2-1 flip; `colours(page, ms)` counts the colours a phone shows. Handles are ARIA roles and names (`getByRole('tab', { name: /Poll/ })`,
 `'Join the swarm'`, `'Scan the room'`) plus the app's stable hooks: `[data-room]`, `.count`, phone
 `.status` / `.label` / `.screen`, `tr[data-seat]` with `data-x/y`, `data-raw-x/y`, `data-source`,
 `.nowplaying[data-state|data-anchor|data-pos]`, `.follow-text`, `.follow-picture`, `.score`.

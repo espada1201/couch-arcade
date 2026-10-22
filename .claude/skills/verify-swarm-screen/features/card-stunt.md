@@ -17,10 +17,11 @@ Any picture, the host's words or an event template is split across the crowd; ev
 
 Preconditions: phones scanned (each check does it).
 
-- **Picture and words.** `drive.mjs stunt`. Reading `phone colours` must equal red, red, green, blue, yellow, yellow; `distinct colours for "GO"` > 1.
-- **Templates.** `drive.mjs templates` (12 phones in a 4x3 block). Readings `Names with a heart: distinct colours`, `Just married: distinct colours` (> 1 each); `host-names.png`.
+- **Picture and words.** `drive.mjs stunt`. Reading `flip moment per phone` (all within 150 ms); `phone colours` must equal red, red, green, blue, yellow, yellow; `distinct colours for "GO"` > 1.
+- **Templates.** `drive.mjs templates` (12 phones in a 4x3 block). Readings `flip moment per phone`, `Names with a heart: distinct colours`, `Just married: distinct colours` (> 1 each); `host-names.png`.
 - **Record.** `drive.mjs record`. Reading `keepsake` (`swarm-moment-YYYY-MM-DD-HHMM.webm`, > 10 KB), saved in the check folder.
 
 ## Gotchas
 
 - Words need enough phones in the right rows: three or six scattered phones can all land between letters and show one flat colour. That is sparse sampling, not a bug.
+- After a scan each phone shows its seat number, so a `.label` of `1` is not proof of a countdown; the flip lever only counts a `3 … 1 → blank` run.

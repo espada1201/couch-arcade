@@ -18,7 +18,7 @@ One button runs a looping choreography; event moments run on their own: a New Ye
 
 Preconditions: `show` and `first-dance` scan first; `countdown` deliberately does not.
 
-- **Loop.** `drive.mjs show`. Reading `cue after 6.5 s = Now: Amber sweep (2 of 8)`; `host-show.png`.
+- **Loop.** `drive.mjs show`. Reading `title card flip per phone` (within 150 ms), `cue after 6.5 s = Now: Amber sweep (2 of 8)`; `host-show.png`.
 - **Countdown.** `drive.mjs countdown`. Readings `labels read together` (all equal), `burst brightness` (>300), `keepsake` file saved in the check folder, `timed to midnight`; `phone-countdown.png`, `phone-year.png`.
 - **First dance.** `drive.mjs first-dance`. Readings `distinct colours in 3 s`, `warm (r > b) share = 1`; `phone-first-dance.png`.
 
