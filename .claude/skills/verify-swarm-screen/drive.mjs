@@ -7,6 +7,7 @@ import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { impairProxy } from './impair.mjs';
+import { pack } from 'peerjs-js-binarypack';
 import { WEBRTC_ARGS, peerBroker } from './broker.mjs';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1406,9 +1407,9 @@ const CHECKS = {
     const room = await openRoom(run, { transport: 'internet', sims: [[0.3, 0.5]], init: DC_TAP });
     const { host, phones } = room;
     const [phone] = phones;
-    const closedBy = async (label, attack) => {
+    const closedBy = async (label, attack, arg) => {
       const t = Date.now();
-      await phone.evaluate(attack);
+      await phone.evaluate(attack, arg);
       await expect(phone.locator('.status')).toContainText(/reconnecting|connecting/, { timeout: 5000 });
       run.note(`${label}: link closed after ms`, Date.now() - t);
       await expect(phone.locator('.status')).toContainText('Seat 1', { timeout: 20_000 });
@@ -1419,6 +1420,10 @@ const CHECKS = {
       for (let i = 0; i < 200; i++) dc.send(window.__first);
     });
     await closedBy('one 16 KB piece', () => window.__dcs.at(-1).send(new ArrayBuffer(16_300)));
+    // PeerJS holds the pieces of a chunked message and says nothing until the last: small pieces that
+    // promise a million more would fill the host's memory unseen. An honest phone never chunks.
+    const piece = Array.from(new Uint8Array(pack({ __peerData: 1, n: 0, total: 1_000_000, data: new Uint8Array(512) })));
+    await closedBy('one 600-byte piece of a chunked message', (bytes) => window.__dcs.at(-1).send(new Uint8Array(bytes).buffer), piece);
     run.note('phone back in its seat each time', true);
     await run.shot(phone, 'phone-back');
   },

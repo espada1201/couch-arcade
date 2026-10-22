@@ -1,7 +1,7 @@
 // Internet transport: WebRTC data channels brokered by the free public PeerJS server.
 // Only signalling goes through the broker; everything after that is phone <-> host.
 import type { DataConnection, Peer as PeerType } from 'peerjs';
-import { PHONE_MESSAGE_BYTES } from './limits.js';
+import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from './limits.js';
 import { BasicLink, RoomTakenError, backoff, sendEach, type HostEnd, type Link, type ServerState, type Transport } from './transport';
 
 const PREFIX = 'swarmscreen-v1-';
@@ -38,14 +38,31 @@ async function makePeer(id?: string): Promise<PeerType> {
   });
 }
 
+const CHUNK_MARK = '__peerData';
+const text = new TextDecoder();
+
+/** Bytes (a buffer) or characters (a string) in one piece off the data channel. */
+const pieceSize = (d: ArrayBuffer | string): number => (typeof d === 'string' ? d.length : d.byteLength);
+
+/** Whether a piece is one of PeerJS's own: a slice of a bigger message, or its close notice. */
+const isPeerPiece = (d: ArrayBuffer | string): boolean => (typeof d === 'string' ? d : text.decode(d)).includes(CHUNK_MARK);
+
 /**
- * A data connection as a Link. `limit`: the largest piece the other end may send. PeerJS stitches a
- * large message back together from 16 KB pieces before it says anything, so the host ends a phone's
- * link at its first oversized piece instead of holding pieces of a message no phone sends.
+ * A data connection as a Link. `limit`: the largest piece the other end may send, and while it is
+ * set the other end is an untrusted phone. PeerJS holds the pieces of a chunked message and says
+ * nothing until the last one comes, so none of it reaches the host's own size and rate checks, and
+ * a phone could fill the host's memory with pieces that promise more. An honest phone's messages
+ * fit one piece, so the host counts every piece against the phone's rate and ends the link at the
+ * first oversized one, or one that is part of a chunked message.
  */
 export function wrap(conn: DataConnection, limit = Infinity): BasicLink {
   const link = new BasicLink((m) => conn.send(m), () => conn.close());
-  conn.dataChannel.addEventListener('message', (e: MessageEvent<ArrayBuffer>) => e.data.byteLength > limit && link.close());
+  if (limit < Infinity) {
+    const wall = tokenBucket(PHONE_LIMIT, performance.now());
+    conn.dataChannel.addEventListener('message', (e: MessageEvent<ArrayBuffer | string>) => {
+      if (!wall.take(performance.now()) || pieceSize(e.data) > limit || isPeerPiece(e.data)) link.close();
+    });
+  }
   conn.on('data', (d) => link.deliver(d));
   conn.on('close', () => link.ended());
   conn.on('error', () => link.ended());

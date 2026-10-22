@@ -25,6 +25,7 @@
   "devDependencies": {
     "@playwright/test": "1.56.1",
     "@types/node": "^22.10.0",
+    "peerjs-js-binarypack": "^2.1.0",
     "typescript": "~5.9.3",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"

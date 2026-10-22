@@ -5,7 +5,7 @@ With no relay, phones reach the host over WebRTC data channels that the public P
 ## Sub-features
 
 - `internet-big` 60 KB song chunks and Big screen frames reach every phone (PeerJS binary serialization cuts them into 16 KB pieces).
-- `internet-guard` the host closes a phone that floods (200 copies of its hello at once) or sends a piece over 2 KB, and the phone comes back into its seat.
+- `internet-guard` the host closes a phone that floods (200 copies of its hello at once) or sends a piece over 2 KB or a small piece of a PeerJS-chunked message (which PeerJS would hold in memory), and the phone comes back into its seat.
 
 ## How to get to it (user POV)
 
@@ -16,7 +16,7 @@ With no relay, phones reach the host over WebRTC data channels that the public P
 Preconditions: none; `broker.mjs` stands in for `0.peerjs.com` at the browser's network boundary and the data flows tab to tab.
 
 - **Run.** `drive.mjs --transport internet play-song big-room cards` reruns those checks over WebRTC; `drive.mjs internet-guard` always uses Internet mode.
-- **Proof.** play-song `3 phones ready after s`; big-room `frames per phone in 10 s` (kb near 56); internet-guard `200 copies of its hello at once: link closed after ms`, `one 16 KB piece: link closed after ms`, `phone back in its seat each time`; `phone-back.png`.
+- **Proof.** play-song `3 phones ready after s`; big-room `frames per phone in 10 s` (kb near 56); internet-guard `200 copies of its hello at once: link closed after ms`, `one 16 KB piece: link closed after ms`, `one 600-byte piece of a chunked message: link closed after ms`, `phone back in its seat each time`; `phone-back.png`.
 
 ## Gotchas
 
