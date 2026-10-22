@@ -191,6 +191,7 @@ body.host { overflow-x: hidden; }
 .panel-title { margin: 0; font: 700 18px var(--display); font-stretch: 100%; color: var(--text); }
 .pointer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-left: 3px solid var(--teal); background: var(--ink-3); border-radius: 0 6px 6px 0; }
 .pointer p { margin: 0; flex: 1 1 200px; font-size: 14px; }
+label.file.primary-choice { padding: 14px; border: 1px dashed var(--amber); border-radius: 8px; color: var(--text); font-size: 14px; font-weight: 600; }
 .panel-intro { margin: 0; color: #d9d0bc; font-size: 15px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .grow { flex: 1; }

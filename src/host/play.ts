@@ -93,11 +93,12 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   show();
   const { el, say, fail } = panel(
     'Spread your photo, or your words, across the phones. Each phone shows one piece of it, then every phone flips together on a 3, 2, 1 countdown.',
+    h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
+    h('p.note', {}, 'Or pick one of these ready-made designs:'),
     thumbs,
     moments,
     h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
     h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: () => words.value.trim() && pick(textStunt(words.value.trim().toUpperCase(), session.layout.aspect)) }, 'Use words')),
-    h('label.file', { for: 'stunt-file' }, 'Or upload a picture', file),
     preview,
     rec?.el,
     flip,

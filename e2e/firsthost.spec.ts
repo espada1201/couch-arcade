@@ -172,6 +172,19 @@ test('Big screen, Show and Live screen each point to Card stunt, and Card stunt 
   expect(errors).toEqual([]);
 });
 
+for (const [w, h] of [[1280, 800], [820, 1180]]) {
+  test(`${w}px: Card stunt offers the picture upload first, in view`, async ({ context }) => {
+    const errors: string[] = [];
+    const { host } = await openHost(context, errors);
+    await host.setViewportSize({ width: w, height: h });
+    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    const above = await host.evaluate(() => document.querySelector('#stunt-file')!.getBoundingClientRect().top < document.querySelector('.thumbs')!.getBoundingClientRect().top);
+    expect(above).toBe(true);
+    expect(await inViewport(host, '#stunt-file')).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');
