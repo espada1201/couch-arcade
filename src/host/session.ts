@@ -34,6 +34,8 @@ export interface Seat {
   sentAt: number;
   /** Smoothed time from sending a frame to its ack (ms); 0 until measured. */
   ackRtt: number;
+  /** The frame the watchdog stopped waiting for, until its ack comes: that ack still tells the round trip. */
+  late: { n: number; at: number } | null;
   /** When the phone's link last closed (0 if never, or before a reload). */
   left: number;
 }
@@ -42,7 +44,7 @@ type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
 
 /** A seat as it starts out, or comes back from a saved room: no link, nothing in flight. */
 function blankSeat(x: Pick<Seat, 'seat' | 'token' | 'raw' | 'source'>, link: Link | null = null): Seat {
-  return { ...x, link, sync: Infinity, lastTap: 0, awaiting: 0, held: null, sentAt: 0, ackRtt: 0, left: 0 };
+  return { ...x, link, sync: Infinity, lastTap: 0, awaiting: 0, held: null, sentAt: 0, ackRtt: 0, late: null, left: 0 };
 }
 
 interface Conn {
@@ -336,10 +338,19 @@ export class HostSession {
 
   /** The phone confirmed frame `n`: the newest held one goes now. */
   private acked(s: Seat, n: number): void {
+    // An ack that took longer than the wait: the phone is slower than the watchdog thought, so learn it.
+    if (s.late?.n === n) {
+      this.learnRtt(s, this.now() - s.late.at);
+      s.late = null;
+      return;
+    }
     if (n < s.awaiting) return;
-    const rtt = this.now() - s.sentAt;
-    if (n === s.awaiting) s.ackRtt = s.ackRtt ? 0.75 * s.ackRtt + 0.25 * rtt : rtt;
+    if (n === s.awaiting) this.learnRtt(s, this.now() - s.sentAt);
     this.release(s);
+  }
+
+  private learnRtt(s: Seat, rtt: number): void {
+    s.ackRtt = s.ackRtt ? 0.75 * s.ackRtt + 0.25 * rtt : rtt;
   }
 
   /** Stop waiting for the frame in flight and send the newest held one. */
@@ -366,7 +377,11 @@ export class HostSession {
     const silent = this.end?.heartbeat ? Infinity : SILENT_MS;
     for (const c of this.conns) if (c.seat ? now - c.heard > silent : now - c.opened > HELLO_MS) c.link.close();
     // A frame whose ack never came (a lost message, a phone that forgot) must not freeze that phone's picture.
-    for (const s of this.online) if (s.awaiting && now - s.sentAt > Math.max(ACK_WAIT_MS, 8 * s.ackRtt)) this.release(s);
+    for (const s of this.online) {
+      if (!s.awaiting || now - s.sentAt <= Math.max(ACK_WAIT_MS, 8 * s.ackRtt)) continue;
+      s.late = { n: s.awaiting, at: s.sentAt };
+      this.release(s);
+    }
   }
 
   private accept(link: Link): void {
@@ -465,6 +480,7 @@ export class HostSession {
         s.awaiting = 0;
         s.held = null;
         s.ackRtt = 0;
+        s.late = null;
         return s;
       }
     const seat = this.freeSeat();

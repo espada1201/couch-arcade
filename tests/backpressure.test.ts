@@ -87,4 +87,28 @@ describe('picture frames to a phone that falls behind', () => {
     r.session.sweep();
     expect(seqs(p.inbox)).toEqual([1, 2, 3, 4, 5, 6]);
   });
+
+  it('learns the round trip of an ack that comes after the 2 s wait, and then waits eight of them', async () => {
+    const r = await room([0.5]);
+    const [p] = r.phones;
+    r.session.setProgram(frame(1), { frame: true });
+    r.session.setProgram(frame(2), { frame: true });
+    const first = programs(p.inbox).at(-1)!.ack!;
+    r.tick(2100);
+    r.session.sweep();
+    expect(seqs(p.inbox)).toEqual([1, 2]);
+    r.tick(900);
+    p.say({ t: 'ack', n: first });
+    r.session.setProgram(frame(3), { frame: true });
+    // Frame 1 took 3 s to come back, so frame 2 gets about 24 s, not 2.
+    r.tick(5000);
+    p.say({ t: 'ping', c0: 0 });
+    r.session.sweep();
+    expect(seqs(p.inbox)).toEqual([1, 2]);
+    r.tick(10_000);
+    p.say({ t: 'ping', c0: 0 });
+    r.tick(10_000);
+    r.session.sweep();
+    expect(seqs(p.inbox)).toEqual([1, 2, 3]);
+  });
 });
