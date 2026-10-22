@@ -14,7 +14,7 @@ test('the camera finds every phone, then the crowd shows a card stunt', async ({
     const y = Number(await row.getAttribute('data-raw-y'));
     expect(Math.abs(x - SIMS[i][0]), `phone ${i} x`).toBeLessThan(0.025);
     expect(Math.abs(y - SIMS[i][1]), `phone ${i} y`).toBeLessThan(0.035);
-    await expect(room.phones[i].locator('.status')).toContainText('placed');
+    await expect(room.phones[i].locator('.status')).toContainText(/· on the map$/);
   }
 
   // Keyboard placement: pick a phone on the map with ] and nudge it with an arrow key.

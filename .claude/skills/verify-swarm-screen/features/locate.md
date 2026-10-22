@@ -12,13 +12,13 @@ Step one for a host: find where every phone sits. Phones flash blink codes and t
 
 ## How to get to it (user POV)
 
-- Host console, tab "Locate": Start camera / Scan the room; "Camera at an angle? Correct perspective"; "No camera? Use seat numbers"; the "Not placed" tray and the room map.
+- Host console, tab "Locate": Start camera / Scan the room; "Camera at an angle? Correct perspective"; "No camera? Use seat numbers"; the "Not on the map yet" tray and the room map.
 
 ## Driving it with drive.mjs
 
 Preconditions: none beyond Doctor; each check joins its own phones.
 
-- **Blink scan.** `drive.mjs scan`. Reading `position error |dx|,|dy|` per phone; phones' status says `placed`; `host-located.png`.
+- **Blink scan.** `drive.mjs scan`. Reading `position error |dx|,|dy|` per phone; phones' status says `on the map`; `host-located.png`.
 - **Real fake-camera video.** `drive.mjs real-camera` (writes `<out>/room.y4m` once). Readings `camera position error`, `floor-plan error`; `host-real-camera.png`, `host-perspective.png`.
 - **Seat grid.** `drive.mjs seat-grid`. Phones answer 1-1, 1-3, 2-1, 2-3 in a 2x3 grid; `map x,y` must be `[[0,0],[1,0],[0,1],[1,1]]`, `data-source=grid`; `phone-seat-form.png`, `host-grid.png`.
 - **Manual and keyboard.** `drive.mjs drag`. Readings: tap-to-place lands at 0.30,0.50, drag ends at 0.70,0.40, Shift+ArrowLeft moves x by -0.1; `host-manual.png`.

@@ -188,6 +188,7 @@ body.host { overflow-x: hidden; }
 .tab[aria-selected='true'] .tab-num { color: var(--amber); }
 .panel { overflow-y: auto; flex: 1; }
 .panel-body { padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 14px; }
+.panel-title { margin: 0; font: 700 18px var(--display); font-stretch: 100%; color: var(--text); }
 .panel-intro { margin: 0; color: #d9d0bc; font-size: 15px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .grow { flex: 1; }
@@ -284,6 +285,10 @@ body.phone { overscroll-behavior: none; }
 .awake-hint {
   position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); margin: 0 auto; max-width: 420px;
   padding: 10px 14px; border-radius: 12px; background: rgba(14, 13, 11, 0.85); color: var(--amber); font-size: 15px; text-align: center; pointer-events: none;
+}
+.map-hint {
+  position: fixed; left: 16px; right: 16px; top: calc(max(10px, env(safe-area-inset-top)) + 40px); margin: 0 auto; max-width: 420px;
+  padding: 10px 14px; border-radius: 12px; background: rgba(14, 13, 11, 0.85); color: var(--text); font-size: 15px; text-align: center; pointer-events: none;
 }
 .nosleep { position: fixed; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; z-index: -1; }
 .you-voted {
@@ -436,5 +441,5 @@ label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
 .follow.preview { position: relative; inset: auto; z-index: auto; aspect-ratio: 16 / 9; border-radius: 8px; padding: 12px; }
 .follow.preview[data-show='picture'] { padding: 0; }
 /* The connection pill and any prompt stay on top of the picture. */
-.status, .overlay, .awake-hint { z-index: 2; }
+.status, .overlay, .awake-hint, .map-hint { z-index: 2; }
 .follow-source .row { align-items: center; }

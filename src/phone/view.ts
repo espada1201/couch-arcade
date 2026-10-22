@@ -60,12 +60,14 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
 
   const label = h('div.label', { 'aria-live': 'polite' });
   const status = h('div.status', { role: 'status' });
+  // Said on the waiting screen until the host has put this phone on the map; the host does it, not the owner.
+  const mapHint = h('p.map-hint', { hidden: true }, 'The host will put your phone on the map. You do not need to do anything. Keep this page open.');
   const layers = overlays(client, (choice) => (navigator.vibrate?.(12), client.vote(choice)));
   const mine = youVoted();
   const follow = new FollowScreen();
   const party = new PartySpeaker(client, speaker);
   client.onChunk = (m) => party.chunk(m);
-  const screen = h('div.screen', {}, label, follow.el, party.el, status, awakeHint, mine.el, ...layers.map((l) => l.el));
+  const screen = h('div.screen', {}, label, follow.el, party.el, status, awakeHint, mapHint, mine.el, ...layers.map((l) => l.el));
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
@@ -128,10 +130,11 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const showStatus = () => {
     party.sync();
     const seat = client.seat >= 0 ? `Seat ${client.seat + 1}` : 'Joining';
-    const place = client.pos ? 'placed' : 'not placed yet';
+    const place = client.pos ? 'on the map' : 'not on the map yet';
     const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', replaced: 'open in another tab', failed: 'disconnected' }[client.status];
     setText(status, `${room} · ${seat} · ${state}`);
     status.dataset.state = client.status;
+    mapHint.hidden = !(client.status === 'live' && !client.pos && client.program.kind === 'lobby');
 
     const p = client.program;
     follow.show(p.kind === 'follow' ? p.view : null);

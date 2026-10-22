@@ -89,6 +89,20 @@ test('a phone that left is labelled away on the map and the page says how to rem
   expect(errors).toEqual([]);
 });
 
+test('plain words: not on the map yet, put phones on the map, and the phone says the host does it', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  await expect(host.getByRole('heading', { level: 3, name: 'Put phones on the map' })).toBeVisible();
+  await expect(host.getByRole('tab', { name: /Locate/ })).toBeVisible();
+  const phone = await joinPhone(context, code, 0, errors);
+  await expect(phone.locator('.status')).toContainText(/· not on the map yet$/);
+  await expect(phone.locator('.map-hint')).toContainText('The host will put your phone on the map');
+  await expect(host.getByRole('group', { name: 'Phones not on the map yet' })).toContainText('Not on the map yet');
+  await expect(host.locator('.count')).toContainText('0 on the map');
+  await expect(host.getByText(/not placed|Not placed/)).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

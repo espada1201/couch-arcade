@@ -463,7 +463,7 @@ const CHECKS = {
       const dy = Math.abs(Number(await row.getAttribute('data-raw-y')) - SIMS[i][1]);
       err.push([+dx.toFixed(3), +dy.toFixed(3)]);
       if (dx > 0.025 || dy > 0.035) run.issue(`phone ${i} placed ${dx.toFixed(3)},${dy.toFixed(3)} off`);
-      await expect(room.phones[i].locator('.status')).toContainText('placed');
+      await expect(room.phones[i].locator('.status')).toContainText(/· on the map$/);
     }
     run.note('position error |dx|,|dy|', err);
     run.note('host count', await room.host.locator('.count').textContent());
@@ -548,7 +548,7 @@ const CHECKS = {
       const row = host.locator(`tr[data-seat="${s}"]`);
       await expect(row).toHaveAttribute('data-source', 'grid');
       got.push([Number(await row.getAttribute('data-x')), Number(await row.getAttribute('data-y'))]);
-      await expect(phones[i].locator('.status')).toContainText('placed');
+      await expect(phones[i].locator('.status')).toContainText(/· on the map$/);
     }
     run.note('typed row,seat', typed);
     run.note('map x,y', got);
@@ -576,7 +576,7 @@ const CHECKS = {
       return [Number(await row.getAttribute('data-x')), Number(await row.getAttribute('data-y'))];
     };
     const [s0, s1] = room.seats;
-    await expect(host.getByRole('group', { name: 'Phones not placed yet' })).toBeVisible();
+    await expect(host.getByRole('group', { name: 'Phones not on the map yet' })).toBeVisible();
     await host.locator('.tray .chip', { hasText: String(s0 + 1) }).click();
     const [cx, cy] = await toPage(0.3, 0.5);
     await host.mouse.click(cx, cy);
@@ -607,7 +607,7 @@ const CHECKS = {
     await host.keyboard.press('Shift+ArrowLeft');
     await expect.poll(async () => (await pos(seat))[0]).toBeLessThan(before[0] - 0.08);
     run.note('Shift+ArrowLeft moved', [before, await pos(seat)]);
-    await expect(room.phones[0].locator('.status')).toContainText('placed');
+    await expect(room.phones[0].locator('.status')).toContainText(/· on the map$/);
     await run.shot(host, 'host-manual');
   },
 
@@ -1601,7 +1601,7 @@ const CHECKS = {
       sockets.at(-1).srv.close();
       await expect(p3.locator('.status')).toContainText(/reconnecting/, { timeout: 5000 });
       await run.shot(p3, 'phone-reconnecting');
-      await expect(p3.locator('.status')).toContainText(`Seat ${seat3 + 1} · not placed yet`, { timeout: 15_000 });
+      await expect(p3.locator('.status')).toContainText(`Seat ${seat3 + 1} · not on the map yet`, { timeout: 15_000 });
       run.note('socket drop -> back live ms', Date.now() - t);
     }
     // Host reload: same room code, phones return.
@@ -1631,7 +1631,7 @@ const CHECKS = {
       try {
         await expect(host.locator('.count')).toHaveText(/^3 phones /, { timeout: 30_000 });
         for (const [i, p] of [...phones, p3].entries())
-          await expect(p.locator('.status')).toContainText(new RegExp(`Seat ${seatsBefore[i] + 1} · (placed|not placed yet)$`), { timeout: 30_000 });
+          await expect(p.locator('.status')).toContainText(new RegExp(`Seat ${seatsBefore[i] + 1} · (on the map|not on the map yet)$`), { timeout: 30_000 });
         back = true;
       } catch {}
       run.note('room recovers after relay restart, same seats (30 s)', back);

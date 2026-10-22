@@ -21,7 +21,7 @@ export class Stage {
   private pick: ((p: Point) => void) | null = null;
   private canvas = h('canvas.stage-canvas', { tabindex: 0, role: 'img', 'aria-describedby': 'stage-keys' });
   private empty = h('div.stage-empty');
-  private tray = h('div.tray', { role: 'group', 'aria-label': 'Phones not placed yet' });
+  private tray = h('div.tray', { role: 'group', 'aria-label': 'Phones not on the map yet' });
   private table = h('table.sr-only', { 'aria-label': 'Phone positions' });
   private away = h('p.stage-away', { hidden: true });
   private hint = h('p.stage-hint', { id: 'stage-keys', hidden: true });
@@ -80,16 +80,16 @@ export class Stage {
           ? `${plural(gone.length, 'phone')} joined, but ${gone.length === 1 ? 'it has' : 'they have'} left. Scan the QR code to bring ${gone.length === 1 ? 'it' : 'them'} back.`
           : `${plural(here.length, 'phone')} ${gone.length ? 'are here' : 'joined'}.` +
             (gone.length ? ` ${plural(gone.length, 'phone')} ${gone.length === 1 ? 'has' : 'have'} left.` : '') +
-            ' Scan the room with the camera, or pick a number below and tap the map to place it.';
+            ' Scan the room with the camera, or pick a number below and then tap the map to put that phone there.';
     const goneIds = gone.map((x) => x.seat + 1).join(', ');
     this.away.hidden = gone.length === 0;
     this.away.textContent = gone.length
       ? `${gone.length === 1 ? `Phone ${goneIds} has` : `Phones ${goneIds} have`} left (dashed outline). Press “Remove disconnected phones” at the top to take ${gone.length === 1 ? 'it' : 'them'} off the map.`
       : '';
-    this.canvas.setAttribute('aria-label', `Room map with ${plural(placed.length, 'placed phone')}`);
+    this.canvas.setAttribute('aria-label', `Room map with ${plural(placed.length, 'phone')} on it`);
     this.tray.hidden = unplaced.length === 0;
     this.tray.replaceChildren(
-      h('span.tray-label', {}, 'Not placed'),
+      h('span.tray-label', {}, 'Not on the map yet'),
       ...unplaced.map((x) =>
         h(
           'button.chip',
