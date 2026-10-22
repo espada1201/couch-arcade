@@ -158,7 +158,7 @@ function envelope(raw) {
 const REPORT_CHARS = 4096;
 
 /**
- * Write `s` to a phone and, once enough has gone out, tell the host how many messages the phone's
+ * Write `data` to a phone and, once enough has gone out, tell the host how many messages the phone's
  * socket has taken: that is how the host sees each phone's own backlog through its one socket.
  */
 function forward(r, id, p, data) {
