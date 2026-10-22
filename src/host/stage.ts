@@ -5,7 +5,7 @@ import { cssFloor, luma, render } from '../core/effects';
 import { distance, type Point } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { fitCanvas } from '../ui/canvas';
-import { h } from '../ui/dom';
+import { h, plural } from '../ui/dom';
 import type { HostSession } from './session';
 
 interface Box {
@@ -67,8 +67,8 @@ export class Stage {
     this.empty.textContent =
       seats.length === 0
         ? 'No phones yet. Scan the QR code with a phone to join.'
-        : `${seats.length} phone${seats.length === 1 ? '' : 's'} joined. Scan the room with the camera, or pick a number below and tap the map to place it.`;
-    this.canvas.setAttribute('aria-label', `Room map with ${placed.length} placed phone${placed.length === 1 ? '' : 's'}`);
+        : `${plural(seats.length, 'phone')} joined. Scan the room with the camera, or pick a number below and tap the map to place it.`;
+    this.canvas.setAttribute('aria-label', `Room map with ${plural(placed.length, 'placed phone')}`);
     this.tray.hidden = unplaced.length === 0;
     this.tray.replaceChildren(
       h('span.tray-label', {}, 'Not placed'),

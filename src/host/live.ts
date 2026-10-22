@@ -3,7 +3,7 @@
 // its own pixel, all switching on the same synced instant so the picture never tears.
 import { BLACK } from '../core/effects';
 import { sampleCrowd, type RGB } from '../core/layout';
-import { h, segmented, slider } from '../ui/dom';
+import { h, plural, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
 import { panel, requirePlaced, stopButton } from './panel';
 import type { HostSession } from './session';
@@ -181,7 +181,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     goLive.disabled = false;
     if (!ok) return void (live = false);
     loop = broadcast(session, ctx, draw, fps);
-    say(`Broadcasting to ${session.layout.positions.size} phones at ${fps} frames a second.`);
+    say(`Broadcasting to ${plural(session.playRoom().positions.size, 'phone')} at ${fps} frames a second.`);
   };
   goLive.addEventListener('click', start);
 

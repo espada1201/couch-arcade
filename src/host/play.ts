@@ -4,7 +4,7 @@ import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type WavePar
 import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
 import type { PotatoState } from '../core/potato';
 import { teamSizes, type TerritoryState } from '../core/territory';
-import { css, h, segmented, slider } from '../ui/dom';
+import { css, h, plural, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { fileStunt, presets, textStunt, type Stunt } from './images';
@@ -57,7 +57,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     if (!requirePlaced(session, say)) return;
     director.take();
     flipCards(session, chosen.image);
-    say(`3, 2, 1… ${session.layout.positions.size} phones flip together.`);
+    const n = session.playRoom().positions.size;
+    say(`3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'flips' : 'flip'} together.`);
   });
   show();
   const { el, say } = panel(
@@ -190,7 +191,7 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
     say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
   const { el, say } = panel(
-    'Every phone is one speaker, timed to the millisecond on the shared clock, so sound physically moves through the crowd. Each phone sings its own note, set by where it sits.',
+    'Every phone is one speaker, timed to within a few milliseconds on the shared clock, so sound physically moves through the crowd. Each phone sings its own note, set by where it sits.',
     h(
       'div.sound-list',
       { role: 'radiogroup', 'aria-label': 'Sound' },
@@ -228,7 +229,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
             ? s.winner === null
               ? 'Dead heat. A draw!'
               : `${s.winner === 0 ? 'Amber' : 'Teal'} wins with ${Math.round((s.winner === 0 ? s.boundary : 1 - s.boundary) * 100)}% of the floor.`
-            : `Amber ${a} phones, ${s.taps[0]} taps · Teal ${b} phones, ${s.taps[1]} taps · ${left}s left`;
+            : `Amber ${plural(a, 'phone')}, ${plural(s.taps[0], 'tap')} · Teal ${plural(b, 'phone')}, ${plural(s.taps[1], 'tap')} · ${left}s left`;
       },
     });
   const { el, say } = panel(
@@ -247,10 +248,10 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
       ...POTATO_RULES,
       show: (s, prev, room) => {
         if (s === prev) return;
-        if (s.phase === 'over') score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${s.passes} throws.`;
+        if (s.phase === 'over') score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${plural(s.passes, 'throw')}.`;
         else if (!prev || prev.out.length !== s.out.length || prev.holder !== s.holder) {
           const alive = room.positions.size - s.out.length;
-          score.textContent = `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${s.passes} throws`;
+          score.textContent = `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${plural(s.passes, 'throw')}`;
         }
       },
     });

@@ -5,7 +5,7 @@ import { DEFAULT_HALF_MS, DEFAULT_REPEATS, scheduleDuration, type BlinkSchedule 
 import { seatGridPoint, type Point } from '../core/layout';
 import { validCorners } from '../core/homography';
 import { localize, type GrayFrame, type LocalizeResult } from '../core/localize';
-import { h } from '../ui/dom';
+import { h, plural } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
 import type { Director } from './director';
 import type { HostSession } from './session';
@@ -157,7 +157,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     progress.hidden = false;
     const started = session.now();
     tick = window.setInterval(() => (progress.value = Math.min(1, (session.now() - started) / total)), 100);
-    result.textContent = `${online.length} phone${online.length === 1 ? ' is' : 's are'} flashing their codes. Keep the camera still…`;
+    result.textContent = `${plural(online.length, 'phone')} ${online.length === 1 ? 'is' : 'are'} flashing their codes. Keep the camera still…`;
     await sleep(total);
     if (cancelled) return;
     clearInterval(tick);
@@ -183,7 +183,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     result.textContent =
       found.size === 0
         ? `Couldn’t see any codes (${frames.length} frames). Check every screen faces the camera at full brightness, then scan again.`
-        : `Placed ${found.size} of ${online.length} phones.` + (missing.length ? ` Not seen: ${missing.join(', ')}. Scan again, or drag them onto the map.` : '');
+        : `Placed ${found.size} of ${plural(online.length, 'phone')}.` + (missing.length ? ` Not seen: ${missing.join(', ')}. Scan again, or drag them onto the map.` : '');
     if (shaky.length && missing.length) result.textContent += ` Phones ${shaky.join(', ')} had a weak connection during the scan.`;
     finish();
     drawOverlay();
@@ -283,7 +283,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     useBtn.disabled = true;
   });
   session.subscribe(() => {
-    if (asking) answered.textContent = `${session.gridEntries.size} of ${session.online.length} phones have answered.`;
+    if (asking) answered.textContent = `${session.gridEntries.size} of ${plural(session.online.length, 'phone')} ${session.gridEntries.size === 1 ? 'has' : 'have'} answered.`;
   });
 
   return h(

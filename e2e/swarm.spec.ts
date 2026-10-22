@@ -219,7 +219,7 @@ test('territory and hot potato respond to taps; a refreshed phone keeps its seat
   let h: Page | null = null;
   await expect.poll(async () => (h = await holder()) !== null, { timeout: 5000 }).toBe(true);
   await h!.locator('.screen').click({ position: { x: 100, y: 400 } });
-  await expect(room.host.locator('.score')).toContainText('1 throws');
+  await expect(room.host.locator('.score')).toContainText(/· 1 throw$/);
   await h!.screenshot({ path: 'test-results/phone-potato.png' });
 
   // Refresh a phone: it rejoins in the same seat.

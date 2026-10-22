@@ -48,3 +48,8 @@ export function slider(label: string, min: number, max: number, step: number, va
   });
   return h('label.slider', {}, h('span', {}, label), input, out);
 }
+
+/** "1 phone", "3 phones". */
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
