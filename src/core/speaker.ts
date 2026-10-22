@@ -102,24 +102,79 @@ export function segments(tl: Timeline, duration: number, from: number): Segment[
 
 /** How far (ms) a source's anchor may stray before it is re-scheduled. */
 export const DRIFT_TOLERANCE_MS = 20;
+/** Checks in a row a source must be out of tolerance before it is replaced: one reading alone can be sampling noise. */
+export const RESYNC_AFTER = 2;
+
+/** A source that is sounding: the anchor it was scheduled for, the anchor it really has, and how many checks in a row it has been out of tolerance. */
+export interface Sounding {
+  planned: number;
+  anchor: number;
+  strikes: number;
+}
 
 export interface Decision {
   /** Keep the sounding source for this stretch (stop it at `until`); null means stop it now. */
   keep: Segment | null;
   /** New sources to schedule. */
   start: Segment[];
+  /** The kept source's checks in a row out of tolerance. */
+  strikes: number;
 }
 
 /**
  * What a phone should do at host time `now`, given the anchor its sounding source really has
  * (measured through its own audio clock). Audio clocks drift against the system clock, and the
- * clock offset estimate moves too; once the error passes the tolerance the source is replaced.
+ * clock offset estimate moves too; once the error stays past the tolerance for RESYNC_AFTER checks
+ * the source is replaced. A new plan (play, seek) replaces it at once.
  */
-export function reconcile(tl: Timeline, duration: number, now: number, sounding: { anchor: number } | null): Decision {
+export function reconcile(tl: Timeline, duration: number, now: number, sounding: Sounding | null): Decision {
   const segs = segments(tl, duration, now);
   const first = segs[0];
-  if (sounding && first && first.from <= now && Math.abs(sounding.anchor - first.anchor) <= DRIFT_TOLERANCE_MS) return { keep: first, start: segs.slice(1) };
-  return { keep: null, start: segs };
+  if (sounding && first && first.from <= now && first.anchor === sounding.planned) {
+    const strikes = Math.abs(sounding.anchor - first.anchor) <= DRIFT_TOLERANCE_MS ? 0 : sounding.strikes + 1;
+    if (strikes < RESYNC_AFTER) return { keep: first, start: segs.slice(1), strikes };
+  }
+  return { keep: null, start: segs, strikes: 0 };
+}
+
+/** What AudioContext.getOutputTimestamp reports: the sample leaving the speaker, and when. */
+export interface OutputStamp {
+  contextTime?: number;
+  performanceTime?: number;
+}
+
+/** A stamp older than this predates a suspend, so it no longer describes the running clock. */
+const STAMP_MAX_AGE_MS = 250;
+
+/** Maps host time (ms) to this phone's audio clock (s) and back, for the moment the sound is heard. */
+export interface AudioClock {
+  toCtx(host: number): number;
+  toHost(ctxTime: number): number;
+}
+
+/**
+ * Pair the audio clock with the host clock. The output timestamp pairs a sample with the moment the
+ * browser measured it leaving the speaker, so it includes the output latency and has no callback
+ * jitter. Without a fresh one (an older browser, a context that has only just started or resumed),
+ * currentTime is paired with now, which is only as precise as the audio callback (10 ms or more),
+ * and the latency is added by hand.
+ */
+export function audioClock(r: { stamp?: OutputStamp | null; currentTime: number; perfNow: number; latency: number; hostOffset: number }): AudioClock {
+  const s = r.stamp;
+  const fresh = !!s?.performanceTime && s.contextTime !== undefined && Math.abs(r.perfNow - s.performanceTime) < STAMP_MAX_AGE_MS;
+  const ctx = fresh ? s!.contextTime! : r.currentTime;
+  const heard = (fresh ? s!.performanceTime! : r.perfNow + r.latency * 1000) + r.hostOffset;
+  return { toCtx: (host) => ctx + (host - heard) / 1000, toHost: (c) => heard + (c - ctx) * 1000 };
+}
+
+/**
+ * Where a source starts: at audio time `when` from track `offset` (s). If that moment has already
+ * passed (a slow decode, a stalled page), it starts now and that much further into the track, so it
+ * joins in step rather than late.
+ */
+export function startPoint(when: number, offset: number, ctxNow: number): { when: number; offset: number } {
+  const late = ctxNow - when;
+  return late > 0 ? { when: ctxNow, offset: offset + late } : { when, offset };
 }
 
 export type Channel = 'stereo' | 'left' | 'right' | 'mono';

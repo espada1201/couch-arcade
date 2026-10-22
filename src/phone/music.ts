@@ -3,7 +3,7 @@
 // is re-checked every couple of seconds, because the audio clock drifts against the
 // system clock (and the clock-offset estimate moves); the decision itself is pure, in
 // core/speaker.ts.
-import { channelFor, clockTime, PAUSED, playingAt, positionAt, reconcile, type Channel, type Segment, type SpeakerProgram, type Track } from '../core/speaker';
+import { audioClock, channelFor, clockTime, PAUSED, playingAt, positionAt, reconcile, startPoint, type AudioClock, type Channel, type Segment, type SpeakerProgram, type Track } from '../core/speaker';
 import { Reassembler, type ChunkMsg } from '../net/chunks';
 import { h, setText } from '../ui/dom';
 import { stop, type Speaker } from './audio';
@@ -21,16 +21,14 @@ interface Voice {
   ctxFrom: number;
   offset: number;
   seg: Segment;
+  /** Drift checks in a row this voice has been out of tolerance. */
+  strikes: number;
 }
 
 type Load = 'loading' | 'decoding' | 'ready' | 'error';
 
-/** Maps between host time (ms) and this phone's audio clock (s), sampled once. */
-interface Clocks {
-  hostNow: number;
-  toCtx: (host: number) => number;
-  toHost: (ctxTime: number) => number;
-}
+/** Host time now, and the mapping to this phone's audio clock, sampled once. */
+type Clocks = AudioClock & { hostNow: number };
 
 export class PartySpeaker {
   readonly el: HTMLElement;
@@ -122,15 +120,16 @@ export class PartySpeaker {
   }
 
   private clocks(ctx: AudioContext): Clocks {
+    const perfNow = performance.now();
     const hostNow = this.client.hostNow();
-    const ct = ctx.currentTime;
-    // The sound leaves the speaker `latency` after it is scheduled, so schedule that much early.
-    const latency = this.speaker.latency();
-    return {
-      hostNow,
-      toCtx: (host) => ct + (host - hostNow) / 1000 - latency,
-      toHost: (c) => hostNow + (c - ct + latency) * 1000,
-    };
+    const clock = audioClock({
+      stamp: ctx.getOutputTimestamp?.(),
+      currentTime: ctx.currentTime,
+      perfNow,
+      latency: this.speaker.latency(),
+      hostOffset: hostNow - perfNow,
+    });
+    return { ...clock, hostNow };
   }
 
   /** Host time at which position 0 of the track is heard, judging by the voice's real schedule. */
@@ -142,8 +141,9 @@ export class PartySpeaker {
     const p = this.program;
     const ctx = this.speaker.context;
     const ok = p && this.buffer && p.track?.id === this.track?.id;
-    if (!ok) this.silence();
-    else if (ctx && ctx.state === 'running') {
+    // A suspended context (a call, a locked phone) stops its clock, so its sources would resume late: start afresh instead.
+    if (!ok || !ctx || ctx.state !== 'running') this.silence();
+    else {
       this.route(ctx, p);
       const key = JSON.stringify(p.tl);
       const now = performance.now();
@@ -161,12 +161,13 @@ export class PartySpeaker {
     const at = c.hostNow + MARGIN_MS + this.speaker.latency() * 1000;
     this.voices = this.voices.filter((v) => v.seg.until > c.hostNow);
     const sounding = this.voices.find((v) => v.seg.from <= at && at < v.seg.until) ?? null;
-    const d = reconcile(p.tl, buffer.duration, at, sounding && { anchor: this.anchorOf(sounding, c) });
+    const d = reconcile(p.tl, buffer.duration, at, sounding && { planned: sounding.seg.anchor, anchor: this.anchorOf(sounding, c), strikes: sounding.strikes });
     const kept = d.keep ? sounding : null;
     for (const v of this.voices) if (v !== kept) stop(v.node, c.toCtx(at));
     this.voices = [];
     if (kept && d.keep) {
       kept.seg = d.keep;
+      kept.strikes = d.strikes;
       stop(kept.node, c.toCtx(d.keep.until));
       this.voices.push(kept);
     }
@@ -174,10 +175,10 @@ export class PartySpeaker {
       const node = ctx.createBufferSource();
       node.buffer = buffer;
       node.connect(this.input!);
-      const v: Voice = { node, ctxFrom: c.toCtx(seg.from), offset: (seg.from - seg.anchor) / 1000, seg };
-      node.start(v.ctxFrom, v.offset);
+      const { when, offset } = startPoint(c.toCtx(seg.from), (seg.from - seg.anchor) / 1000, ctx.currentTime);
+      node.start(when, offset);
       stop(node, c.toCtx(seg.until));
-      this.voices.push(v);
+      this.voices.push({ node, ctxFrom: when, offset, seg, strikes: 0 });
     }
   }
 

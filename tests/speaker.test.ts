@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { audioFileProblem, channelFor, clockTime, durationProblem, MAX_TRACK_BYTES, MAX_TRACK_SECONDS, PAUSED, positionAt, reconcile, schedule, segments, type Timeline } from '../src/core/speaker';
+import { audioClock, audioFileProblem, channelFor, clockTime, DRIFT_TOLERANCE_MS, durationProblem, MAX_TRACK_BYTES, MAX_TRACK_SECONDS, PAUSED, positionAt, reconcile, schedule, segments, startPoint, type Timeline } from '../src/core/speaker';
+import { gaussian, rng } from './rng';
 
 const DUR = 100; // seconds
 
@@ -68,29 +69,147 @@ describe('party speaker timeline', () => {
 
 describe('drift correction', () => {
   const tl = schedule(PAUSED, 0, 1000, DUR, 'play'); // anchor 1000
+  const playing = (anchor: number, strikes = 0) => ({ planned: 1000, anchor, strikes });
 
   it('keeps a source that is within tolerance', () => {
-    expect(reconcile(tl, DUR, 20_000, { anchor: 1012 })).toEqual({ keep: { anchor: 1000, from: 20_000, until: 101_000 }, start: [] });
+    expect(reconcile(tl, DUR, 20_000, playing(1012))).toEqual({ keep: { anchor: 1000, from: 20_000, until: 101_000 }, start: [], strikes: 0 });
   });
 
-  it('re-schedules a source that has drifted more than 20 ms', () => {
-    const d = reconcile(tl, DUR, 20_000, { anchor: 1031 });
+  it('re-schedules a source only once it has been more than 20 ms out on two checks in a row', () => {
+    const once = reconcile(tl, DUR, 20_000, playing(1031));
+    expect(once).toEqual({ keep: { anchor: 1000, from: 20_000, until: 101_000 }, start: [], strikes: 1 });
+    const twice = reconcile(tl, DUR, 22_000, playing(1031, once.strikes));
+    expect(twice).toEqual({ keep: null, start: [{ anchor: 1000, from: 22_000, until: 101_000 }], strikes: 0 });
+    // A reading back in tolerance clears the count.
+    expect(reconcile(tl, DUR, 22_000, playing(1005, once.strikes)).strikes).toBe(0);
+  });
+
+  it('replaces the source at once when the plan moves (a seek), however close the anchors are', () => {
+    const seek = schedule(tl, 5000, 500, DUR, { seek: 4.49 }); // the new anchor is 10 ms from the old one
+    const d = reconcile(seek, DUR, 6000, playing(1000));
     expect(d.keep).toBeNull();
-    expect(d.start).toEqual([{ anchor: 1000, from: 20_000, until: 101_000 }]);
+    expect(d.start).toEqual([{ anchor: 5500 - 4490, from: 6000, until: 5500 - 4490 + DUR * 1000 }]);
   });
 
   it('starts from scratch when nothing is sounding, and stays silent while paused', () => {
     expect(reconcile(tl, DUR, 20_000, null).start).toHaveLength(1);
     const paused = schedule(tl, 30_000, 0, DUR, 'pause');
-    expect(reconcile(paused, DUR, 40_000, { anchor: 1000 })).toEqual({ keep: null, start: [] });
+    expect(reconcile(paused, DUR, 40_000, playing(1000))).toEqual({ keep: null, start: [], strikes: 0 });
   });
 
   it('keeps the current source through a scheduled pause, and queues the next stretch', () => {
     let t = schedule(tl, 5000, 500, DUR, 'pause');
     t = schedule(t, 5000, 2000, DUR, 'play');
-    const d = reconcile(t, DUR, 5100, { anchor: 1000 });
+    const d = reconcile(t, DUR, 5100, playing(1000));
     expect(d.keep).toEqual({ anchor: 1000, from: 5100, until: 5500 });
     expect(d.start).toEqual([{ anchor: 7000 - 4500, from: 7000, until: 7000 - 4500 + DUR * 1000 }]);
+  });
+});
+
+describe('drift correction against sampling noise', () => {
+  const LONG = 10_000; // seconds, so the track never ends mid-simulation
+  const CHECK_MS = 2000;
+
+  /**
+   * Reading a phone's anchor pairs its audio clock with the system clock. Paired through currentTime
+   * that reading is only as precise as the audio callback: headless Chromium's 10 ms callbacks gave a
+   * 14.9 ms spread, and phones run 20 ms buffers, so ±10 ms. The clock offset estimate adds about 2 ms,
+   * and now and then a reading is far out: the page stalls between the two clock reads, or one slow
+   * ping moves the estimate (1 reading in 100, ±30 ms).
+   */
+  function fallbackNoise(seed: number) {
+    const r = rng(seed);
+    return () => (r() - 0.5) * 20 + gaussian(r) * 2 + (r() < 1 / 100 ? (r() < 0.5 ? -30 : 30) : 0);
+  }
+
+  /** A phone checked every 2 s: its source's real anchor error grows by `drift` ms a check, or jumps once. */
+  function simulate(checks: number, noise: () => number, { drift = 0, jumpAt = -1, jump = 0 } = {}) {
+    const tl = schedule(PAUSED, 0, 1000, LONG, 'play');
+    let real = 1000;
+    let strikes = 0;
+    let worst = 0;
+    let noisy = 0;
+    const resyncs: number[] = [];
+    for (let i = 0; i < checks; i++) {
+      real += drift + (i === jumpAt ? jump : 0);
+      worst = Math.max(worst, Math.abs(real - 1000));
+      const measured = real + noise();
+      if (Math.abs(measured - 1000) > DRIFT_TOLERANCE_MS) noisy++;
+      const d = reconcile(tl, LONG, 2000 + i * CHECK_MS, { planned: 1000, anchor: measured, strikes });
+      if (d.keep) strikes = d.strikes;
+      else [real, strikes] = [1000, (resyncs.push(i), 0)];
+    }
+    return { resyncs, worst, noisy };
+  }
+
+  it('a phone that is in step is never re-scheduled, though single readings stray past the tolerance', () => {
+    for (const seed of [1, 2, 3]) {
+      const run = simulate(900, fallbackNoise(seed)); // half an hour
+      expect(run.noisy).toBeGreaterThan(5);
+      expect(run.resyncs).toEqual([]);
+    }
+  });
+
+  it('a phone whose audio clock really drifts is re-scheduled before it is far out', () => {
+    // 100 ppm, a fast phone crystal: 0.2 ms a check, so 20 ms after under 3.5 minutes.
+    const run = simulate(600, fallbackNoise(4), { drift: 0.2 });
+    expect(run.resyncs.length).toBeGreaterThanOrEqual(3);
+    // Past the tolerance by no more than one reading's sampling error.
+    expect(run.worst).toBeLessThan(DRIFT_TOLERANCE_MS + 15);
+  });
+
+  it('a real jump (the clock offset estimate moving 40 ms) is fixed on the second check after it', () => {
+    const run = simulate(100, fallbackNoise(5), { jumpAt: 50, jump: 40 });
+    expect(run.resyncs).toEqual([51]);
+  });
+});
+
+describe('audio clock', () => {
+  // A phone's audio device: audio time c (s) leaves the speaker at system time 5000 + c * 1000 ms,
+  // currentTime runs 42 ms of latency ahead of that and moves in 20 ms callbacks.
+  const BASE = 5000;
+  const LATENCY = 0.042;
+  const heardAt = (c: number) => BASE + c * 1000;
+  const currentTimeAt = (perf: number) => Math.floor(((perf - BASE) / 1000 + LATENCY) / 0.02) * 0.02;
+  /** The browser's stamp, taken at the last callback (up to 20 ms before now). */
+  const stampAt = (perf: number, age: number) => ({ contextTime: (perf - age - BASE) / 1000, performanceTime: perf - age });
+  const HOST_OFFSET = 123_456;
+
+  it('maps through the output timestamp to within a millisecond of when the sound is heard', () => {
+    const r = rng(9);
+    for (let i = 0; i < 200; i++) {
+      const perf = 10_000 + r() * 60_000;
+      const clock = audioClock({ stamp: stampAt(perf, r() * 20), currentTime: currentTimeAt(perf), perfNow: perf, latency: LATENCY, hostOffset: HOST_OFFSET });
+      const c = (perf - BASE) / 1000 + 0.5;
+      expect(Math.abs(clock.toHost(c) - (heardAt(c) + HOST_OFFSET))).toBeLessThan(1);
+      expect(clock.toCtx(clock.toHost(c))).toBeCloseTo(c, 9);
+    }
+  });
+
+  it('falls back to currentTime plus the latency, to within one callback, without a usable stamp', () => {
+    const r = rng(10);
+    for (const stamp of [undefined, null, { contextTime: 0, performanceTime: 0 }, 'stale'] as const) {
+      const perf = 10_000 + r() * 60_000;
+      // A stamp from before a suspend: the audio clock stood still since, the system clock did not.
+      const s = stamp === 'stale' ? { contextTime: (perf - 900 - BASE) / 1000 - 0.5, performanceTime: perf - 900 } : stamp;
+      const clock = audioClock({ stamp: s, currentTime: currentTimeAt(perf), perfNow: perf, latency: LATENCY, hostOffset: HOST_OFFSET });
+      const c = (perf - BASE) / 1000 + 0.5;
+      expect(Math.abs(clock.toHost(c) - (heardAt(c) + HOST_OFFSET))).toBeLessThanOrEqual(20);
+    }
+  });
+});
+
+describe('late start', () => {
+  it('a start still ahead keeps its time and offset', () => {
+    expect(startPoint(10.5, 3, 10.2)).toEqual({ when: 10.5, offset: 3 });
+  });
+
+  it('a start that has already passed begins now, that much further in, so the track stays on its anchor', () => {
+    const p = startPoint(10, 3, 10.35);
+    expect(p.when).toBe(10.35);
+    expect(p.offset).toBeCloseTo(3.35, 9);
+    // The track position at any audio time t is (t - when + offset) either way.
+    expect(p.when - p.offset).toBeCloseTo(10 - 3, 9);
   });
 });
 
