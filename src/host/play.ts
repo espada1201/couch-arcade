@@ -76,14 +76,14 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
       pick(await fileStunt(f));
       say('');
     } catch {
-      say('That file could not be read as a picture.');
+      fail('That file could not be read as a picture.');
     }
   });
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', () => {
     const missing = moment && missingNames(moment, typed());
-    if (missing) return say(missing), names[typed()[0] ? 1 : 0].focus();
-    if (!requirePlaced(session, say)) return;
+    if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
+    if (!requirePlaced(session, fail)) return;
     director.run({ stop: rec?.end, program: cardProgram(session, chosen.image) });
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
     rec?.begin(FLIP_LEAD_MS + 8000);
@@ -91,7 +91,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     say(`3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'flips' : 'flip'} together.`);
   });
   show();
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'A stadium card stunt from any picture. Every phone shows its own patch of the image, then the whole crowd flips at the same instant.',
     thumbs,
     moments,
@@ -201,13 +201,13 @@ export function liveWave(session: HostSession) {
 export function wavePanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
   const wave = liveWave(session);
   const go = (w: WaveParams) => {
-    if (!requirePlaced(session, say)) return;
+    if (!requirePlaced(session, fail)) return;
     director.run(wave.start(w, 250));
     controls.arm();
     say('Rolling. Change anything and it updates live.');
   };
   const controls = waveControls(stage, {}, wave.retune, true);
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'A band of light rolls through the room in real space: a sweep from wall to wall, a ping-pong, or a ripple spreading out from any spot you tap on the map.',
     controls.el,
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: () => go(controls.get()) }, 'Start the wave'), stopButton(director, () => say(''))),
@@ -228,12 +228,12 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
   const wave = liveWave(session);
   const params = (): WaveParams => ({ ...WAVE_DEFAULTS, ...current.w, period: current.w.period / tempo });
   const play = () => {
-    if (!requirePlaced(session, say)) return;
+    if (!requirePlaced(session, fail)) return;
     director.run(wave.start(params(), 400));
     say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
-  const { el, say } = panel(
-    'Every phone is one speaker on the shared clock, so sound moves through the crowd. The header shows how closely the phones agree (in sync to ±N ms), and a Bluetooth speaker on a phone adds its own delay. Each phone sings its own note, set by where it sits.',
+  const { el, say, fail } = panel(
+    'Every phone is one speaker on the shared clock, so sound moves through the crowd. The header shows how closely the phones’ clocks agree, and a Bluetooth speaker on a phone adds its own delay. Each phone sings its own note, set by where it sits.',
     h(
       'div.sound-list',
       { role: 'radiogroup', 'aria-label': 'Sound' },
@@ -255,7 +255,7 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
   );
   const party = speakerPanel(session, director);
   el.hidden = true;
-  const mode = segmented<'party' | 'tones'>('Mode', [['party', 'Party speaker'], ['tones', 'Spatial tones']], 'party', (v) => {
+  const mode = segmented<'party' | 'tones'>('Music mode', [['party', 'Party speaker'], ['tones', 'Spatial tones']], 'party', (v) => {
     party.hidden = v !== 'party';
     el.hidden = v !== 'tones';
   });
@@ -269,7 +269,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Two halves of the room. Tap to push the front line.');
   const duration = h('select', { id: 'terr-dur' }, ...[30, 45, 60, 90].map((s) => h('option', { value: s, selected: s === 45 }, `${s} seconds`)));
   const start = () =>
-    runGame<TerritoryState>(session, director, say, {
+    runGame<TerritoryState>(session, director, { say, fail }, {
       ...territoryRules(Number(duration.value) * 1000, TEAMS),
       show: (s, _prev, room) => {
         bar.style.setProperty('--b', String(s.boundary));
@@ -285,7 +285,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
         );
       },
     });
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'A no-TV icebreaker: the room is the scoreboard. It splits down the middle into Amber and Teal. Every tap shoves the front line into the other side, and any phone the line passes over defects. Push it to the wall to win.',
     bar,
     score,
@@ -297,7 +297,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
 export function potatoPanel(session: HostSession, director: Director): HTMLElement {
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'A ball of fire jumps between neighbours. Tap when it lands on you.');
   const start = () =>
-    runGame<PotatoState>(session, director, say, {
+    runGame<PotatoState>(session, director, { say, fail }, {
       ...POTATO_RULES,
       show: (s, prev, room) => {
         if (s === prev) return;
@@ -308,7 +308,7 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
         }
       },
     });
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'A no-TV icebreaker: the game plays out on the phones themselves. A glowing ball flies across the crowd from phone to phone. When it lands on yours, tap before the fuse runs out to throw it to a neighbour. Miss and your phone burns out. The fuse gets shorter every throw.',
     h('div.legend', {}, h('span', { style: `--c:${css([255, 96, 16])}` }, 'Ball'), h('span', { style: `--c:${css(EMBER)}` }, 'Burnt out')),
     score,

@@ -19,7 +19,7 @@ describe('crowd games follow who is actually here', () => {
   it('a phone that left never gets the potato, and one that came back can', async () => {
     const r = await room([0, 0.5, 1]);
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    runGame<PotatoState>(r.session, r.director, r.say, { ...POTATO_RULES, show: () => {} });
+    runGame<PotatoState>(r.session, r.director, { say: r.say, fail: r.fail }, { ...POTATO_RULES, show: () => {} });
     expect(lastProgram(r.phones[0].inbox, 'potato')!.state.holder).toBe(0);
     r.phones[1].drop();
     r.phones[2].drop();
@@ -31,7 +31,7 @@ describe('crowd games follow who is actually here', () => {
 
   it('a phone that left does not count toward its team', async () => {
     const r = await room([0, 0.1, 1]);
-    runGame<TerritoryState>(r.session, r.director, r.say, { ...territoryRules(45_000, [[1, 1, 1], [2, 2, 2]]), show: () => {} });
+    runGame<TerritoryState>(r.session, r.director, { say: r.say, fail: r.fail }, { ...territoryRules(45_000, [[1, 1, 1], [2, 2, 2]]), show: () => {} });
     expect(r.say).toHaveBeenCalledWith('');
     expect(lastProgram(r.phones[0].inbox, 'territory')).not.toBeNull();
     // Teams start as {0} and {1, 2}; with phone 1 gone, one tap from phone 2 is a whole team's push.
@@ -45,8 +45,8 @@ describe('crowd games follow who is actually here', () => {
 
   it('needs two placed phones to start', async () => {
     const r = await room([0.5]);
-    runGame<PotatoState>(r.session, r.director, r.say, { ...POTATO_RULES, show: () => {} });
-    expect(r.say).toHaveBeenCalledWith('Hot Potato needs at least 2 connected, placed phones.');
+    runGame<PotatoState>(r.session, r.director, { say: r.say, fail: r.fail }, { ...POTATO_RULES, show: () => {} });
+    expect(r.fail).toHaveBeenCalledWith('Hot Potato needs at least 2 connected, placed phones.');
     expect(r.director.run).not.toHaveBeenCalled();
   });
 });

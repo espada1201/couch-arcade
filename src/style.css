@@ -65,7 +65,9 @@ input[type='file'] { font: 13px var(--display); color: var(--muted); max-width: 
 input[type='range'] { accent-color: var(--amber); width: 100%; }
 input[type='checkbox'], input[type='radio'] { accent-color: var(--amber); }
 .note { color: var(--muted); font-size: 13px; margin: 6px 0; }
-.note:empty, .result:empty { display: none; }
+.note:empty, .result:empty, .alert:empty { display: none; }
+.notice { display: contents; }
+.notice > * { scroll-margin: 12px; }
 
 /* ---------- Landing ---------- */
 .landing {
@@ -172,7 +174,9 @@ label.grow { flex: 1 1 180px; }
 label.grow, label.num, label.file { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 label.num input, label.num select { width: 110px; }
 .check { display: flex; gap: 10px; align-items: center; font-size: 14px; cursor: pointer; }
-.result { margin: 0; font-size: 14px; padding: 10px 12px; border-left: 3px solid var(--amber); background: var(--ink-3); border-radius: 0 6px 6px 0; }
+.result, .alert { margin: 0; font-size: 14px; padding: 10px 12px; border-left: 3px solid var(--amber); background: var(--ink-3); border-radius: 0 6px 6px 0; }
+.alert { border-left-color: var(--red); }
+.alert .btn { margin-left: 6px; }
 progress { width: 100%; height: 6px; appearance: none; border: 0; border-radius: 3px; background: var(--ink-3); overflow: hidden; }
 progress::-webkit-progress-bar { background: var(--ink-3); }
 progress::-webkit-progress-value { background: var(--amber); }
@@ -238,6 +242,7 @@ body.phone { overscroll-behavior: none; }
 .eyebrow { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted); }
 .phone-gate .room-code { font-size: 64px; line-height: 1; margin: 0 0 12px; }
 .gate-copy { color: #d9d0bc; margin: 0 0 24px; font-size: 16px; }
+.gate-copy + .gate-tip { margin-top: -12px; font-size: 14px; color: var(--muted); }
 .screen {
   position: fixed; inset: 0; display: grid; place-items: center;
   user-select: none; -webkit-user-select: none; touch-action: manipulation; cursor: pointer;
@@ -276,7 +281,7 @@ body.phone { overscroll-behavior: none; }
 
 /* ---------- Party speaker ---------- */
 .sound-modes { display: grid; }
-.sound-modes > .seg { padding: 18px 20px 0; }
+.sound-modes > .seg { margin: 18px 20px 0; }
 label.file.drop { padding: 14px; border: 1px dashed var(--edge); border-radius: 8px; cursor: pointer; }
 label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
 .np-host-title { margin: 0; font-weight: 700; overflow-wrap: anywhere; }

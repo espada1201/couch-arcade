@@ -119,8 +119,8 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   /** Opens the selected source; on failure says why and returns null. */
   const prepare = async (mine: number): Promise<typeof shown | null> => {
     const want = kind;
-    const fail = (text: string) => {
-      if (mine === gen) say(text);
+    const refuse = (text: string) => {
+      if (mine === gen) fail(text);
       return null;
     };
     let s: MediaStream | null = null;
@@ -129,13 +129,13 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
       try {
         s = await openCamera({ width: { ideal: 640 } });
       } catch (e) {
-        return fail(`${errorText(e)} Or pick another source.`);
+        return refuse(`${errorText(e)} Or pick another source.`);
       }
       v = h('video', { muted: true, playsinline: true });
       v.srcObject = s;
     } else if (want === 'video') {
       const f = file.files?.[0];
-      if (!f) return fail(loop ? `Choose a video file to switch to it. The crowd keeps showing ${NAMES[shown.kind]} until then.` : 'Choose a video file first.');
+      if (!f) return refuse(loop ? `Choose a video file to switch to it. The crowd keeps showing ${NAMES[shown.kind]} until then.` : 'Choose a video file first.');
       v = h('video', { muted: true, playsinline: true, loop: true });
       v.src = URL.createObjectURL(f);
     }
@@ -145,7 +145,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
         await v.play();
       } catch {
         drop(s, v);
-        return fail('That video could not be played in this browser.');
+        return refuse('That video could not be played in this browser.');
       }
     }
     if (mine !== gen) return drop(s, v), null;
@@ -175,7 +175,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   };
 
   const start = async () => {
-    if (!requirePlaced(session, say)) return;
+    if (!requirePlaced(session, fail)) return;
     const hold = director.run({ stop });
     const mine = ++gen;
     goLive.disabled = true;
@@ -199,7 +199,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   };
   file.addEventListener('change', () => loop && kind === 'video' && void switchSource());
 
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'Turn the crowd into a live screen. Point your camera at the stage, play a video, or let a generated animation run, and every phone becomes one pixel of the moving picture.',
     segmented<SourceKind>('Source', [['aurora', 'Aurora'], ['fire', 'Fire'], ['camera', 'Camera'], ['video', 'Video']], kind, (v) => {
       kind = v;

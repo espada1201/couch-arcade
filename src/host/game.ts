@@ -5,6 +5,7 @@ import { potatoTap, potatoTick, startPotato, type PotatoState } from '../core/po
 import { startTerritory, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
 import { runCrowd, type CrowdRules } from './crowd';
 import type { Director } from './director';
+import type { Notice } from './panel';
 import type { HostSession } from './session';
 
 export interface GameRules<S extends { phase: 'playing' | 'over' }> extends Pick<CrowdRules<S>, 'throttleMs' | 'resendMs'> {
@@ -18,16 +19,16 @@ export interface GameRules<S extends { phase: 'playing' | 'over' }> extends Pick
   show(s: S, prev: S | null, room: Room): void;
 }
 
-export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSession, director: Pick<Director, 'run'>, say: (text: string) => void, rules: GameRules<S>): void {
+export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSession, director: Pick<Director, 'run'>, notice: Pick<Notice, 'say' | 'fail'>, rules: GameRules<S>): void {
   // Who is in this game is fixed at the start; where they are and whether they are still here is not.
   const players = session.playRoom();
-  if (players.positions.size < 2) return say(`${rules.name} needs at least 2 connected, placed phones.`);
+  if (players.positions.size < 2) return notice.fail(`${rules.name} needs at least 2 connected, placed phones.`);
   const room = (): Room => {
     const now = session.playRoom();
     for (const seat of now.positions.keys()) if (!players.positions.has(seat)) now.positions.delete(seat);
     return now;
   };
-  say('');
+  notice.say('');
   runCrowd<S>(session, director, rules.start(players, session.now()), {
     program: rules.program,
     input: { tap: (s, seat) => rules.tap(s, room(), seat, session.now()) },

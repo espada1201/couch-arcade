@@ -185,7 +185,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
 
   /** Take over the crowd for the show; false (and a hint) if it needs placed phones and none are. */
   const takeOver = (placed = true): boolean => {
-    if (placed && !requirePlaced(session, say)) return false;
+    if (placed && !requirePlaced(session, fail)) return false;
     say('');
     director.run({ stop: halt });
     release = keepScreenOn();
@@ -202,7 +202,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     const timed = cue.timed && midnight.checked;
     const away = msToMidnight(new Date());
     const problem = timed ? midnightProblem(away) : null;
-    if (problem) return say(problem);
+    if (problem) return fail(problem);
     if (!takeOver(!cue.unplaced)) return;
     const done = () => {
       clearInterval(ticker);
@@ -236,7 +236,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     if (away <= COUNT_FROM * 1000) say(`Midnight is only ${Math.ceil(away / 1000)} s away: the phones count down what is left.`);
   };
 
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'Press one button and walk away. The show loops through your title, waves of light and sound, live animation and pictures on every phone, until you press Stop. Or play one event moment on its own.',
     h('div.row', {}, h('label.grow', { for: 'show-title' }, 'Title on the crowd', title)),
     h('label.check', { for: 'show-sound' }, sound, h('span', {}, 'With sound')),

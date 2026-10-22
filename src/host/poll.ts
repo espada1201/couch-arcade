@@ -171,11 +171,11 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
     const q = question.value.trim();
     const typed = fields.map((f) => f.value.trim());
     const options = typed.filter(Boolean);
-    if (!q) return say('Type a question first.'), question.focus();
-    if (options.length < MIN_OPTIONS) return say(`Give at least ${MIN_OPTIONS} answers.`), fields[typed.findIndex((t) => !t)].focus();
+    if (!q) return fail('Type a question first.'), question.focus();
+    if (options.length < MIN_OPTIONS) return fail(`Give at least ${MIN_OPTIONS} answers.`), fields[typed.findIndex((t) => !t)].focus();
     const gap = typed.findIndex((t, i) => !t && typed.slice(i + 1).some(Boolean));
-    if (gap >= 0) return say(`Fill the answers in order: answer ${LETTERS[gap]} is empty.`), fields[gap].focus();
-    if (session.online.length === 0) return say('No phones yet. Scan the QR code with a phone to join.');
+    if (gap >= 0) return fail(`Fill the answers in order: answer ${LETTERS[gap]} is empty.`), fields[gap].focus();
+    if (session.online.length === 0) return fail('No phones yet. Scan the QR code with a phone to join.');
     say('');
     begin(q, options);
   };
@@ -184,7 +184,7 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
   revealBtn.addEventListener('click', () => run?.dispatch({ type: 'reveal' }));
   anon.addEventListener('change', () => run?.dispatch({ type: 'anon', on: anon.checked }));
 
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     `Ask the room a question. Every phone gets big answer buttons: no sign-up, no TV, up to ${MAX_IDS} phones. On Reveal the room becomes the chart, each answer a block of the crowd sized by its share.`,
     h('div.row', {}, h('label.grow', { for: 'poll-q' }, 'Question', question)),
     h(
