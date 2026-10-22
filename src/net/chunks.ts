@@ -2,12 +2,11 @@
 // chunks and keeps a small window in flight per receiver; the receiver acks the lowest
 // chunk it is still missing. Every transport here is JSON over an ordered channel whose
 // messages must stay under 64 KB (the relay's maxPayload, PeerJS data channels), so a
-// chunk message is sized to fit in MAX_MESSAGE with room for the relay's envelope.
+// chunk message is sized to fit in MAX_MESSAGE_BYTES with room for the relay's envelope.
+import { payloadBytes } from '../core/protocol';
 
-/** Hard cap on one serialized message, in bytes. */
-export const MAX_MESSAGE = 60 * 1024;
-/** Raw bytes per chunk: base64 grows 3 bytes to 4 chars; 512 bytes are left for the envelope. */
-export const CHUNK_BYTES = Math.floor((MAX_MESSAGE - 512) / 4) * 3;
+/** Raw bytes per chunk, with 512 bytes left for the envelope. */
+export const CHUNK_BYTES = payloadBytes(512);
 
 export interface ChunkMsg {
   t: 'chunk';

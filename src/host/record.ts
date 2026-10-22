@@ -1,6 +1,7 @@
 // "Record the moment": the host's camera films the crowd while a cue or stunt runs,
 // and the host gets a .webm to keep. Only offered where the browser can record.
 import { h } from '../ui/dom';
+import { openCamera, stopStream } from './media';
 
 /** A looping show could run all night; a keepsake stops here. */
 export const RECORD_MAX_MS = 5 * 60_000;
@@ -45,18 +46,12 @@ export function recorder(): Recorder | null {
   let began = 0;
 
   const release = () => {
-    stream?.getTracks().forEach((t) => t.stop());
+    stopStream(stream);
     stream = null;
   };
 
-  const open = async (): Promise<MediaStream> => {
-    try {
-      // The room's sound (the cheer at midnight) belongs in the keepsake too.
-      return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    } catch {
-      return navigator.mediaDevices.getUserMedia({ video: true });
-    }
-  };
+  // The room's sound (the cheer at midnight) belongs in the keepsake too.
+  const open = () => openCamera(true, { audio: true });
 
   const begin = async (maxMs = RECORD_MAX_MS) => {
     if (!on.checked || rec || starting) return;
@@ -65,7 +60,7 @@ export function recorder(): Recorder | null {
     try {
       stream = await open();
     } catch (e) {
-      status.textContent = `Couldn’t open the camera to record: ${e instanceof Error ? e.message : String(e)}`;
+      status.textContent = `Couldn’t record: ${e instanceof Error ? e.message : String(e)}`;
       return;
     } finally {
       starting = false;

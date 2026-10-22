@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CHUNK_BYTES, ChunkSender, MAX_MESSAGE, Reassembler, chunkCount, chunkMsg, fromBase64, toBase64 } from '../src/net/chunks';
+import { MAX_MESSAGE_BYTES } from '../src/core/protocol';
+import { CHUNK_BYTES, ChunkSender, Reassembler, chunkCount, chunkMsg, fromBase64, toBase64 } from '../src/net/chunks';
 
 function bytes(n: number): Uint8Array {
   const b = new Uint8Array(n);
@@ -27,7 +28,7 @@ describe('chunks', () => {
   it('keeps every serialized chunk message under the 60 KB limit', () => {
     const data = bytes(CHUNK_BYTES * 2 + 5);
     expect(chunkCount(data.length)).toBe(3);
-    for (let i = 0; i < 3; i++) expect(JSON.stringify(chunkMsg('a-long-track-id-0123456789abcdef', data, i)).length).toBeLessThanOrEqual(MAX_MESSAGE);
+    for (let i = 0; i < 3; i++) expect(JSON.stringify(chunkMsg('a-long-track-id-0123456789abcdef', data, i)).length).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
   });
 
   it('reassembles chunks that arrive out of order and twice', () => {

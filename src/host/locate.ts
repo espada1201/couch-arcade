@@ -104,13 +104,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     } catch (e) {
       source?.stop();
       source = null;
-      const name = e instanceof Error ? e.name : '';
-      camMsg.textContent =
-        name === 'NotAllowedError'
-          ? 'Camera permission was refused. Allow it in the browser’s address bar, or use typed seat numbers below.'
-          : name === 'NotFoundError'
-            ? 'No camera found. Use typed seat numbers below, or place phones by hand on the map.'
-            : `Could not start the camera: ${e instanceof Error ? e.message : String(e)}`;
+      camMsg.textContent = `${e instanceof Error ? e.message : String(e)} You can also use typed seat numbers below, or place phones by hand on the map.`;
     }
   });
 

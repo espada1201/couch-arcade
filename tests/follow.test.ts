@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_CARD_CHARS, NO_CAPTIONS, captionLines, deckFrom, heard, parseCards, step } from '../src/core/follow';
-import { MAX_MESSAGE_BYTES, messageBytes } from '../src/core/protocol';
+import { FRAME_BUDGET, dataUrlBytes } from '../src/core/frames';
+import { MAX_MESSAGE_BYTES, messageBytes, payloadBytes } from '../src/core/protocol';
+import { CHUNK_BYTES } from '../src/net/chunks';
 
 describe('text cards', () => {
   it('one card per non-empty line, trimmed', () => {
@@ -72,5 +74,20 @@ describe('message size', () => {
     const card = parseCards('😀'.repeat(MAX_CARD_CHARS))[0];
     const msg = { t: 'program', program: { kind: 'follow', view: { show: 'card', text: card, n: 1, of: 1 } } };
     expect(messageBytes(msg)).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
+  });
+});
+
+describe('one message limit', () => {
+  it('a full-budget picture frame, as a program message, fits under the transport limit', () => {
+    const b64 = 'A'.repeat(Math.ceil(FRAME_BUDGET / 3) * 4);
+    const msg = { t: 'program', program: { kind: 'follow', view: { show: 'picture', src: `data:image/jpeg;base64,${b64}`, seq: 1e9 } } };
+    expect(dataUrlBytes(msg.program.view.src)).toBeGreaterThanOrEqual(FRAME_BUDGET);
+    expect(messageBytes(msg)).toBeLessThanOrEqual(MAX_MESSAGE_BYTES);
+  });
+
+  it('chunks and frames are both cut from the one 60 KB limit', () => {
+    expect(MAX_MESSAGE_BYTES).toBe(60 * 1024);
+    expect(CHUNK_BYTES).toBe(payloadBytes(512));
+    expect(FRAME_BUDGET).toBe(payloadBytes(1024));
   });
 });

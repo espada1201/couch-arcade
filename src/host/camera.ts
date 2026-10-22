@@ -3,6 +3,7 @@
 // machine by listening to the light they report emitting.
 import type { GrayFrame } from '../core/localize';
 import { OPTICS_CHANNEL, type Optics } from '../core/protocol';
+import { cameraProblem, openCamera, stopStream } from './media';
 
 export interface FrameSource {
   readonly preview: HTMLElement;
@@ -48,18 +49,18 @@ export class CameraSource implements FrameSource {
   }
 
   async start(): Promise<void> {
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot use a camera here (it needs https or localhost).');
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        deviceId: this.deviceId ? { exact: this.deviceId } : undefined,
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 },
-      },
+    this.stream = await openCamera({
+      deviceId: this.deviceId ? { exact: this.deviceId } : undefined,
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 30 },
     });
     this.preview.srcObject = this.stream;
-    await this.preview.play();
+    try {
+      await this.preview.play();
+    } catch (e) {
+      throw new Error(cameraProblem(e));
+    }
     this.canvas.width = W;
     this.canvas.height = Math.round(W / this.aspect);
     this.running = true;
@@ -93,7 +94,7 @@ export class CameraSource implements FrameSource {
 
   stop(): void {
     this.running = false;
-    this.stream?.getTracks().forEach((t) => t.stop());
+    stopStream(this.stream);
     this.stream = null;
   }
 }

@@ -8,6 +8,7 @@ import { canvas2d } from '../ui/canvas';
 import { h, plural, segmented, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import type { Director, Hold } from './director';
+import { openCamera, stopStream } from './media';
 import { panel, stopButton } from './panel';
 import type { HostSession } from './session';
 import { every, type Broadcast } from './ticker';
@@ -178,7 +179,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     go.disabled = false;
     loop?.stop();
     loop = null;
-    stream?.getTracks().forEach((t) => t.stop());
+    stopStream(stream);
     stream = null;
     if (recognition) {
       recognition.onend = recognition.onerror = recognition.onresult = null;
@@ -192,18 +193,15 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const startMedia = async (mine: number, kind: 'screen' | 'camera') => {
     let s: MediaStream;
     try {
-      s =
-        kind === 'screen'
-          ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false })
-          : await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 } }, audio: false });
-    } catch {
+      s = kind === 'screen' ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false }) : await openCamera({ width: { ideal: 1280 } });
+    } catch (e) {
       if (mine === gen) {
         hold?.end();
-        say(kind === 'screen' ? 'Screen sharing was cancelled or is not allowed in this browser.' : 'The camera could not be opened. Allow it in the address bar.');
+        say(kind === 'screen' ? 'Screen sharing was cancelled or is not allowed in this browser.' : e instanceof Error ? e.message : String(e));
       }
       return;
     }
-    if (mine !== gen) return s.getTracks().forEach((t) => t.stop());
+    if (mine !== gen) return stopStream(s);
     stream = s;
     const video = h('video', { muted: true, playsinline: true });
     video.muted = true;

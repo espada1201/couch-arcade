@@ -1,9 +1,10 @@
 // The host side of streaming a picture to phones as JPEG stills: skip frames that
 // haven't changed (judged on a tiny thumbnail), resend now and then for late joiners,
 // and keep every frame under a byte budget that fits one transport message.
+import { payloadBytes } from './protocol';
 
-/** Most bytes one JPEG frame may take; base64 makes it ~4/3 larger on the wire, still under MAX_MESSAGE_BYTES. */
-export const FRAME_BUDGET = 40 * 1024;
+/** Most bytes one JPEG frame may take: as a base64 data URL it still fits one message, with 1 KB for the rest. */
+export const FRAME_BUDGET = payloadBytes(1024);
 const MIN_QUALITY = 0.3;
 const MAX_QUALITY = 0.85;
 

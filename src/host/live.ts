@@ -6,6 +6,7 @@ import { sampleCrowd, type RGB } from '../core/layout';
 import { h, plural, segmented, slider, toggles } from '../ui/dom';
 import type { Director } from './director';
 import { followPanel } from './follow';
+import { openCamera, stopStream } from './media';
 import { panel, requirePlaced, stopButton } from './panel';
 import { every, type Broadcast } from './ticker';
 import type { HostSession } from './session';
@@ -111,7 +112,7 @@ function spreadPanel(session: HostSession, director: Director): HTMLElement {
   let gen = 0;
 
   const drop = (s: MediaStream | null, v: HTMLVideoElement | null) => {
-    s?.getTracks().forEach((t) => t.stop());
+    stopStream(s);
     if (v?.src) URL.revokeObjectURL(v.src);
   };
   const release = () => {
@@ -129,9 +130,9 @@ function spreadPanel(session: HostSession, director: Director): HTMLElement {
     let v: HTMLVideoElement | null = null;
     if (kind === 'camera') {
       try {
-        s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 } }, audio: false });
-      } catch {
-        return fail('The camera could not be opened. Allow it in the address bar, or pick another source.');
+        s = await openCamera({ width: { ideal: 640 } });
+      } catch (e) {
+        return fail(`${e instanceof Error ? e.message : String(e)} Or pick another source.`);
       }
       v = h('video', { muted: true, playsinline: true });
       v.srcObject = s;
