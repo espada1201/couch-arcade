@@ -47,6 +47,13 @@ const server = createServer((req, res) => {
     return res.end();
   }
   const { path } = parsed;
+  // The browser hides why a WebSocket was refused, so a host asks here: 204 means it would be let in.
+  if (path === '/relay') {
+    const q = parsed.url.searchParams;
+    const status = admit(q.get('room') ?? '', q.get('role') === 'host' ? 'host' : 'phone', q.get('key') ?? '');
+    res.writeHead(status ? Number(status.slice(0, 3)) : 204, { 'cache-control': 'no-store' });
+    return res.end();
+  }
   if (path === '/relay.json') {
     res.writeHead(200, { 'content-type': TYPES['.json'], 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ lanUrl }));
@@ -69,6 +76,13 @@ const MAX_ROOMS = 64;
 const MAX_PHONES = 200;
 const ROOM = /^[A-Z0-9]{3,12}$/;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * A host that dropped (a reload, a Wi-Fi blip) gets this long to come back for its room before
+ * another host may take the code: room -> { key, until }.
+ */
+const TOMB_MS = Number(process.env.RELAY_TOMB_MS) || 60_000;
+const tombs = new Map();
 
 /**
  * room -> { host: WebSocket, key: string, phones: Map<id, Phone> }; exists only while a host is attached.
@@ -115,6 +129,8 @@ function admit(room, role, key) {
   if (role === 'host') {
     if (!KEY.test(key)) return '400 Bad Request';
     if (r) return r.key === key ? null : '409 Conflict';
+    const tomb = tombs.get(room);
+    if (tomb && tomb.until > Date.now() && tomb.key !== key) return '409 Conflict';
     return rooms.size >= MAX_ROOMS ? '503 Service Unavailable' : null;
   }
   if (!r) return '404 Not Found';
@@ -173,6 +189,7 @@ function attachHost(ws, room, key) {
     for (const p of r.phones.values()) p.ws.close(1012, 'host moved');
     r.phones.clear();
   } else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
+  tombs.delete(room);
   r.host = ws;
   ws.on('message', (raw) => {
     const env = envelope(String(raw));
@@ -190,6 +207,7 @@ function attachHost(ws, room, key) {
     if (r.host !== ws) return;
     for (const p of r.phones.values()) p.ws.close(1001, 'host left');
     rooms.delete(room);
+    tombs.set(room, { key: r.key, until: Date.now() + TOMB_MS });
   });
 }
 
@@ -221,6 +239,7 @@ function attachPhone(ws, r) {
 // (or the phones, if it was the host) know.
 const HEARTBEAT_MS = Number(process.env.RELAY_HEARTBEAT_MS) || 15_000;
 setInterval(() => {
+  for (const [room, tomb] of tombs) if (tomb.until <= Date.now()) tombs.delete(room);
   for (const ws of [...servers.host.clients, ...servers.phone.clients]) {
     if (ws.missed) ws.terminate();
     else {

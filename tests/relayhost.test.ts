@@ -4,7 +4,7 @@ import type { HostMsg } from '../src/core/protocol';
 import type { Program } from '../src/core/effects';
 import { HostSession } from '../src/host/session';
 import { RelayTransport } from '../src/net/relay';
-import type { Link } from '../src/net/transport';
+import { RoomTakenError, type Link } from '../src/net/transport';
 import { memoryStorage } from './harness';
 import { freePort, rawPhone, startRelay } from './relayserver';
 
@@ -82,6 +82,30 @@ describe('relay host end', () => {
     links[0].close();
     await until(() => closed);
     end.close();
+  });
+
+  it('says the room was taken when another host got its code while the relay was down', async () => {
+    const t = new RelayTransport();
+    const end = await t.host('SQAT');
+    const server: string[] = [];
+    end.onServer((state) => server.push(state));
+    await stopRelay(relay);
+    relay = await startRelay(port);
+    // A fresh relay has no record of the room: a squatter gets in before the host's next try.
+    const squatter = new WebSocket(`ws://127.0.0.1:${port}/relay?room=SQAT&role=host&key=squatterkey1`);
+    await new Promise((r) => (squatter.onopen = r));
+    await until(() => server.at(-1) === 'taken');
+    await new Promise((r) => setTimeout(r, 6000));
+    expect(server).toEqual(['down', 'taken']);
+    squatter.close();
+    end.close();
+  }, 30_000);
+
+  it('a host whose room code is taken is told so, not that the relay is down', async () => {
+    const holder = new WebSocket(`ws://127.0.0.1:${port}/relay?room=HELD&role=host&key=holderkey123`);
+    await new Promise((r) => (holder.onopen = r));
+    await expect(new RelayTransport().host('HELD')).rejects.toBeInstanceOf(RoomTakenError);
+    holder.close();
   });
 
   it('stops reconnecting once closed', async () => {

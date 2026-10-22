@@ -1,7 +1,6 @@
 import qrcode from 'qrcode-generator';
 import { carry } from '../landing';
-import { RoomTakenError } from '../net/peer';
-import type { ServerState } from '../net/transport';
+import { RoomTakenError, type ServerState } from '../net/transport';
 import { pickTransport } from '../net/pick';
 import { errorText, h, plural, setText } from '../ui/dom';
 import { followPanel } from './follow';

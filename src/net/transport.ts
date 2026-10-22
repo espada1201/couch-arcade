@@ -30,9 +30,17 @@ export function sendEach(links: Link[], msg: unknown): void {
   for (const l of links) l.send(msg);
 }
 
-/** Wait before reconnect attempt `n` (from 1): doubling from 800 ms, capped at 5 s. */
-export function backoff(n: number): number {
-  return Math.min(5000, 400 * 2 ** n);
+/**
+ * Wait before reconnect attempt `n` (from 1): doubling from 800 ms, capped at 5 s, then spread by
+ * ±25% so a room of phones that lost the relay together don't all knock at the same instant.
+ */
+export function backoff(n: number, random = Math.random()): number {
+  return Math.min(5000, 400 * 2 ** n) * (0.75 + 0.5 * random);
+}
+
+/** The room code is already held by another host, so the UI should pick a new one. */
+export class RoomTakenError extends Error {
+  readonly code = 'room-taken';
 }
 
 export interface Transport {

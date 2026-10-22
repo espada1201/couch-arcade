@@ -141,3 +141,32 @@ describe('phones are untrusted', () => {
     b.host.close();
   });
 });
+
+describe('a room whose host dropped', () => {
+  it('is kept for its host for a while: another key gets 409, the same key gets back in', async () => {
+    const tPort = await freePort();
+    const relay = await startRelay(tPort, { RELAY_TOMB_MS: '1500' });
+    const ws = (q: string) => new WebSocket(`ws://127.0.0.1:${tPort}/relay?${q}`);
+    const probe = async (q: string) => (await fetch(`http://127.0.0.1:${tPort}/relay?${q}`)).status;
+    try {
+      const host = ws('room=TOMB&role=host&key=ownerkey123');
+      await new Promise((r) => (host.onopen = r));
+      expect(await probe('room=TOMB&role=host&key=thiefkey123')).toBe(409);
+      host.close();
+      await new Promise((r) => (host.onclose = r));
+      // Gone, but its code is held for it: a squatter is refused, and says so to a probe.
+      expect(await probe('room=TOMB&role=host&key=thiefkey123')).toBe(409);
+      expect(await probe('room=TOMB&role=host&key=ownerkey123')).toBe(204);
+      expect(await probe('room=TOMB&role=phone')).toBe(404);
+      const back = ws('room=TOMB&role=host&key=ownerkey123');
+      await new Promise((r) => (back.onopen = r));
+      back.close();
+      await new Promise((r) => (back.onclose = r));
+      // After the hold runs out the code is free again.
+      await new Promise((r) => setTimeout(r, 1700));
+      expect(await probe('room=TOMB&role=host&key=thiefkey123')).toBe(204);
+    } finally {
+      relay.kill();
+    }
+  });
+});

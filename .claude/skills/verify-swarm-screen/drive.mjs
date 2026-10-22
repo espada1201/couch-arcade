@@ -1227,6 +1227,43 @@ const CHECKS = {
     }
   },
 
+  async 'room-taken'(run) {
+    run.allowErrors = /WebSocket|relay|ERR_|Failed to load/;
+    const room = await openRoom(run, { sims: [[0.3, 0.5]] });
+    const { host, phones, code } = room;
+    const url = host.url();
+    const ws = (key) => `${base().replace('http', 'ws')}relay?room=${code}&role=host&key=${key}`;
+    // The host tab closes: for a minute its room code is held for it, and comes back with its phones.
+    await host.close();
+    await expect(phones[0].locator('.status')).toContainText(/reconnecting/, { timeout: 10_000 });
+    run.note('another host, host just left', await wsStatus(ws('squatterkey1')));
+    if (run.readings['another host, host just left'] !== 409) run.issue('another host took the room code the moment its host left');
+    const host2 = await room.context.newPage();
+    run.watch(host2);
+    await host2.setViewportSize({ width: 1440, height: 900 });
+    await host2.goto(url);
+    await expect(host2.locator('[data-room]')).toHaveAttribute('data-room', code);
+    await expect(host2.locator('.count')).toHaveText(/^1 phone /, { timeout: 20_000 });
+    await expect(phones[0].locator('.status')).toContainText('Seat');
+    run.note('host back in its room with its phone', true);
+    // The relay restarts and a squatter grabs the code before the host gets back: the host says so.
+    if (!server) return run.inconclusive('relay restart needs a server this run launched');
+    let block = true;
+    await room.context.routeWebSocket(/role=host/, (r) => (block ? r.close() : r.connectToServer()));
+    const port = server.port;
+    stopServer();
+    await expect(host2.locator('.count')).toHaveText('Reconnecting to the room server…', { timeout: 10_000 });
+    await launch(port);
+    const squatter = new WebSocket(ws('squatterkey1'));
+    await new Promise((res, rej) => (squatter.on('open', res), squatter.on('error', rej)));
+    block = false;
+    const t = Date.now();
+    await expect(host2.locator('.count')).toHaveText(/Another host took this room code/, { timeout: 20_000 });
+    run.note('host says the room was taken after ms', Date.now() - t);
+    await run.shot(host2, 'host-room-taken');
+    squatter.close();
+  },
+
   async 'host-moved'(run) {
     // The host opens the same room in a second tab: phones must follow it, the first tab must say so.
     const room = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });

@@ -1,15 +1,9 @@
 // Internet transport: WebRTC data channels brokered by the free public PeerJS server.
 // Only signalling goes through the broker; everything after that is phone <-> host.
 import type { DataConnection, Peer as PeerType } from 'peerjs';
-import { BasicLink, backoff, sendEach, type HostEnd, type Link, type ServerState, type Transport } from './transport';
+import { BasicLink, RoomTakenError, backoff, sendEach, type HostEnd, type Link, type ServerState, type Transport } from './transport';
 
 const PREFIX = 'swarmscreen-v1-';
-
-/** The room code is already registered with the broker, so the UI should pick a new one. */
-export class RoomTakenError extends Error {
-  readonly type = 'unavailable-id';
-  readonly code = 'room-taken';
-}
 
 /**
  * Settles once: `run` calls ok or fail, and after `ms` it fails with `timeout`. `onFail` cleans up
@@ -70,6 +64,9 @@ export class PeerTransport implements Transport {
       if (peer.destroyed) return;
       onServer('down');
       setTimeout(() => !peer.destroyed && peer.disconnected && peer.reconnect(), backoff(++tries));
+    });
+    peer.on('error', (err) => {
+      if ((err as { type?: unknown }).type === 'unavailable-id') onServer('taken');
     });
     peer.on('open', () => {
       if (tries) onServer('up');

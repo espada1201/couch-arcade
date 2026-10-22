@@ -1,7 +1,7 @@
 // LAN transport: a WebSocket relay served by `npm start` on the host computer, so a
 // room works on any Wi-Fi network with no internet at all.
 import { stableId } from '../storage';
-import { BasicLink, backoff, type HostEnd, type Link, type ServerState, type Transport } from './transport';
+import { BasicLink, RoomTakenError, backoff, type HostEnd, type Link, type ServerState, type Transport } from './transport';
 
 // The host's socket carries every phone. Up (host to relay): `msg` for one phone, `all` for the
 // same message to many (one copy on the host's socket, fanned out by the relay), `close`. Down:
@@ -60,6 +60,15 @@ function opened(ws: WebSocket, failure: string): Promise<void> {
   });
 }
 
+/** Whether the relay would refuse this host because another host holds (or just held) the room. */
+async function taken(url: string): Promise<boolean> {
+  try {
+    return (await fetch(url.replace(/^ws/, 'http'), { cache: 'no-store' })).status === 409;
+  } catch {
+    return false;
+  }
+}
+
 /** Proves to the relay that a reloaded host page owns its room, so nobody else can take it over. */
 function hostKey(room: string): string {
   return stableId(`swarm-relay-key-${room}`, 24);
@@ -71,7 +80,12 @@ export class RelayTransport implements Transport {
   async host(room: string): Promise<HostEnd> {
     const url = socketUrl(room, 'host', hostKey(room));
     const first = new WebSocket(url);
-    await opened(first, `Could not start room ${room} on the local relay. It may be running on another device.`);
+    try {
+      await opened(first, `Could not start room ${room} on the local relay.`);
+    } catch (e) {
+      if (await taken(url)) throw new RoomTakenError(`Room code ${room} is already in use on this relay. Start a new room.`);
+      throw e;
+    }
     const phones = new Map<string, RelayPhone>();
     const byLink = new Map<Link, RelayPhone>();
     let onLink: (l: Link) => void = () => {};
@@ -126,6 +140,8 @@ export class RelayTransport implements Transport {
       try {
         await opened(sock, 'relay unreachable');
       } catch {
+        // Someone took the room code while this page was away: say so instead of knocking forever.
+        if (await taken(url)) return onServer('taken');
         return retry();
       }
       if (closed) return sock.close();
