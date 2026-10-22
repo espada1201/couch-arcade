@@ -6,6 +6,7 @@ import type { PollProgram } from '../core/effects';
 import { LETTERS, MAX_OPTIONS, MIN_OPTIONS, POLL_COLORS, apportion, leaders, pollReduce, startPoll, tally, zones, type PollAction, type PollState } from '../core/poll';
 import { css, h, plural } from '../ui/dom';
 import type { Director } from './director';
+import { runCrowd } from './crowd';
 import { panel, stopButton } from './panel';
 import type { HostSession } from './session';
 
@@ -16,48 +17,35 @@ export interface PollRun {
 
 /** Run a poll on the crowd until the director moves on. `show` hears every new state. */
 export function runPoll(session: HostSession, director: Pick<Director, 'run'>, question: string, options: string[], show: (s: PollState) => void): PollRun {
-  let state: PollState | null = startPoll(question, options);
-  const broadcast = (s: PollState) => {
-    const counts = tally(s);
-    const result = s.phase === 'revealed' ? { pct: apportion(counts, 100), zones: zones(session.playRoom(), counts) } : null;
-    session.setProgram(
-      (seat): PollProgram => ({
+  const crowd = runCrowd<PollState>(session, director, startPoll(question, options), {
+    program: (s) => {
+      const counts = tally(s);
+      const result = s.phase === 'revealed' ? { pct: apportion(counts, 100), zones: zones(session.playRoom(), counts) } : null;
+      return (seat): PollProgram => ({
         kind: 'poll',
         question: s.question,
         options: s.options,
         phase: s.phase,
         mine: s.votes.get(seat) ?? null,
         result: result && { pct: result.pct, zone: result.zones.get(seat) ?? null },
-      }),
-    );
-    show(s);
-  };
-  const dispatch = (a: PollAction) => {
-    if (!state) return;
-    const next = pollReduce(state, a);
-    if (next === state) return;
-    state = next;
-    broadcast(next);
-  };
-  // Phones that leave take their vote with them; joins and moves reshape the chart.
-  const roster = () => {
-    if (!state) return;
-    const here = new Set(session.online.map((s) => s.seat));
-    let s = state;
-    for (const seat of s.votes.keys()) if (!here.has(seat)) s = pollReduce(s, { type: 'leave', seat });
-    state = s;
-    broadcast(s);
-  };
-  director.run({
-    stop: () => {
-      state = null;
-      unsubscribe();
+      });
     },
-    onInput: { vote: (seat, m) => dispatch({ type: 'vote', seat, choice: m.choice }) },
+    input: { vote: (s, seat, m) => pollReduce(s, { type: 'vote', seat, choice: m.choice }) },
+    // Phones that leave take their vote with them; joins and moves reshape the chart.
+    roster: (s) => {
+      const here = new Set(session.online.map((x) => x.seat));
+      for (const seat of s.votes.keys()) if (!here.has(seat)) s = pollReduce(s, { type: 'leave', seat });
+      return s;
+    },
+    show: (s) => show(s),
   });
-  const unsubscribe = session.subscribe(roster);
-  broadcast(state);
-  return { dispatch, counts: () => (state ? tally(state) : options.map(() => 0)) };
+  return {
+    dispatch: (a) => crowd.dispatch((s) => pollReduce(s, a)),
+    counts: () => {
+      const s = crowd.state();
+      return s ? tally(s) : options.map(() => 0);
+    },
+  };
 }
 
 /** "Pizza leads with 67%", "Pizza and Tacos tie on 50%", or nothing yet. */

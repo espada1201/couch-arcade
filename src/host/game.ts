@@ -1,9 +1,9 @@
-// The loop every crowd game shares: start on the placed phones, feed taps and clock
-// ticks through pure rules, and broadcast each new state to the crowd.
+// Crowd games: start on the placed phones and run the crowd loop with each game's pure rules.
 import type { Program } from '../core/effects';
 import type { RGB, Room } from '../core/layout';
 import { potatoTap, potatoTick, startPotato, type PotatoState } from '../core/potato';
 import { startTerritory, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
+import { runCrowd } from './crowd';
 import type { Director } from './director';
 import type { HostSession } from './session';
 
@@ -31,43 +31,17 @@ export function runGame<S extends { phase: 'playing' | 'over' }>(session: HostSe
     for (const seat of now.positions.keys()) if (!players.positions.has(seat)) now.positions.delete(seat);
     return now;
   };
-  let state: S | null = null;
-  let timer = 0;
-  let last = -Infinity;
   say('');
-  const send = (s: S, at: number) => {
-    last = at;
-    session.setProgram(rules.program(s));
-  };
-  const push = (s: S) => {
-    const prev = state;
-    state = s;
-    const now = performance.now();
-    if (s !== prev && (!rules.throttleMs || now - last > rules.throttleMs || s.phase === 'over')) send(s, now);
-    rules.show(s, prev, room());
-    if (s.phase === 'over') clearInterval(timer);
-  };
-  const first = rules.start(players, session.now());
-  director.run({
-    stop: () => {
-      clearInterval(timer);
-      state = null;
-    },
-    program: rules.program(first),
-    onInput: { tap: (seat) => state && push(rules.tap(state, room(), seat, session.now())) },
+  runCrowd<S>(session, director, rules.start(players, session.now()), {
+    program: rules.program,
+    input: { tap: (s, seat) => rules.tap(s, room(), seat, session.now()) },
+    tick: (s) => rules.tick(s, room(), session.now()),
+    tickMs: rules.tickMs,
+    over: (s) => s.phase === 'over',
+    throttleMs: rules.throttleMs,
+    resendMs: rules.resendMs,
+    show: (s, prev) => rules.show(s, prev, room()),
   });
-  last = performance.now();
-  state = first;
-  rules.show(first, null, room());
-  timer = window.setInterval(() => {
-    if (!state) return;
-    const next = rules.tick(state, room(), session.now());
-    if (next !== state) push(next);
-    else if (rules.resendMs !== undefined && performance.now() - last > rules.resendMs) {
-      send(state, performance.now());
-      rules.show(state, state, room());
-    }
-  }, rules.tickMs);
 }
 
 /** Territory's rules minus the scoreboard. */
