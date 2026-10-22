@@ -61,6 +61,10 @@ describe('room poll on the host', () => {
     const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {}, true);
     r.phones[0].say({ t: 'vote', choice: 1 });
     expect(ballot(r.phones[0].inbox)).toMatchObject({ anon: true, mine: 1 });
+    // A vote was cast on the promise of anonymity, so it holds until Reveal.
+    poll.dispatch({ type: 'anon', on: false });
+    expect(ballot(r.phones[1].inbox).anon).toBe(true);
+    poll.dispatch({ type: 'reveal' });
     poll.dispatch({ type: 'anon', on: false });
     expect(ballot(r.phones[1].inbox).anon).toBe(false);
   });
@@ -90,6 +94,36 @@ describe('room poll on the host', () => {
     expect(r.phones[0].inbox.at(-1)).toEqual({ t: 'program', program: { kind: 'lobby' } });
     r.phones[0].say({ t: 'vote', choice: 0 });
     expect(poll.counts()).toEqual([0, 0]);
+  });
+
+  it('a saved poll that is not the shape a poll saves is ignored rather than restored', () => {
+    const store = memoryStorage();
+    vi.stubGlobal('localStorage', store);
+    try {
+      const good = { room: 'TEST', question: 'Q', options: ['A', 'B'], phase: 'open', anon: false, votes: [[0, 1]] };
+      const junk = [
+        'not json',
+        JSON.stringify(42),
+        JSON.stringify({ ...good, votes: 5 }),
+        JSON.stringify({ ...good, votes: [[0, 7]] }),
+        JSON.stringify({ ...good, votes: [[-1, 0]] }),
+        JSON.stringify({ ...good, votes: [['0', 1]] }),
+        JSON.stringify({ ...good, options: ['A'] }),
+        JSON.stringify({ ...good, options: ['A', 'B', 'C', 'D', 'E'] }),
+        JSON.stringify({ ...good, options: ['A', 2] }),
+        JSON.stringify({ ...good, phase: 'paused' }),
+        JSON.stringify({ ...good, anon: 'yes' }),
+        JSON.stringify({ ...good, question: '' }),
+      ];
+      for (const raw of junk) {
+        store.setItem('swarm-poll', raw);
+        expect(savedPoll('TEST'), raw).toBeNull();
+      }
+      store.setItem('swarm-poll', JSON.stringify(good));
+      expect(savedPoll('TEST')).toMatchObject({ question: 'Q', options: ['A', 'B'], phase: 'open', anon: false });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a running poll survives a host reload, votes and all, and is forgotten once stopped', async () => {

@@ -59,5 +59,9 @@ test('three phones vote, the host counts them, and Reveal turns the room into th
   // Neighbours can't read a pick off the screen: a Tacos phone and a Pizza phone glow alike.
   await expect.poll(async () => JSON.stringify(await bg(phones[0])) === JSON.stringify(await bg(phones[1]))).toBe(true);
   expect(await bg(phones[0])).not.toEqual(A);
+  // People voted on that promise, so the host can't lift it before Reveal.
+  await expect(host.getByLabel(/Anonymous/)).toBeDisabled();
+  await host.getByRole('button', { name: 'Reveal' }).click();
+  await expect(host.getByLabel(/Anonymous/)).toBeEnabled();
   expect(errors).toEqual([]);
 });

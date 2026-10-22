@@ -49,12 +49,22 @@ describe('room poll', () => {
     expect(liveTally(pollReduce(s, { type: 'reveal' }), new Set([0]))).toEqual([1, 1, 0]);
   });
 
-  it('anonymous mode is part of the poll and can be switched while it runs', () => {
+  it('anonymous mode is part of the poll and can be switched while nobody has voted', () => {
     const s = startPoll('Q', ['A', 'B'], true);
     expect(s.anon).toBe(true);
     expect(pollReduce(s, { type: 'anon', on: true })).toBe(s);
     expect(pollReduce(s, { type: 'anon', on: false }).anon).toBe(false);
     expect(poll().anon).toBe(false);
+    expect(pollReduce(poll(), { type: 'anon', on: true }).anon).toBe(true);
+  });
+
+  it('once someone has voted anonymously, anonymity holds until Reveal', () => {
+    let s = pollReduce(startPoll('Q', ['A', 'B'], true), { type: 'vote', seat: 0, choice: 1 });
+    expect(pollReduce(s, { type: 'anon', on: false })).toBe(s);
+    s = pollReduce(s, { type: 'close' });
+    expect(pollReduce(s, { type: 'anon', on: false })).toBe(s);
+    s = pollReduce(s, { type: 'reveal' });
+    expect(pollReduce(s, { type: 'anon', on: false }).anon).toBe(false);
   });
 
   it('a closed poll takes no votes until it reopens, and reopening keeps the votes', () => {

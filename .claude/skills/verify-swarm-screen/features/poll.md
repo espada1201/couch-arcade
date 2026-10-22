@@ -8,7 +8,7 @@ A ballot on every phone; votes count live on the host; Reveal turns the room its
 - `poll-count` host bars and leader line update.
 - `poll-close` closed ballots go inert.
 - `poll-reveal` the room splits into answer zones by position; a phone outside its pick's zone is told "You voted A".
-- `poll-anon` Anonymous hides counts until Reveal.
+- `poll-anon` Anonymous hides counts until Reveal; once anyone has voted it can't be turned off until Reveal.
 
 ## How to get to it (user POV)
 

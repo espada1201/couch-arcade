@@ -24,7 +24,7 @@ export interface PollState {
   phase: PollPhase;
   /** Seat -> option index. One vote per phone, kept while the phone is offline; only forgetting the phone drops it. */
   votes: ReadonlyMap<number, number>;
-  /** Anonymous: until Reveal nobody, host included, sees counts or who picked what. */
+  /** Anonymous: until Reveal nobody, host included, sees counts or who picked what. Once anyone has voted it stays on until Reveal. */
   anon: boolean;
 }
 
@@ -39,6 +39,11 @@ export type PollAction =
 
 export function startPoll(question: string, options: string[], anon = false): PollState {
   return { question, options, phase: 'open', votes: new Map(), anon };
+}
+
+/** Someone voted on the promise that nobody sees their pick before Reveal, so anonymity can't be turned off until then. */
+export function anonLocked(s: PollState): boolean {
+  return s.anon && s.votes.size > 0 && s.phase !== 'revealed';
 }
 
 /** Pure: returns the same object when nothing changed. */
@@ -56,7 +61,8 @@ export function pollReduce(s: PollState, a: PollAction): PollState {
       return { ...s, votes };
     }
     case 'anon':
-      return s.anon === a.on ? s : { ...s, anon: a.on };
+      if (s.anon === a.on || (!a.on && anonLocked(s))) return s;
+      return { ...s, anon: a.on };
     case 'close':
       return s.phase === 'open' ? { ...s, phase: 'closed' } : s;
     case 'reopen':

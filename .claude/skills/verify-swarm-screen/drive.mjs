@@ -658,6 +658,8 @@ const CHECKS = {
     await host.getByLabel(/Anonymous/).check();
     await host.getByRole('button', { name: 'Reopen voting' }).click();
     await expect(bar('Pizza')).toHaveText('hidden');
+    await expect(host.getByLabel(/Anonymous/)).toBeDisabled();
+    run.note('anonymity locked until Reveal', await host.locator('label[for=poll-anon]').textContent());
   },
 
   async show(run) {

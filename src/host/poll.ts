@@ -3,7 +3,7 @@
 // don't need to be placed to vote; placement only decides who forms the chart.
 import { MAX_IDS } from '../core/blinkcode';
 import type { PollProgram } from '../core/effects';
-import { LETTERS, MAX_OPTIONS, MIN_OPTIONS, POLL_COLORS, apportion, leaders, liveTally, pollReduce, startPoll, zones, type PollAction, type PollState } from '../core/poll';
+import { LETTERS, MAX_OPTIONS, MIN_OPTIONS, POLL_COLORS, anonLocked, apportion, leaders, liveTally, pollReduce, startPoll, zones, type PollAction, type PollPhase, type PollState } from '../core/poll';
 import { forget, loadJson, saveJson } from '../storage';
 import { css, h, plural, setText } from '../ui/dom';
 import type { Director } from './director';
@@ -28,10 +28,17 @@ interface Saved {
   votes: [number, number][];
 }
 
-/** The poll that was running in `room` when the host page went away, if any. */
+const isIndex = (n: unknown, below = Infinity): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < below;
+
+/** The poll that was running in `room` when the host page went away, if any. Anything else in storage (an older shape, a hand edit) is ignored. */
 export function savedPoll(room: string): PollState | null {
-  const s = loadJson<Saved>(STORE);
-  return s?.room === room ? { question: s.question, options: s.options, phase: s.phase, anon: s.anon, votes: new Map(s.votes) } : null;
+  const s = loadJson<Partial<Saved>>(STORE);
+  if (!s || typeof s !== 'object' || s.room !== room) return null;
+  const { question, options, phase, anon, votes } = s;
+  if (typeof question !== 'string' || !question || typeof anon !== 'boolean' || !['open', 'closed', 'revealed'].includes(phase as string)) return null;
+  if (!Array.isArray(options) || options.length < MIN_OPTIONS || options.length > MAX_OPTIONS || !options.every((o) => typeof o === 'string')) return null;
+  if (!Array.isArray(votes) || !votes.every((v) => Array.isArray(v) && v.length === 2 && isIndex(v[0]) && isIndex(v[1], options.length))) return null;
+  return { question, options, phase: phase as PollPhase, anon, votes: new Map(votes) };
 }
 
 /** Run a poll on the crowd until the director moves on (or resume one from `from`). `show` hears every new state. */
@@ -90,6 +97,7 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
   const fillInOrder = () => fields.forEach((f, i) => (f.disabled = i >= MIN_OPTIONS && !f.value.trim() && !fields[i - 1].value.trim()));
   for (const f of fields) f.addEventListener('input', fillInOrder);
   const anon = h('input', { type: 'checkbox', id: 'poll-anon', checked: true });
+  const anonText = h('span', {}, 'Anonymous: hide the counts and everyone’s pick until Reveal');
   const summary = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Phones vote without being placed. Place them to turn the room into the chart on Reveal.');
   const chart = h('ul.poll-chart', { 'aria-label': 'Results' });
   const startBtn = h('button.btn.primary', { type: 'button' }, 'Start the poll');
@@ -100,6 +108,9 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
 
   const draw = (s: PollState | null) => {
     last = s;
+    anon.disabled = !!s && anonLocked(s);
+    if (s) anon.checked = s.anon;
+    setText(anonText, anon.disabled ? 'Anonymous until Reveal: people have voted on that promise' : 'Anonymous: hide the counts and everyone’s pick until Reveal');
     closeBtn.disabled = revealBtn.disabled = !s;
     closeBtn.textContent = s && s.phase !== 'open' ? 'Reopen voting' : 'Close voting';
     revealBtn.disabled = !s || s.phase === 'revealed';
@@ -163,7 +174,7 @@ export function pollPanel(session: HostSession, director: Director): HTMLElement
       {},
       ...fields.map((f, i) => h('label.grow.poll-option', { for: f.id, style: `--c:${css(POLL_COLORS[i])}` }, `Answer ${LETTERS[i]}${i < MIN_OPTIONS ? '' : ' (optional)'}`, f)),
     ),
-    h('label.check', { for: 'poll-anon' }, anon, h('span', {}, 'Anonymous: hide the counts and everyone’s pick until Reveal')),
+    h('label.check', { for: 'poll-anon' }, anon, anonText),
     h('div.row', {}, startBtn, closeBtn, revealBtn, stopButton(director)),
     summary,
     chart,
