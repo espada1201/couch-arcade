@@ -105,6 +105,9 @@ test('territory and hot potato respond to taps; a refreshed phone keeps its seat
   await room.host.getByRole('button', { name: 'Start Territory' }).click();
   const left = room.phones[0];
   await expect(left.locator('.label')).toHaveText('TAP');
+  // A player has their phone in hand: a background tab with nothing changing on screen gets no
+  // animation frames in headless Chrome, and every click would wait on them.
+  await left.bringToFront();
   for (let i = 0; i < 200; i++) {
     await left.locator('.screen').click({ position: { x: 100, y: 400 } });
     if (i % 10 === 9 && (await room.host.locator('.score').textContent())?.includes('wins')) break;
