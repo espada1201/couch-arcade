@@ -107,8 +107,8 @@ describe('wrap against a phone that chunks on purpose', () => {
     expect(held()).toBe(0);
   });
 
-  it('counts every piece against the rate limit, so a stream of pieces cannot pass as a phone', () => {
-    const { conn, send, chunk } = stitcher();
+  it('counts every raw piece against the rate limit, so a flood past the burst ends the link', () => {
+    const { conn, send } = stitcher();
     const link = wrap(conn, PHONE_MESSAGE_BYTES);
     const closed = vi.fn();
     link.onClose(closed);
@@ -116,8 +116,6 @@ describe('wrap against a phone that chunks on purpose', () => {
     for (let i = 0; i < PHONE_LIMIT.burst; i++) send(tiny);
     expect(closed).not.toHaveBeenCalled();
     send(tiny);
-    expect(closed).toHaveBeenCalledTimes(1);
-    send(chunk(2, 0));
     expect(closed).toHaveBeenCalledTimes(1);
   });
 

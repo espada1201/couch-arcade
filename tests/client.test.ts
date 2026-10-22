@@ -148,6 +148,26 @@ describe('phone client', () => {
     expect(client.status).toBe('live');
   });
 
+  it('a phone woken after a long lock gets a fresh run of quick retries while its host restarts', async () => {
+    const wake: (() => void)[] = [];
+    const doc = { addEventListener: (_: string, cb: () => void) => wake.push(cb), removeEventListener: () => {}, visibilityState: 'visible', hidden: false };
+    vi.stubGlobal('document', doc);
+    const host = silentHost();
+    const client = new PhoneClient(host.transport, 'ABCD');
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(1000);
+    doc.hidden = true;
+    host.setAway(true);
+    await vi.advanceTimersByTimeAsync(15 * 60_000);
+    doc.hidden = false;
+    for (const cb of wake.splice(0)) cb();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(client.status).toBe('reconnecting');
+    host.setAway(false);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(client.status).toBe('live');
+  });
+
   it('a first join to a room nobody hosts says connecting, then fails soon with the reason', async () => {
     const transport: Transport = {
       name: 'test',

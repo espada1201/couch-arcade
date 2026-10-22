@@ -33,10 +33,13 @@ function opened(ws: WebSocket, failure: string): Promise<void> {
   });
 }
 
+/** How long to wait for the relay to say why, so a phone on another network hears the advice soon. */
+const PROBE_MS = 3000;
+
 /** What the relay would answer this socket: 204 it would be let in, else why not. null: the relay did not answer. */
 async function probe(url: string): Promise<number | null> {
   try {
-    return (await fetch(url.replace(/^ws/, 'http'), { cache: 'no-store' })).status;
+    return (await fetch(url.replace(/^ws/, 'http'), { cache: 'no-store', signal: AbortSignal.timeout(PROBE_MS) })).status;
   } catch {
     return null;
   }

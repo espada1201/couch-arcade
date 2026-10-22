@@ -230,9 +230,15 @@ export class PhoneClient {
     this.onChange();
     if (this.status === 'failed') return;
     const again = () => {
-      // A hidden tab (a second copy, a locked phone) shouldn't fight for the seat.
-      if (document.hidden) document.addEventListener('visibilitychange', again, { once: true });
+      // A hidden tab (a second copy, a locked phone) shouldn't fight for the seat. Once it wakes,
+      // the time asleep doesn't count: its host may be mid-restart, so start the retries afresh.
+      if (document.hidden) document.addEventListener('visibilitychange', woke, { once: true });
       else void this.connect();
+    };
+    const woke = () => {
+      this.lostAt = null;
+      this.retries = 0;
+      again();
     };
     setTimeout(again, joined && this.retries > FAST_RETRIES ? SLOW_RETRY_MS : backoff(this.retries));
   }
