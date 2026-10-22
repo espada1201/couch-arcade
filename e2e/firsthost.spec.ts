@@ -64,6 +64,18 @@ for (const [w, h] of [[1280, 800], [820, 1180]]) {
   });
 }
 
+test('the map text counts the phones that are here, and says when one has left', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  const phones = [await joinPhone(context, code, 0, errors), await joinPhone(context, code, 1, errors), await joinPhone(context, code, 2, errors)];
+  await expect(host.locator('.stage-empty')).toContainText('3 phones joined');
+  await phones[1].close();
+  await expect(host.locator('.stage-empty')).toContainText('2 phones are here');
+  await expect(host.locator('.stage-empty')).toContainText('1 phone has left');
+  await expect(host.locator('.stage-empty')).not.toContainText('3 phones joined');
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

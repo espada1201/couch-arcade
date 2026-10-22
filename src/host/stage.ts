@@ -70,10 +70,16 @@ export class Stage {
     const placed = seats.filter((x) => s.layout.positions.has(x.seat));
     const unplaced = seats.filter((x) => !s.layout.positions.has(x.seat));
     this.empty.hidden = placed.length > 0;
+    const here = seats.filter((x) => x.link);
+    const gone = seats.filter((x) => !x.link);
     this.empty.textContent =
       seats.length === 0
         ? 'No phones yet. Scan the QR code with a phone to join.'
-        : `${plural(seats.length, 'phone')} joined. Scan the room with the camera, or pick a number below and tap the map to place it.`;
+        : here.length === 0
+          ? `${plural(gone.length, 'phone')} joined, but ${gone.length === 1 ? 'it has' : 'they have'} left. Scan the QR code to bring ${gone.length === 1 ? 'it' : 'them'} back.`
+          : `${plural(here.length, 'phone')} ${gone.length ? 'are here' : 'joined'}.` +
+            (gone.length ? ` ${plural(gone.length, 'phone')} ${gone.length === 1 ? 'has' : 'have'} left.` : '') +
+            ' Scan the room with the camera, or pick a number below and tap the map to place it.';
     this.canvas.setAttribute('aria-label', `Room map with ${plural(placed.length, 'placed phone')}`);
     this.tray.hidden = unplaced.length === 0;
     this.tray.replaceChildren(
