@@ -153,3 +153,30 @@ describe('host session', () => {
     expect(session.send(0, { t: 'full' })).toBe(false);
   });
 });
+
+describe('backpressure', () => {
+  it('a message that may be skipped is not queued on a link already holding too much', async () => {
+    let accept: (l: Link) => void = () => {};
+    const transport: Transport = { name: 'test', host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), close: () => {} }), join: async () => Promise.reject(new Error('unused')) };
+    const session = new HostSession(transport, 'TEST', () => 0);
+    await session.open();
+    const phones = [0, 500_000].map((backlog, i) => {
+      const inbox: HostMsg[] = [];
+      const link = new BasicLink((m) => inbox.push(m as HostMsg), () => {}, () => backlog);
+      accept(link);
+      link.deliver({ t: 'hello', token: `t${i}` });
+      return inbox;
+    });
+    session.setProgram({ kind: 'identify' }, { maxBuffered: 100_000 });
+    expect(phones[0].at(-1)).toEqual({ t: 'program', program: { kind: 'identify' } });
+    expect(phones[1].at(-1)).not.toEqual({ t: 'program', program: { kind: 'identify' } });
+    // Without the limit everyone gets it.
+    session.setProgram({ kind: 'lobby' });
+    expect(phones[1].at(-1)).toEqual({ t: 'program', program: { kind: 'lobby' } });
+  });
+
+  it('local links never report a backlog', () => {
+    expect(new BasicLink(() => {}).buffered()).toBe(0);
+  });
+});
+

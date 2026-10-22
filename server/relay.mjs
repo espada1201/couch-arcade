@@ -6,6 +6,7 @@ import { networkInterfaces } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { skipForSlowPhone } from './backpressure.mjs';
 
 const PORT = Number(process.env.PORT) || 4321;
 const ROOT = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -128,7 +129,9 @@ function attachHost(ws, room, key) {
     }
     const phone = m && typeof m === 'object' ? r.phones.get(m.id) : undefined;
     if (!phone) return;
-    if (m.t === 'msg') phone.send(JSON.stringify(m.data ?? null));
+    if (m.t === 'msg') {
+      if (!skipForSlowPhone(m.data, phone.bufferedAmount)) phone.send(JSON.stringify(m.data ?? null));
+    }
     else if (m.t === 'close') phone.close(1000);
   });
   ws.on('close', () => {

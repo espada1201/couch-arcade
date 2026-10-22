@@ -31,7 +31,7 @@ export class FrameGate {
   private readonly threshold: number;
   private readonly keyframeMs: number;
 
-  constructor({ threshold = 3, keyframeMs = 4000 } = {}) {
+  constructor({ threshold = 3, keyframeMs = 15_000 } = {}) {
     this.threshold = threshold;
     this.keyframeMs = keyframeMs;
   }

@@ -82,3 +82,13 @@ describe('encodeWithin', () => {
     expect(encodeWithin(() => url(100_000), FRAME_BUDGET, 0.8)).toBeNull();
   });
 });
+
+describe('keyframes', () => {
+  it('an unchanged picture is resent about every 15 s for late joiners and dropped frames', () => {
+    const g = new FrameGate();
+    const flat = new Uint8Array(16).fill(100);
+    expect(g.next(flat, 0)).toBe('change');
+    expect(g.next(flat, 14_000)).toBe('skip');
+    expect(g.next(flat, 15_000)).toBe('keyframe');
+  });
+});

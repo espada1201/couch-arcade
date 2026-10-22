@@ -3,6 +3,8 @@
 
 export interface Link {
   send(msg: unknown): void;
+  /** Bytes queued on this link and not yet sent (0 where the transport can't tell). */
+  buffered(): number;
   onMessage(cb: (msg: unknown) => void): void;
   onClose(cb: () => void): void;
   close(): void;
@@ -28,10 +30,14 @@ export class BasicLink implements Link {
   constructor(
     private readonly sender: (m: unknown) => void,
     private readonly closer: () => void = () => {},
+    private readonly backlog: () => number = () => 0,
   ) {}
 
   send(msg: unknown): void {
     if (!this.closed) this.sender(msg);
+  }
+  buffered(): number {
+    return this.closed ? 0 : this.backlog();
   }
   onMessage(cb: (m: unknown) => void): void {
     this.msgCbs.push(cb);

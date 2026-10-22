@@ -41,6 +41,8 @@ export class RelayTransport implements Transport {
         const link = new BasicLink(
           (data) => ws.send(JSON.stringify({ t: 'msg', id: m.id, data })),
           () => ws.send(JSON.stringify({ t: 'close', id: m.id })),
+          // One socket carries every phone, so this is the whole room's backlog; the relay checks each phone's.
+          () => ws.bufferedAmount,
         );
         links.set(m.id, link);
         onLink(link);
@@ -58,7 +60,7 @@ export class RelayTransport implements Transport {
   async join(room: string): Promise<Link> {
     const ws = new WebSocket(socketUrl(room, 'phone'));
     await opened(ws, `No host is running room ${room} on this network.`);
-    const link = new BasicLink((data) => ws.send(JSON.stringify(data)), () => ws.close());
+    const link = new BasicLink((data) => ws.send(JSON.stringify(data)), () => ws.close(), () => ws.bufferedAmount);
     ws.onerror = null;
     ws.onmessage = (e) => link.deliver(JSON.parse(e.data as string));
     ws.onclose = () => link.ended();

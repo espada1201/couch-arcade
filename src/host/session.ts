@@ -133,11 +133,15 @@ export class HostSession {
     return Math.max(0, ...this.online.map((s) => s.sync));
   }
 
-  setProgram(p: Program | ((seat: number) => Program)): void {
+  /**
+   * Set what every phone runs. With `maxBuffered`, a phone whose link already holds more than
+   * that many bytes is skipped this time (a picture frame it would only receive late anyway).
+   */
+  setProgram(p: Program | ((seat: number) => Program), { maxBuffered = Infinity } = {}): void {
     this.programFor = typeof p === 'function' ? p : () => p;
     // Programs change many times a second (live screen, games); they are not roster changes,
     // so no persistence or listener churn here. The stage reads programOf() every frame.
-    for (const s of this.online) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
+    for (const s of this.online) if (s.link!.buffered() <= maxBuffered) this.sendTo(s, { t: 'program', program: this.programFor(s.seat) });
   }
 
   /** Offer every phone, late joiners too, a song to fetch in the background. */

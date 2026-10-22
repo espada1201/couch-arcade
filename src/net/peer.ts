@@ -44,7 +44,7 @@ async function makePeer(id?: string): Promise<PeerType> {
 }
 
 function wrap(conn: DataConnection): BasicLink {
-  const link = new BasicLink((m) => conn.send(m), () => conn.close());
+  const link = new BasicLink((m) => conn.send(m), () => conn.close(), () => conn.dataChannel?.bufferedAmount ?? 0);
   conn.on('data', (d) => link.deliver(d));
   conn.on('close', () => link.ended());
   conn.on('error', () => link.ended());

@@ -11,7 +11,8 @@ import type { Director, Hold } from './director';
 import { openCamera, stopStream } from './media';
 import { panel, stopButton } from './panel';
 import type { HostSession } from './session';
-import { every, type Broadcast } from './ticker';
+import { captureFrames } from './capture';
+import type { Broadcast } from './ticker';
 
 type FollowSource = 'screen' | 'camera' | 'cards' | 'captions';
 
@@ -53,25 +54,23 @@ const PREV_KEYS = new Set(['ArrowLeft', 'ArrowUp', 'PageUp']);
 const OWNS_ARROWS = 'input, textarea, select, [contenteditable], [role="tab"], canvas';
 
 /**
- * Turn a playing video into JPEG stills at `fps`, sending only when the picture changed
- * (or a periodic refresh is due) and keeping every frame under the byte budget.
+ * Turn a playing video into JPEG stills at up to `fps`, sending only when the picture changed
+ * (or a periodic refresh is due) and keeping every frame under the byte budget. Frames come
+ * from the stream itself where the browser allows, so a hidden host tab keeps sending.
  */
-function streamFrames(video: HTMLVideoElement, fps: number, send: (src: string) => void): Broadcast {
+function streamFrames(video: HTMLVideoElement, track: MediaStreamTrack | undefined, fps: number, send: (src: string) => void): Broadcast {
   const [, thumb] = canvas2d(THUMB_W, THUMB_H);
   const [frame, fctx] = canvas2d(FRAME_W, FRAME_W);
   const gate = new FrameGate();
   let quality = 0.7;
-  return every(fps, () => {
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    if (video.readyState < 2 || !vw || !vh) return;
-    thumb.drawImage(video, 0, 0, THUMB_W, THUMB_H);
+  return captureFrames(video, track, fps, (src, vw, vh) => {
+    thumb.drawImage(src, 0, 0, THUMB_W, THUMB_H);
     if (gate.next(lumaOf(thumb.getImageData(0, 0, THUMB_W, THUMB_H).data), performance.now()) === 'skip') return;
     const encoded = encodeWithin(
       (q, scale) => {
         frame.width = Math.max(2, Math.round(Math.min(FRAME_W, vw) * scale));
         frame.height = Math.max(2, Math.round((frame.width * vh) / vw));
-        fctx.drawImage(video, 0, 0, frame.width, frame.height);
+        fctx.drawImage(src, 0, 0, frame.width, frame.height);
         return frame.toDataURL('image/jpeg', q);
       },
       FRAME_BUDGET,
@@ -103,8 +102,10 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const show = (view: FollowView) => {
     const msg: HostMsg = { t: 'program', program: { kind: 'follow', view } };
     // Never hand the transport more than one message can carry (frames and cards are sized to fit).
-    if (messageBytes(msg) > MAX_MESSAGE_BYTES) return;
-    session.setProgram(msg.program);
+    const bytes = messageBytes(msg);
+    if (bytes > MAX_MESSAGE_BYTES) return;
+    // A phone still holding about two frames would only get this one late: skip it, the next will do.
+    session.setProgram(msg.program, view.show === 'picture' ? { maxBuffered: 2 * bytes } : {});
     preview.show(view);
   };
 
@@ -219,7 +220,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       return;
     }
     if (mine !== gen) return;
-    loop = streamFrames(video, fps, (src) => {
+    loop = streamFrames(video, s.getVideoTracks()[0], fps, (src) => {
       show({ show: 'picture', src, seq: ++seq });
       say(`Showing ${kind === 'screen' ? 'your screen' : 'the camera'} on ${phones()} · up to ${fps} fps · last frame ${Math.round(dataUrlBytes(src) / 1024)} KB.`);
     });
