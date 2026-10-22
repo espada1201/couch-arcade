@@ -6,7 +6,8 @@ import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { parsePhoneMsg, type HostMsg } from '../core/protocol';
-import type { HostEnd, Link, Transport } from '../net/transport';
+import { randomId, type HostEnd, type Link, type Transport } from '../net/transport';
+import { forget, loadJson, saveJson } from '../storage';
 
 export type Source = 'camera' | 'grid' | 'manual';
 
@@ -47,10 +48,7 @@ interface Saved {
 
 const STORE = 'swarm-host';
 
-export function newRoomCode(): string {
-  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => abc[b % abc.length]).join('');
-}
+const ROOM_CODE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export class HostSession {
   readonly seats = new Map<number, Seat>();
@@ -75,13 +73,8 @@ export class HostSession {
   ) {}
 
   static restore(transport: Transport, fresh: boolean): HostSession {
-    let saved: Saved | null = null;
-    try {
-      saved = fresh ? null : (JSON.parse(localStorage.getItem(STORE) ?? 'null') as Saved | null);
-    } catch {
-      saved = null;
-    }
-    const s = new HostSession(transport, saved?.room ?? newRoomCode());
+    const saved = fresh ? null : loadJson<Saved>(STORE);
+    const s = new HostSession(transport, saved?.room ?? randomId(4, ROOM_CODE));
     if (saved) {
       s.mirror = saved.mirror;
       s.frame = saved.frame ?? 'source';
@@ -92,6 +85,11 @@ export class HostSession {
       s.relayout(false);
     }
     return s;
+  }
+
+  /** Drop the saved room, so the next host page starts a new one. */
+  static forget(): void {
+    forget(STORE);
   }
 
   async open(): Promise<void> {
@@ -176,7 +174,7 @@ export class HostSession {
 
   /** Whether a saved perspective correction is actually shaping the map right now. */
   get perspectiveActive(): boolean {
-    return this.frame === 'source' && !!this.perspective && [...this.seats.values()].some((s) => s.raw && s.source === 'camera') && [...this.seats.values()].every((s) => !s.raw || s.source === 'camera');
+    return this.frame === 'source' && !!this.perspective && [...this.seats.values()].some((s) => s.raw && s.source === 'camera') && this.allFromCamera();
   }
 
   setPerspective(p: Perspective | null): void {
@@ -198,9 +196,8 @@ export class HostSession {
     const raw = new Map<number, Point>();
     for (const s of this.seats.values()) if (s.raw) raw.set(s.seat, s.raw);
     const H = this.perspective && floorPlan(this.perspective.corners);
-    const fromCamera = [...this.seats.values()].every((s) => !s.raw || s.source === 'camera');
     if (this.frame === 'room') this.layout = { positions: raw, aspect: this.roomAspect };
-    else if (H && fromCamera && this.perspective) {
+    else if (H && this.perspective && this.allFromCamera()) {
       const floor = new Map<number, Point>();
       for (const [seat, p] of raw) {
         const q = applyHomography(H, p);
@@ -210,6 +207,11 @@ export class HostSession {
     } else this.layout = normalize(raw, { mirror: this.mirror, sourceAspect: this.sourceAspect });
     if (broadcast) for (const s of this.online) this.sendPos(s);
     this.changed();
+  }
+
+  /** Every placed phone was placed by the camera (so a perspective correction applies to all of them). */
+  private allFromCamera(): boolean {
+    return [...this.seats.values()].every((s) => !s.raw || s.source === 'camera');
   }
 
   private sendPos(s: Seat): void {
@@ -289,20 +291,16 @@ export class HostSession {
   }
 
   private changed(): void {
-    try {
-      const saved: Saved = {
-        room: this.room,
-        mirror: this.mirror,
-        frame: this.frame,
-        sourceAspect: this.sourceAspect,
-        roomAspect: this.roomAspect,
-        perspective: this.perspective,
-        seats: [...this.seats.values()].map(({ seat, token, raw, source }) => ({ seat, token, raw, source })),
-      };
-      localStorage.setItem(STORE, JSON.stringify(saved));
-    } catch {
-      /* storage unavailable: the room still works, it just won't survive a refresh */
-    }
+    // If storage is unavailable the room still works, it just won't survive a refresh.
+    saveJson(STORE, {
+      room: this.room,
+      mirror: this.mirror,
+      frame: this.frame,
+      sourceAspect: this.sourceAspect,
+      roomAspect: this.roomAspect,
+      perspective: this.perspective,
+      seats: [...this.seats.values()].map(({ seat, token, raw, source }) => ({ seat, token, raw, source })),
+    } satisfies Saved);
     for (const cb of this.listeners) cb();
   }
 }

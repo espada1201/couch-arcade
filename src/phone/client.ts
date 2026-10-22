@@ -5,7 +5,8 @@ import { ClockEstimator, sampleFrom } from '../core/clock';
 import type { Program } from '../core/effects';
 import type { Point } from '../core/layout';
 import type { HostMsg, PhoneMsg } from '../core/protocol';
-import { randomId, type Link, type Transport } from '../net/transport';
+import type { Link, Transport } from '../net/transport';
+import { stableId } from '../storage';
 
 export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced' | 'failed';
 
@@ -29,16 +30,8 @@ export class PhoneClient {
     private readonly sim?: Point,
   ) {
     // Simulated phones are tabs of one browser, so each needs its own identity.
-    const key = `swarm-phone-${room}${sim ? `@${sim.x},${sim.y}` : ''}`;
-    let token = '';
-    try {
-      // localStorage so closing the tab and rescanning the QR code lands in the same seat.
-      token = localStorage.getItem(key) ?? '';
-      if (!token) localStorage.setItem(key, (token = randomId(16)));
-    } catch {
-      token = randomId(16);
-    }
-    this.token = token;
+    // Kept in localStorage so closing the tab and rescanning the QR code lands in the same seat.
+    this.token = stableId(`swarm-phone-${room}${sim ? `@${sim.x},${sim.y}` : ''}`, 16);
     // A sleeping phone's clock may have stopped; relearn the offset when it wakes.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && this.link) {

@@ -1,6 +1,7 @@
 // LAN transport: a WebSocket relay served by `npm start` on the host computer, so a
 // room works on any Wi-Fi network with no internet at all.
-import { BasicLink, randomId, type HostEnd, type Link, type Transport } from './transport';
+import { stableId } from '../storage';
+import { BasicLink, type HostEnd, type Link, type Transport } from './transport';
 
 type Down = { t: 'open'; id: string } | { t: 'msg'; id: string; data: unknown } | { t: 'close'; id: string };
 
@@ -23,20 +24,7 @@ function opened(ws: WebSocket, failure: string): Promise<void> {
 
 /** Proves to the relay that a reloaded host page owns its room, so nobody else can take it over. */
 function hostKey(room: string): string {
-  const name = `swarm-relay-key-${room}`;
-  try {
-    const saved = localStorage.getItem(name);
-    if (saved) return saved;
-  } catch {
-    // Storage blocked: the key lasts for this page only.
-  }
-  const key = randomId(24);
-  try {
-    localStorage.setItem(name, key);
-  } catch {
-    // As above.
-  }
-  return key;
+  return stableId(`swarm-relay-key-${room}`, 24);
 }
 
 export class RelayTransport implements Transport {

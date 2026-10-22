@@ -1,5 +1,6 @@
 import qrcode from 'qrcode-generator';
 import { carry } from '../landing';
+import { RoomTakenError } from '../net/peer';
 import { pickTransport } from '../net/pick';
 import { h } from '../ui/dom';
 import { livePanel } from './live';
@@ -41,11 +42,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   const status = h('p.boot', { role: 'status' }, 'Opening the room…');
   app.replaceChildren(status);
   const newRoom = () => {
-    try {
-      localStorage.removeItem('swarm-host');
-    } catch {
-      /* nothing saved to clear */
-    }
+    HostSession.forget();
     location.search = carry(params, { host: '1', fresh: '1' });
   };
   for (let attempt = 0; ; attempt++) {
@@ -54,7 +51,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       break;
     } catch (e) {
       // A brand-new code that happens to be taken: quietly roll another.
-      if (fresh && attempt < 3 && (e as { code?: string }).code === 'room-taken') {
+      if (fresh && attempt < 3 && e instanceof RoomTakenError) {
         session = HostSession.restore(transport, true);
         continue;
       }

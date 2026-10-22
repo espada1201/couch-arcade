@@ -4,6 +4,7 @@ import { AMBER, TEAL, WHITE, makeWave, type WaveParams } from '../core/effects';
 import type { RGB } from '../core/layout';
 import { canvas2d } from '../ui/canvas';
 import { h } from '../ui/dom';
+import { keepScreenOn } from '../ui/wakelock';
 import type { Director } from './director';
 import { presets, textStunt } from './images';
 import { H, W, aurora, broadcast, fire } from './live';
@@ -48,28 +49,12 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   let timer = 0;
   let ticker = 0;
   let stopCue: (() => void) | void;
-  let running = false;
-  let wake: WakeLockSentinel | null = null;
-
   // The host walks away, and a sleeping display throttles the cue timers to a crawl.
-  const lock = async () => {
-    try {
-      const w = (await navigator.wakeLock?.request('screen')) ?? null;
-      const old = running ? wake : w;
-      if (running) wake = w;
-      void old?.release().catch(() => {});
-    } catch {
-      // Denied (low battery, hidden tab): the show still runs, it just may stutter.
-    }
-  };
-  // The browser drops the lock whenever the tab is hidden.
-  const relock = () => running && document.visibilityState === 'visible' && void lock();
+  let release: (() => void) | undefined;
 
   const halt = () => {
-    running = false;
-    document.removeEventListener('visibilitychange', relock);
-    void wake?.release().catch(() => {});
-    wake = null;
+    release?.();
+    release = undefined;
     clearTimeout(timer);
     clearInterval(ticker);
     stopCue?.();
@@ -95,9 +80,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     if (!requirePlaced(session, say)) return;
     say('');
     director.take(halt);
-    running = true;
-    document.addEventListener('visibilitychange', relock);
-    void lock();
+    release = keepScreenOn();
     play(0);
   };
 

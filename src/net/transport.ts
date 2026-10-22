@@ -55,8 +55,8 @@ export class BasicLink implements Link {
   }
 }
 
-export function randomId(len = 10): string {
-  const abc = 'abcdefghijkmnpqrstuvwxyz23456789';
+/** Random string from `abc`; the default alphabet drops look-alikes (l, o, 0, 1). */
+export function randomId(len = 10, abc = 'abcdefghijkmnpqrstuvwxyz23456789'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(len));
   return Array.from(bytes, (b) => abc[b % abc.length]).join('');
 }

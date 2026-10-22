@@ -11,25 +11,34 @@ export class RoomTakenError extends Error {
   readonly code = 'room-taken';
 }
 
+/**
+ * Settles once: `run` calls ok or fail, and after `ms` it fails with `timeout`. `onFail` cleans up
+ * after any failure; `done` tells a late success that it lost the race.
+ */
+export function settleWithin<T>(ms: number, timeout: string, onFail: () => void, run: (ok: (v: T) => void, fail: (err: Error) => void, done: () => boolean) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return false;
+      settled = true;
+      clearTimeout(timer);
+      return true;
+    };
+    const fail = (err: Error) => {
+      if (!settle()) return;
+      onFail();
+      reject(err);
+    };
+    const timer = setTimeout(() => fail(new Error(timeout)), ms);
+    run((v) => settle() && resolve(v), fail, () => settled);
+  });
+}
+
 async function makePeer(id?: string): Promise<PeerType> {
   const { Peer } = await import('peerjs');
   const peer = id ? new Peer(id) : new Peer();
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const fail = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      peer.destroy();
-      reject(err);
-    };
-    const timer = setTimeout(() => fail(new Error('Could not reach the PeerJS broker')), 12000);
-    peer.on('open', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(peer);
-    });
+  return settleWithin(12000, 'Could not reach the PeerJS broker', () => peer.destroy(), (ok, fail) => {
+    peer.on('open', () => ok(peer));
     peer.on('error', fail);
   });
 }
@@ -61,23 +70,12 @@ export class PeerTransport implements Transport {
   async join(room: string): Promise<Link> {
     const peer = await makePeer();
     const conn = peer.connect(PREFIX + room, { reliable: true, serialization: 'json' });
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const fail = (err: Error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        peer.destroy();
-        reject(err);
-      };
-      const timer = setTimeout(() => fail(new Error('The host did not answer. Check the room code.')), 15000);
+    return settleWithin<Link>(15000, 'The host did not answer. Check the room code.', () => peer.destroy(), (ok, fail, done) => {
       conn.on('open', () => {
-        if (settled) return conn.close();
-        settled = true;
-        clearTimeout(timer);
+        if (done()) return conn.close();
         const link = wrap(conn);
         link.onClose(() => peer.destroy());
-        resolve(link);
+        ok(link);
       });
       peer.on('error', fail);
     });

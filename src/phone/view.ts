@@ -2,21 +2,13 @@ import { DIM, luma, render, type Frame } from '../core/effects';
 import { pickTransport } from '../net/pick';
 import { OPTICS_CHANNEL, type Optics } from '../core/protocol';
 import { css, h } from '../ui/dom';
+import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
   const m = v?.match(/^([\d.]+),([\d.]+)$/);
   return m ? { x: Number(m[1]), y: Number(m[2]) } : undefined;
-}
-
-async function keepAwake(): Promise<void> {
-  type WL = { request(t: 'screen'): Promise<unknown> };
-  const wl = (navigator as Navigator & { wakeLock?: WL }).wakeLock;
-  if (!wl) return;
-  const grab = () => wl.request('screen').catch(() => {});
-  await grab();
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && void grab());
 }
 
 export async function phoneView(app: HTMLElement, room: string, params: URLSearchParams): Promise<void> {
@@ -42,7 +34,8 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   await new Promise<void>((resolve) => joinBtn.addEventListener('click', () => resolve(), { once: true }));
   speaker.unlock();
   document.documentElement.requestFullscreen?.().catch(() => {});
-  void keepAwake();
+  // Held for the life of the page: a phone that dims drops out of the picture.
+  keepScreenOn();
 
   const label = h('div.label', { 'aria-live': 'polite' });
   const status = h('div.status', { role: 'status' });
