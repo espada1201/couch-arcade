@@ -66,8 +66,6 @@ const HELLO_MS = 10_000;
 /** Links open at once that have not said hello; a new one past this closes the oldest. */
 const MAX_UNGREETED = 32;
 
-const clampInt = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(v)));
-
 /**
  * 'source': raw positions are camera or seat-grid coordinates, stretched to fill the room.
  * 'room': positions were edited by hand and are used exactly as placed.
@@ -413,11 +411,13 @@ export class HostSession {
     });
   }
 
-  /** A phone typed its row and seat: kept only while the seat grid is asking, inside its size. */
+  /** A phone typed its row and seat: kept only while the seat grid is asking, and only inside its size. */
   private enterSeat(me: Seat, row: number, seat: number): void {
     const grid = this.programFor(me.seat);
     if (grid.kind !== 'grid') return;
-    const entry = { row: clampInt(row, 1, grid.rows), seat: clampInt(seat, 1, grid.seats) };
+    const entry = { row: Math.round(row), seat: Math.round(seat) };
+    // Out of range is a typo or a forged message, not the nearest edge seat.
+    if (entry.row < 1 || entry.row > grid.rows || entry.seat < 1 || entry.seat > grid.seats) return;
     const was = this.gridEntries.get(me.seat);
     if (was?.row === entry.row && was.seat === entry.seat) return;
     this.gridEntries.set(me.seat, entry);

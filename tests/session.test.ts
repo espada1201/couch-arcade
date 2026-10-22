@@ -242,10 +242,15 @@ describe('untrusted phones', () => {
     session.setProgram({ kind: 'grid', rows: 4, seats: 10 });
     let changes = 0;
     session.subscribe(() => changes++);
+    // Out of range is ignored, not moved to the nearest edge seat, where it would clash with a real one.
     a.say({ t: 'seat', row: 99, seat: -5.4 });
-    expect(session.gridEntries.get(0)).toEqual({ row: 4, seat: 1 });
-    a.say({ t: 'seat', row: 99, seat: -5.4 });
+    a.say({ t: 'seat', row: 0, seat: 3 });
+    a.say({ t: 'seat', row: 2, seat: 11 });
+    expect(session.gridEntries.size).toBe(0);
+    expect(changes).toBe(0);
     a.say({ t: 'seat', row: 4, seat: 1 });
+    a.say({ t: 'seat', row: 4, seat: 1 });
+    expect(session.gridEntries.get(0)).toEqual({ row: 4, seat: 1 });
     expect(changes).toBe(1);
     a.say({ t: 'seat', row: 2.4, seat: 7 });
     expect(session.gridEntries.get(0)).toEqual({ row: 2, seat: 7 });
