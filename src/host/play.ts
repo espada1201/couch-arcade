@@ -5,18 +5,12 @@ import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
 import { startPotato, potatoTap, potatoTick, type PotatoState } from '../core/potato';
 import { startTerritory, teamSizes, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
 import { css, h, segmented, slider } from '../ui/dom';
+import type { Director } from './director';
+import { runGame } from './game';
 import { fileStunt, presets, textStunt, type Stunt } from './images';
+import { panel, requirePlaced, stopButton } from './panel';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
-
-/** Starting something stops whatever was running (games, taps, stage picking). */
-export interface Director {
-  take(stop?: () => void): void;
-}
-
-function needPlaced(session: HostSession): string | null {
-  return session.layout.positions.size > 0 ? null : 'Place some phones on the map first (Locate tab).';
-}
 
 /** Show `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
 export function flipCards(session: HostSession, image: Image, leadMs = 3200): void {
@@ -30,7 +24,6 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const all = presets();
   let chosen: Stunt = all[0];
   const preview = h('div.stunt-preview');
-  const msg = h('p.note', { role: 'status' });
   const show = () => preview.replaceChildren(chosen.canvas);
   const pick = (s: Stunt) => {
     chosen = s;
@@ -54,31 +47,28 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     if (!f) return;
     try {
       pick(await fileStunt(f));
-      msg.textContent = '';
+      say('');
     } catch {
-      msg.textContent = 'That file could not be read as a picture.';
+      say('That file could not be read as a picture.');
     }
   });
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', () => {
-    const err = needPlaced(session);
-    if (err) return void (msg.textContent = err);
+    if (!requirePlaced(session, say)) return;
     director.take();
     flipCards(session, chosen.image);
-    msg.textContent = `3, 2, 1… ${session.layout.positions.size} phones flip together.`;
+    say(`3, 2, 1… ${session.layout.positions.size} phones flip together.`);
   });
   show();
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'A stadium card stunt from any picture. Every phone shows its own patch of the image, then the whole crowd flips at the same instant.'),
+  const { el, say } = panel(
+    'A stadium card stunt from any picture. Every phone shows its own patch of the image, then the whole crowd flips at the same instant.',
     thumbs,
     h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: () => words.value.trim() && pick(textStunt(words.value.trim().toUpperCase(), session.layout.aspect)) }, 'Use words')),
     h('label.file', { for: 'stunt-file' }, 'Or upload a picture', file),
     preview,
     flip,
-    msg,
   );
+  return el;
 }
 
 const COLORS: [string, RGB][] = [
@@ -141,7 +131,6 @@ function waveControls(stage: Stage, initial: Partial<WaveParams>, onChange: (w: 
 }
 
 export function wavePanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
-  const msg = h('p.note', { role: 'status' });
   let wave: WaveProgram | null = null;
   let sentAt = 0;
   let pending = 0;
@@ -151,18 +140,16 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
     if (wave) session.setProgram({ ...wave });
   };
   const go = (w: WaveParams) => {
-    const err = needPlaced(session);
-    if (err) return void (msg.textContent = err);
+    if (!requirePlaced(session, say)) return;
     director.take(() => {
       wave = null;
       clearTimeout(pending);
       pending = 0;
-      stage.onPick = null;
     });
     controls.arm();
     wave = makeWave(session.now() + 250, w);
     send();
-    msg.textContent = 'Rolling. Change anything and it updates live.';
+    say('Rolling. Change anything and it updates live.');
   };
   // Live edits keep the wave's phase so the band never jumps and phones keep their audio
   // schedule; a new speed rebases t0 so the band stays where it is (pingpong parity included).
@@ -178,14 +165,12 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
     else pending ||= window.setTimeout(send, wait);
   };
   const controls = waveControls(stage, {}, retune, true);
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'A band of light rolls through the room in real space: a sweep from wall to wall, a ping-pong, or a ripple spreading out from any spot you tap on the map.'),
+  const { el, say } = panel(
+    'A band of light rolls through the room in real space: a sweep from wall to wall, a ping-pong, or a ripple spreading out from any spot you tap on the map.',
     controls.el,
-    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: () => go(controls.get()) }, 'Start the wave'), h('button.btn.ghost', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), (msg.textContent = '')) }, 'Stop')),
-    msg,
+    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: () => go(controls.get()) }, 'Start the wave'), stopButton(director, () => say(''))),
   );
+  return el;
 }
 
 const SOUNDS: { name: string; blurb: string; w: Partial<WaveParams> & Pick<WaveParams, 'shape' | 'voice' | 'period' | 'rgb'> }[] = [
@@ -195,22 +180,17 @@ const SOUNDS: { name: string; blurb: string; w: Partial<WaveParams> & Pick<WaveP
   { name: 'Slow chord', blurb: 'A wide, slow wash of harmony from front to back.', w: { shape: 'sweep', angle: 90, voice: 'bell', period: 6000, width: 0.3, rgb: TEAL } },
 ];
 
-export function soundPanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
-  const msg = h('p.note', { role: 'status' });
+export function soundPanel(session: HostSession, director: Director): HTMLElement {
   let current = SOUNDS[0];
   let tempo = 1;
   const play = () => {
-    const err = needPlaced(session);
-    if (err) return void (msg.textContent = err);
+    if (!requirePlaced(session, say)) return;
     director.take();
-    stage.onPick = null;
     session.setProgram(makeWave(session.now() + 400, { ...current.w, period: current.w.period / tempo }));
-    msg.textContent = `Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`;
+    say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'Every phone is one speaker, timed to the millisecond on the shared clock, so sound physically moves through the crowd. Each phone sings its own note, set by where it sits.'),
+  const { el, say } = panel(
+    'Every phone is one speaker, timed to the millisecond on the shared clock, so sound physically moves through the crowd. Each phone sings its own note, set by where it sits.',
     h(
       'div.sound-list',
       { role: 'radiogroup', 'aria-label': 'Sound' },
@@ -225,121 +205,73 @@ export function soundPanel(session: HostSession, stage: Stage, director: Directo
       ),
     ),
     slider('Tempo', 0.5, 2, 0.05, 1, (v) => `${v.toFixed(2)}×`, (v) => (tempo = v)),
-    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: play }, 'Play'), h('button.btn.ghost', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), (msg.textContent = '')) }, 'Stop')),
-    msg,
+    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: play }, 'Play'), stopButton(director, () => say(''))),
   );
+  return el;
 }
 
 const TEAMS: [RGB, RGB] = [AMBER, TEAL];
 
 export function territoryPanel(session: HostSession, director: Director): HTMLElement {
-  const msg = h('p.note', { role: 'status' });
   const bar = h('div.tug', { 'aria-hidden': 'true' }, h('div.tug-a'), h('div.tug-line'));
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Two halves of the room. Tap to push the front line.');
   const duration = h('select', { id: 'terr-dur' }, ...[30, 45, 60, 90].map((s) => h('option', { value: s, selected: s === 45 }, `${s} seconds`)));
-  let state: TerritoryState | null = null;
-  let room = session.playRoom();
-  let timer = 0;
-  let last = 0;
-  const draw = () => {
-    if (!state) return;
-    bar.style.setProperty('--b', String(state.boundary));
-    const [a, b] = teamSizes(state, room);
-    const left = Math.max(0, Math.ceil((state.endsAt - session.now()) / 1000));
-    score.textContent =
-      state.phase === 'over'
-        ? state.winner === null
-          ? 'Dead heat. A draw!'
-          : `${state.winner === 0 ? 'Amber' : 'Teal'} wins with ${Math.round((state.winner === 0 ? state.boundary : 1 - state.boundary) * 100)}% of the floor.`
-        : `Amber ${a} phones, ${state.taps[0]} taps · Teal ${b} phones, ${state.taps[1]} taps · ${left}s left`;
-  };
-  const push = (s: TerritoryState) => {
-    const changed = s !== state;
-    state = s;
-    const now = performance.now();
-    if (changed && (now - last > 40 || s.phase === 'over')) {
-      last = now;
-      session.setProgram({ kind: 'territory', state: s, colors: TEAMS });
-    }
-    draw();
-    if (s.phase === 'over') clearInterval(timer);
-  };
-  const start = () => {
-    room = session.playRoom();
-    if (room.positions.size < 2) return void (msg.textContent = 'Territory needs at least 2 connected, placed phones.');
-    director.take(() => {
-      clearInterval(timer);
-      session.onTap = () => {};
-      state = null;
+  const start = () =>
+    runGame<TerritoryState>(session, director, say, {
+      name: 'Territory',
+      start: (room, now) => startTerritory(room, now, Number(duration.value) * 1000),
+      tap: (s, room, seat, now) => territoryTap(s, room, seat, now),
+      tick: (s, _room, now) => territoryTick(s, now),
+      program: (state) => ({ kind: 'territory', state, colors: TEAMS }),
+      tickMs: 100,
+      throttleMs: 40,
+      resendMs: 120,
+      show: (s, _prev, room) => {
+        bar.style.setProperty('--b', String(s.boundary));
+        const [a, b] = teamSizes(s, room);
+        const left = Math.max(0, Math.ceil((s.endsAt - session.now()) / 1000));
+        score.textContent =
+          s.phase === 'over'
+            ? s.winner === null
+              ? 'Dead heat. A draw!'
+              : `${s.winner === 0 ? 'Amber' : 'Teal'} wins with ${Math.round((s.winner === 0 ? s.boundary : 1 - s.boundary) * 100)}% of the floor.`
+            : `Amber ${a} phones, ${s.taps[0]} taps · Teal ${b} phones, ${s.taps[1]} taps · ${left}s left`;
+      },
     });
-    msg.textContent = '';
-    state = null;
-    push(startTerritory(room, session.now(), Number(duration.value) * 1000));
-    session.onTap = (seat) => state && push(territoryTap(state, room, seat, session.now()));
-    timer = window.setInterval(() => {
-      if (!state) return;
-      const next = territoryTick(state, session.now());
-      if (next !== state) push(next);
-      else if (performance.now() - last > 120) {
-        // Re-send so slow taps that were throttled still land on every phone.
-        last = performance.now();
-        session.setProgram({ kind: 'territory', state, colors: TEAMS });
-        draw();
-      }
-    }, 100);
-  };
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'The room splits down the middle into Amber and Teal. Every tap shoves the front line into the other side, and any phone the line passes over defects. Push it to the wall to win.'),
+  const { el, say } = panel(
+    'The room splits down the middle into Amber and Teal. Every tap shoves the front line into the other side, and any phone the line passes over defects. Push it to the wall to win.',
     bar,
     score,
     h('div.row', {}, h('label.num', { for: 'terr-dur' }, 'Round', duration), h('button.btn.primary', { type: 'button', onclick: start }, 'Start Territory')),
-    msg,
   );
+  return el;
 }
 
 export function potatoPanel(session: HostSession, director: Director): HTMLElement {
-  const msg = h('p.note', { role: 'status' });
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'A ball of fire jumps between neighbours. Tap when it lands on you.');
-  let state: PotatoState | null = null;
-  let room = session.playRoom();
-  let timer = 0;
-  const push = (s: PotatoState) => {
-    if (s === state) return;
-    const prev = state;
-    state = s;
-    session.setProgram({ kind: 'potato', state: s });
-    if (s.phase === 'over') {
-      clearInterval(timer);
-      score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${s.passes} throws.`;
-    } else if (!prev || prev.out.length !== s.out.length || prev.holder !== s.holder) {
-      const alive = room.positions.size - s.out.length;
-      score.textContent = `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${s.passes} throws`;
-    }
-  };
-  const start = () => {
-    room = session.playRoom();
-    const s = startPotato(room, session.now() + 1500, Math.random);
-    if (!s) return void (msg.textContent = 'Hot Potato needs at least 2 connected, placed phones.');
-    director.take(() => {
-      clearInterval(timer);
-      session.onTap = () => {};
-      state = null;
+  const start = () =>
+    runGame<PotatoState>(session, director, say, {
+      name: 'Hot Potato',
+      // Two or more placed phones always give a game.
+      start: (room, now) => startPotato(room, now + 1500, Math.random)!,
+      tap: (s, room, seat, now) => potatoTap(s, room, seat, now, Math.random),
+      tick: potatoTick,
+      program: (state) => ({ kind: 'potato', state }),
+      tickMs: 50,
+      show: (s, prev, room) => {
+        if (s === prev) return;
+        if (s.phase === 'over') score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${s.passes} throws.`;
+        else if (!prev || prev.out.length !== s.out.length || prev.holder !== s.holder) {
+          const alive = room.positions.size - s.out.length;
+          score.textContent = `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${s.passes} throws`;
+        }
+      },
     });
-    msg.textContent = '';
-    state = null;
-    push(s);
-    session.onTap = (seat) => state && push(potatoTap(state, room, seat, session.now(), Math.random));
-    timer = window.setInterval(() => state && push(potatoTick(state, room, session.now())), 50);
-  };
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'A glowing ball flies across the crowd from phone to phone. When it lands on yours, tap before the fuse runs out to throw it to a neighbour. Miss and your phone burns out. The fuse gets shorter every throw.'),
+  const { el, say } = panel(
+    'A glowing ball flies across the crowd from phone to phone. When it lands on yours, tap before the fuse runs out to throw it to a neighbour. Miss and your phone burns out. The fuse gets shorter every throw.',
     h('div.legend', {}, h('span', { style: `--c:${css([255, 96, 16])}` }, 'Ball'), h('span', { style: `--c:${css(EMBER)}` }, 'Burnt out')),
     score,
     h('button.btn.primary', { type: 'button', onclick: start }, 'Start Hot Potato'),
-    msg,
   );
+  return el;
 }

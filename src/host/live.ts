@@ -4,7 +4,8 @@
 import { BLACK } from '../core/effects';
 import { sampleCrowd, type RGB } from '../core/layout';
 import { h, segmented, slider } from '../ui/dom';
-import type { Director } from './play';
+import type { Director } from './director';
+import { panel, requirePlaced, stopButton } from './panel';
 import type { HostSession } from './session';
 
 type SourceKind = 'aurora' | 'fire' | 'camera' | 'video';
@@ -69,18 +70,38 @@ export function castFrame(session: HostSession, ctx: CanvasRenderingContext2D, p
   return next;
 }
 
+export interface Broadcast {
+  stop(): void;
+  setFps(fps: number): void;
+}
+
+/** Draw a picture onto `ctx` and cast it to the crowd `fps` times a second until stopped. */
+export function broadcast(session: HostSession, ctx: CanvasRenderingContext2D, draw: (ctx: CanvasRenderingContext2D, t: number) => void, fps: number): Broadcast {
+  let last = new Map<number, RGB>();
+  const frame = () => {
+    draw(ctx, performance.now());
+    last = castFrame(session, ctx, last);
+  };
+  let timer = window.setInterval(frame, 1000 / fps);
+  return {
+    stop: () => clearInterval(timer),
+    setFps: (v) => {
+      clearInterval(timer);
+      timer = window.setInterval(frame, 1000 / v);
+    },
+  };
+}
+
 export function livePanel(session: HostSession, director: Director): HTMLElement {
   const canvas = h('canvas.live-preview', { width: W, height: H, 'aria-label': 'What the crowd is showing' });
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  const msg = h('p.note', { role: 'status' });
   const file = h('input', { type: 'file', accept: 'video/*', id: 'live-file', hidden: true });
   const fileLabel = h('label.file', { for: 'live-file', hidden: true }, 'Video file', file);
   let kind: SourceKind = 'aurora';
   let fps = 10;
-  let timer = 0;
+  let loop: Broadcast | null = null;
   let video: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
-  let last = new Map<number, RGB>();
   let live = false;
   // Bumped by every start and stop, so a start whose camera prompt or video load resolves
   // after it was superseded drops what it opened instead of leaving the camera on.
@@ -98,7 +119,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
 
   const prepare = async (mine: number): Promise<boolean> => {
     const fail = (text: string) => {
-      if (mine === gen) msg.textContent = text;
+      if (mine === gen) say(text);
       return false;
     };
     let s: MediaStream | null = null;
@@ -132,12 +153,10 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     return true;
   };
 
-  const frame = () => {
-    const t = performance.now();
-    if (kind === 'aurora') aurora(ctx, t);
-    else if (kind === 'fire') fire(ctx);
-    else if (video && video.readyState >= 2) ctx.drawImage(video, 0, 0, W, H);
-    last = castFrame(session, ctx, last);
+  const draw = (c: CanvasRenderingContext2D, t: number) => {
+    if (kind === 'aurora') aurora(c, t);
+    else if (kind === 'fire') fire(c);
+    else if (video && video.readyState >= 2) c.drawImage(video, 0, 0, W, H);
   };
 
   const goLive = h('button.btn.primary', { type: 'button' }, 'Go live');
@@ -146,13 +165,13 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     gen++;
     live = false;
     goLive.disabled = false;
-    clearInterval(timer);
-    timer = 0;
+    loop?.stop();
+    loop = null;
     release();
   };
 
   const start = async () => {
-    if (session.layout.positions.size === 0) return void (msg.textContent = 'Place some phones on the map first (Locate tab).');
+    if (!requirePlaced(session, say)) return;
     director.take(stop);
     const mine = ++gen;
     live = true;
@@ -161,16 +180,13 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     if (mine !== gen) return;
     goLive.disabled = false;
     if (!ok) return void (live = false);
-    last = new Map();
-    timer = window.setInterval(frame, 1000 / fps);
-    msg.textContent = `Broadcasting to ${session.layout.positions.size} phones at ${fps} frames a second.`;
+    loop = broadcast(session, ctx, draw, fps);
+    say(`Broadcasting to ${session.layout.positions.size} phones at ${fps} frames a second.`);
   };
   goLive.addEventListener('click', start);
 
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'Turn the crowd into a live screen. Point your camera at the stage, play a video, or let a generated animation run, and every phone becomes one pixel of the moving picture.'),
+  const { el, say } = panel(
+    'Turn the crowd into a live screen. Point your camera at the stage, play a video, or let a generated animation run, and every phone becomes one pixel of the moving picture.',
     segmented<SourceKind>('Source', [['aurora', 'Aurora'], ['fire', 'Fire'], ['camera', 'Camera'], ['video', 'Video']], kind, (v) => {
       kind = v;
       fileLabel.hidden = file.hidden = v !== 'video';
@@ -179,13 +195,10 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     fileLabel,
     slider('Frame rate', 2, 20, 1, fps, (v) => `${v} fps`, (v) => {
       fps = v;
-      if (timer) {
-        clearInterval(timer);
-        timer = window.setInterval(frame, 1000 / fps);
-      }
+      loop?.setFps(fps);
     }),
     canvas,
-    h('div.row', {}, goLive, h('button.btn.ghost', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), (msg.textContent = '')) }, 'Stop')),
-    msg,
+    h('div.row', {}, goLive, stopButton(director, () => say(''))),
   );
+  return el;
 }

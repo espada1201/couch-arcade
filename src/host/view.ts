@@ -4,7 +4,8 @@ import { pickTransport } from '../net/pick';
 import { h } from '../ui/dom';
 import { livePanel } from './live';
 import { locatePanel } from './locate';
-import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel, type Director } from './play';
+import { Director } from './director';
+import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel } from './play';
 import { HostSession } from './session';
 import { showPanel } from './show';
 import { Stage } from './stage';
@@ -72,14 +73,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   const joinUrl = `${base}?${q}`;
 
   const stage = new Stage(session);
-  let stopCurrent: (() => void) | undefined;
-  const director: Director = {
-    take(stop) {
-      stopCurrent?.();
-      stopCurrent = stop;
-      stage.onPick = null;
-    },
-  };
+  const director = new Director(session, stage);
 
   const count = h('span.count', { role: 'status' });
   const updateCount = () => {
@@ -103,12 +97,12 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   });
 
   const tabs: [string, string, () => HTMLElement][] = [
-    ['locate', 'Locate', () => locatePanel(session, params, (stop) => director.take(stop))],
+    ['locate', 'Locate', () => locatePanel(session, params, director)],
     ['show', 'Show', () => showPanel(session, director)],
     ['card', 'Card stunt', () => cardPanel(session, director)],
     ['live', 'Live screen', () => livePanel(session, director)],
     ['wave', 'Wave', () => wavePanel(session, stage, director)],
-    ['sound', 'Sound', () => soundPanel(session, stage, director)],
+    ['sound', 'Sound', () => soundPanel(session, director)],
     ['territory', 'Territory', () => territoryPanel(session, director)],
     ['potato', 'Hot Potato', () => potatoPanel(session, director)],
   ];
@@ -162,8 +156,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
         h(
           'div.top-actions',
           {},
-          h('button.btn.ghost.small', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' })) }, 'Lights off'),
-          h('button.btn.ghost.small', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' }), session.forgetOffline()) }, 'Forget offline'),
+          h('button.btn.ghost.small', { type: 'button', onclick: () => director.idle() }, 'Lights off'),
+          h('button.btn.ghost.small', { type: 'button', onclick: () => (director.idle(), session.forgetOffline()) }, 'Forget offline'),
           h(
             'button.btn.ghost.small',
             {

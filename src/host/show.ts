@@ -2,10 +2,13 @@
 // pictures, waves, sound and live animation, so the host can put the laptop down.
 import { AMBER, TEAL, WHITE, makeWave, type WaveParams } from '../core/effects';
 import type { RGB } from '../core/layout';
+import { canvas2d } from '../ui/canvas';
 import { h } from '../ui/dom';
+import type { Director } from './director';
 import { presets, textStunt } from './images';
-import { H, W, aurora, castFrame, fire } from './live';
-import { flipCards, type Director } from './play';
+import { H, W, aurora, broadcast, fire } from './live';
+import { panel, requirePlaced, stopButton } from './panel';
+import { flipCards } from './play';
 import type { HostSession } from './session';
 
 interface Cue {
@@ -20,18 +23,7 @@ function wave(w: Partial<WaveParams> & { rgb: RGB }): Cue['run'] {
 }
 
 function live(draw: (ctx: CanvasRenderingContext2D, t: number) => void): Cue['run'] {
-  return (session) => {
-    const c = document.createElement('canvas');
-    c.width = W;
-    c.height = H;
-    const ctx = c.getContext('2d', { willReadFrequently: true })!;
-    let last = new Map<number, RGB>();
-    const timer = window.setInterval(() => {
-      draw(ctx, performance.now());
-      last = castFrame(session, ctx, last);
-    }, 100);
-    return () => clearInterval(timer);
-  };
+  return (session) => broadcast(session, canvas2d(W, H)[1], draw, 10).stop;
 }
 
 const picture = (name: string): Cue['run'] => (session) => flipCards(session, presets().find((p) => p.name === name)!.image, 1500);
@@ -53,7 +45,6 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   const now = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'Ready when you are.');
   const bar = h('progress', { max: 1, value: 0, 'aria-label': 'Cue progress' });
   const list = h('ol.cues', {}, ...CUES.map((c) => h('li', {}, c.name, h('span', {}, `${Math.round(c.ms / 1000)}s`))));
-  const msg = h('p.note', { role: 'status' });
   let timer = 0;
   let ticker = 0;
   let stopCue: (() => void) | void;
@@ -101,8 +92,8 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   };
 
   const start = () => {
-    if (session.layout.positions.size === 0) return void (msg.textContent = 'Place some phones on the map first (Locate tab).');
-    msg.textContent = '';
+    if (!requirePlaced(session, say)) return;
+    say('');
     director.take(halt);
     running = true;
     document.addEventListener('visibilitychange', relock);
@@ -110,16 +101,14 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     play(0);
   };
 
-  return h(
-    'div.panel-body',
-    {},
-    h('p.panel-intro', {}, 'Press one button and walk away. The show loops through your title, waves of light and sound, live animation and pictures, timed for the whole crowd.'),
+  const { el, say } = panel(
+    'Press one button and walk away. The show loops through your title, waves of light and sound, live animation and pictures, timed for the whole crowd.',
     h('div.row', {}, h('label.grow', { for: 'show-title' }, 'Title on the crowd', title)),
     h('label.check', { for: 'show-sound' }, sound, h('span', {}, 'With sound')),
     list,
     bar,
     now,
-    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: start }, 'Start the show'), h('button.btn.ghost', { type: 'button', onclick: () => (director.take(), session.setProgram({ kind: 'lobby' })) }, 'Stop')),
-    msg,
+    h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: start }, 'Start the show'), stopButton(director)),
   );
+  return el;
 }

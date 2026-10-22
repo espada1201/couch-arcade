@@ -7,11 +7,12 @@ import { validCorners } from '../core/homography';
 import { localize, type GrayFrame, type LocalizeResult } from '../core/localize';
 import { h } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
+import type { Director } from './director';
 import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function locatePanel(session: HostSession, params: URLSearchParams, takeOver: (stop?: () => void) => void): HTMLElement {
+export function locatePanel(session: HostSession, params: URLSearchParams, director: Director): HTMLElement {
   const synthetic = params.get('camera') === 'synthetic';
   let source: FrameSource | null = null;
   let lastScan: LocalizeResult | null = null;
@@ -133,7 +134,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
       scanning = false;
     };
     // Something else took the crowd mid-scan: drop the burst rather than decode it and blank the screens.
-    takeOver(() => {
+    director.take(() => {
       if (!scanning || cancelled) return;
       cancelled = true;
       finish();
@@ -239,7 +240,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
 
   identify.addEventListener('click', () => {
     const on = identify.getAttribute('aria-pressed') !== 'true';
-    takeOver(on ? () => identify.setAttribute('aria-pressed', 'false') : undefined);
+    director.take(on ? () => identify.setAttribute('aria-pressed', 'false') : undefined);
     identify.setAttribute('aria-pressed', String(on));
     session.setProgram({ kind: on ? 'identify' : 'lobby' });
   });
@@ -255,7 +256,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     {
       type: 'button',
       onclick: () => {
-        takeOver(() => {
+        director.take(() => {
           asking = false;
           useBtn.disabled = true;
         });

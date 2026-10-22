@@ -1,5 +1,5 @@
 type Attrs = Record<string, string | number | boolean | EventListener | undefined>;
-type Child = Node | string | null | undefined | false;
+export type Child = Node | string | null | undefined | false;
 
 /** Minimal element builder: h('button.primary', { onclick }, 'Go'). */
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K | `${K}.${string}`, attrs: Attrs = {}, ...kids: Child[]): HTMLElementTagNameMap[K] {

@@ -11,3 +11,11 @@ export function fitCanvas(c: HTMLCanvasElement): number {
   }
   return dpr;
 }
+
+/** An offscreen canvas and a context tuned for reading pixels back. */
+export function canvas2d(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return [c, c.getContext('2d', { willReadFrequently: true })!];
+}

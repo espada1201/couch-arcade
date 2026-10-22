@@ -1,15 +1,9 @@
 // Pictures for the card stunt. Everything is drawn on a canvas so it can be sampled
 // per phone: built-in designs, the host's own words, or an uploaded photo.
 import type { Image } from '../core/layout';
+import { canvas2d } from '../ui/canvas';
 
 export const STUNT_SIZE = 240;
-
-function canvas(w = STUNT_SIZE, h = STUNT_SIZE): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  return [c, c.getContext('2d', { willReadFrequently: true })!];
-}
 
 function toImage(c: HTMLCanvasElement): Image {
   const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
@@ -23,13 +17,16 @@ export interface Stunt {
 }
 
 function make(name: string, draw: (ctx: CanvasRenderingContext2D, s: number) => void): Stunt {
-  const [c, ctx] = canvas();
+  const [c, ctx] = canvas2d(STUNT_SIZE, STUNT_SIZE);
   draw(ctx, STUNT_SIZE);
   return { name, canvas: c, image: toImage(c) };
 }
 
+let built: Stunt[] | null = null;
+
+/** The built-in pictures, drawn once and shared (nothing draws on them afterwards). */
 export function presets(): Stunt[] {
-  return [
+  return (built ??= [
     make('Sunrise', (ctx, s) => {
       const g = ctx.createLinearGradient(0, 0, 0, s);
       g.addColorStop(0, '#16233b');
@@ -66,13 +63,13 @@ export function presets(): Stunt[] {
       ctx.bezierCurveTo(s * 0.88, s * 0.12, s * 0.95, s * 0.55, s / 2, s * 0.85);
       ctx.fill();
     }),
-  ];
+  ]);
 }
 
 export function textStunt(text: string, aspect: number): Stunt {
   const w = STUNT_SIZE * Math.max(1, aspect);
   const hgt = STUNT_SIZE * Math.max(1, 1 / aspect);
-  const [c, ctx] = canvas(Math.round(w), Math.round(hgt));
+  const [c, ctx] = canvas2d(Math.round(w), Math.round(hgt));
   ctx.fillStyle = '#0e0d0b';
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.fillStyle = '#ffb000';
@@ -91,7 +88,7 @@ export function textStunt(text: string, aspect: number): Stunt {
 export async function fileStunt(file: File): Promise<Stunt> {
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
-  const [c, ctx] = canvas(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k)));
+  const [c, ctx] = canvas2d(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k)));
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
   return { name: file.name, canvas: c, image: toImage(c) };
 }
