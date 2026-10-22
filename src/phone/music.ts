@@ -5,7 +5,7 @@
 // core/speaker.ts.
 import { channelFor, clockTime, PAUSED, playingAt, positionAt, reconcile, type Channel, type Segment, type SpeakerProgram, type Track } from '../core/speaker';
 import { Reassembler, type ChunkMsg } from '../net/chunks';
-import { h } from '../ui/dom';
+import { h, setText } from '../ui/dom';
 import type { Speaker } from './audio';
 import type { PhoneClient } from './client';
 
@@ -236,14 +236,14 @@ export class PartySpeaker {
     else if (!ctx || ctx.state !== 'running') [state, text] = ['muted', 'Tap the screen to turn the sound on'];
     else if (playingAt(tl, hostNow, t.duration)) [state, text] = ['playing', `Playing${{ left: ' · left channel', right: ' · right channel', mono: '', stereo: '' }[this.channel ?? 'stereo']}`];
     else [state, text] = ['ready', positionAt(tl, hostNow, t.duration) > 0 ? 'Paused' : 'Ready. Keep this page open with the sound up.'];
-    this.title.textContent = t?.name ?? '';
-    this.state.textContent = text;
+    setText(this.title, t?.name ?? '');
+    setText(this.state, text);
     this.el.dataset.state = state;
     const pos = t ? positionAt(tl, hostNow, t.duration) : 0;
     const pct = t && t.duration > 0 ? (pos / t.duration) * 100 : 0;
     this.fill.style.width = `${pct}%`;
     this.bar.setAttribute('aria-valuenow', String(Math.round(pct)));
-    this.time.textContent = t ? `${clockTime(pos)} / ${clockTime(t.duration)}` : '';
+    setText(this.time, t ? `${clockTime(pos)} / ${clockTime(t.duration)}` : '');
     // For tests and debugging: where this phone's audio really is, in shared host time.
     const sounding = ctx && this.voices.find((v) => v.seg.from <= hostNow && hostNow < v.seg.until);
     if (sounding) {

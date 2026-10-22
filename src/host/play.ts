@@ -4,7 +4,7 @@ import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type Program
 import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
 import type { PotatoState } from '../core/potato';
 import { teamSizes, type TerritoryState } from '../core/territory';
-import { css, h, plural, segmented, slider } from '../ui/dom';
+import { css, h, plural, segmented, setText, slider } from '../ui/dom';
 import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
@@ -277,12 +277,14 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
         bar.style.setProperty('--b', String(s.boundary));
         const [a, b] = teamSizes(s, room);
         const left = Math.max(0, Math.ceil((s.endsAt - session.now()) / 1000));
-        score.textContent =
+        setText(
+          score,
           s.phase === 'over'
             ? s.winner === null
               ? 'Dead heat. A draw!'
               : `${s.winner === 0 ? 'Amber' : 'Teal'} wins with ${Math.round((s.winner === 0 ? s.boundary : 1 - s.boundary) * 100)}% of the floor.`
-            : `Amber ${plural(a, 'phone')}, ${plural(s.taps[0], 'tap')} · Teal ${plural(b, 'phone')}, ${plural(s.taps[1], 'tap')} · ${left}s left`;
+            : `Amber ${plural(a, 'phone')}, ${plural(s.taps[0], 'tap')} · Teal ${plural(b, 'phone')}, ${plural(s.taps[1], 'tap')} · ${left}s left`,
+        );
       },
     });
   const { el, say } = panel(
@@ -301,10 +303,10 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
       ...POTATO_RULES,
       show: (s, prev, room) => {
         if (s === prev) return;
-        if (s.phase === 'over') score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${plural(s.passes, 'throw')}.`;
+        if (s.phase === 'over') setText(score, s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${plural(s.passes, 'throw')}.`);
         else if (!prev || prev.out.length !== s.out.length || prev.holder !== s.holder) {
           const alive = room.positions.size - s.out.length;
-          score.textContent = `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${plural(s.passes, 'throw')}`;
+          setText(score, `Ball on phone ${s.holder + 1} · fuse ${(s.fuse / 1000).toFixed(1)}s · ${alive} still in · ${plural(s.passes, 'throw')}`);
         }
       },
     });

@@ -1,7 +1,7 @@
 import { DIM, luma, render, type Frame } from '../core/effects';
 import { pickTransport } from '../net/pick';
 import { OPTICS_CHANNEL, type Optics } from '../core/protocol';
-import { css, h } from '../ui/dom';
+import { css, h, setText } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
@@ -65,7 +65,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     const bg = css(frame.rgb);
     if (bg !== lastCss) screen.style.backgroundColor = lastCss = bg;
     const text = frame.label ?? '';
-    if (label.textContent !== text) label.textContent = text;
+    setText(label, text);
     // Celebrate once, the moment this phone shows WIN.
     const win = text === 'WIN';
     if (win && !won) {
@@ -109,7 +109,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     const seat = client.seat >= 0 ? `Seat ${client.seat + 1}` : 'Joining';
     const place = client.pos ? 'placed' : 'not placed yet';
     const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', replaced: 'open in another tab', failed: 'disconnected' }[client.status];
-    status.textContent = `${room} · ${seat} · ${state}`;
+    setText(status, `${room} · ${seat} · ${state}`);
     status.dataset.state = client.status;
 
     const p = client.program;

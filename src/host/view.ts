@@ -2,7 +2,7 @@ import qrcode from 'qrcode-generator';
 import { carry } from '../landing';
 import { RoomTakenError } from '../net/peer';
 import { pickTransport } from '../net/pick';
-import { h, plural } from '../ui/dom';
+import { h, plural, setText } from '../ui/dom';
 import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { Director } from './director';
@@ -85,7 +85,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     const online = session.online.length;
     const placed = [...session.layout.positions.keys()].filter((s) => session.seats.get(s)?.link).length;
     const sync = session.worstSync;
-    count.textContent = `${plural(online, 'phone')} · ${placed} placed` + (online && Number.isFinite(sync) ? ` · in sync to ±${sync} ms` : online ? ' · syncing…' : '');
+    setText(count, `${plural(online, 'phone')} · ${placed} placed` + (online && Number.isFinite(sync) ? ` · in sync to ±${sync} ms` : online ? ' · syncing…' : ''));
   };
   session.subscribe(updateCount);
   updateCount();

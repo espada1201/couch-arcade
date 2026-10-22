@@ -5,7 +5,7 @@ import { DEFAULT_HALF_MS, DEFAULT_REPEATS, scheduleDuration, type BlinkSchedule 
 import { seatGridPoint, type Point } from '../core/layout';
 import { validCorners } from '../core/homography';
 import { localize, type GrayFrame, type LocalizeResult } from '../core/localize';
-import { h, plural } from '../ui/dom';
+import { h, plural, setText } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
 import type { Director, Hold } from './director';
 import type { HostSession } from './session';
@@ -87,7 +87,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
 
   startBtn.addEventListener('click', async () => {
     source?.stop();
-    camMsg.textContent = 'Starting camera…';
+    setText(camMsg, 'Starting camera…');
     try {
       source = synthetic ? new SyntheticSource() : new CameraSource(devices.value || undefined);
       await source.start();
@@ -104,7 +104,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     } catch (e) {
       source?.stop();
       source = null;
-      camMsg.textContent = `${e instanceof Error ? e.message : String(e)} You can also use typed seat numbers below, or place phones by hand on the map.`;
+      setText(camMsg, `${e instanceof Error ? e.message : String(e)} You can also use typed seat numbers below, or place phones by hand on the map.`);
     }
   });
 
@@ -113,7 +113,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     if (!src || scanning) return;
     const online = session.online;
     if (online.length === 0) {
-      result.textContent = 'No phones are connected yet.';
+      setText(result, 'No phones are connected yet.');
       return;
     }
     scanning = true;
@@ -133,12 +133,12 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
         if (!scanning || cancelled) return;
         cancelled = true;
         finish();
-        result.textContent = 'Scan stopped.';
+        setText(result, 'Scan stopped.');
       },
     });
     // Phones flash on the shared clock, so give late joiners a moment to lock on first.
     for (let i = 0; i < 30 && session.worstSync > 40; i++) {
-      result.textContent = 'Waiting for every phone’s clock to lock on…';
+      setText(result, 'Waiting for every phone’s clock to lock on…');
       await sleep(100);
       if (cancelled) return;
     }
@@ -153,12 +153,12 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     progress.hidden = false;
     const started = session.now();
     tick = window.setInterval(() => (progress.value = Math.min(1, (session.now() - started) / total)), 100);
-    result.textContent = `${plural(online.length, 'phone')} ${online.length === 1 ? 'is' : 'are'} flashing their codes. Keep the camera still…`;
+    setText(result, `${plural(online.length, 'phone')} ${online.length === 1 ? 'is' : 'are'} flashing their codes. Keep the camera still…`);
     await sleep(total);
     if (cancelled) return;
     clearInterval(tick);
     src.onFrame = null;
-    result.textContent = 'Decoding…';
+    setText(result, 'Decoding…');
     await sleep(30);
     if (cancelled) return;
     lastScan = localize(frames, schedule);
@@ -202,7 +202,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     marking = true;
     corners = [];
     view.classList.add('marking');
-    perspectiveMsg.textContent = `Click the ${CORNER_NAMES[0]} corner of the area, as it appears in the camera picture.`;
+    setText(perspectiveMsg, `Click the ${CORNER_NAMES[0]} corner of the area, as it appears in the camera picture.`);
     drawOverlay();
   });
   overlay.addEventListener('click', (e) => {
@@ -210,12 +210,12 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     const r = picture();
     const b = overlay.getBoundingClientRect();
     corners.push({ x: (e.clientX - b.left - r.x) / r.w, y: (e.clientY - b.top - r.y) / r.h });
-    if (corners.length < 4) perspectiveMsg.textContent = `Now the ${CORNER_NAMES[corners.length]} corner.`;
+    if (corners.length < 4) setText(perspectiveMsg, `Now the ${CORNER_NAMES[corners.length]} corner.`);
     else {
       marking = false;
       view.classList.remove('marking');
       if (!validCorners(corners)) {
-        perspectiveMsg.textContent = 'Those corners cross over. Click “Correct perspective” and go round in order: top-left, top-right, bottom-right, bottom-left.';
+        setText(perspectiveMsg, 'Those corners cross over. Click “Correct perspective” and go round in order: top-left, top-right, bottom-right, bottom-left.');
         corners = [];
       } else {
         commit();
@@ -230,7 +230,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
   clearBtn.addEventListener('click', () => {
     session.setPerspective(null);
     clearBtn.hidden = true;
-    perspectiveMsg.textContent = '';
+    setText(perspectiveMsg, '');
     drawOverlay();
   });
 
@@ -278,7 +278,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     asking?.end();
   });
   session.subscribe(() => {
-    if (asking) answered.textContent = `${session.gridEntries.size} of ${plural(session.online.length, 'phone')} ${session.gridEntries.size === 1 ? 'has' : 'have'} answered.`;
+    if (asking) setText(answered, `${session.gridEntries.size} of ${plural(session.online.length, 'phone')} ${session.gridEntries.size === 1 ? 'has' : 'have'} answered.`);
   });
 
   return h(

@@ -5,7 +5,7 @@ import { NO_CAPTIONS, captionLines, deckFrom, heard, step, type Deck, type Follo
 import { FRAME_BUDGET, FrameGate, dataUrlBytes, encodeWithin, lumaOf } from '../core/frames';
 import { MAX_MESSAGE_BYTES, messageBytes, type HostMsg } from '../core/protocol';
 import { canvas2d } from '../ui/canvas';
-import { h, plural, segmented, slider } from '../ui/dom';
+import { h, plural, segmented, setText, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import type { Director, Hold } from './director';
 import { openCamera, stopStream } from './media';
@@ -122,7 +122,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const next = h('button.btn', { type: 'button', 'aria-label': 'Next card' }, 'Next ›');
   const cardView = (): FollowView | null => (deck.cards.length ? { show: 'card', text: deck.cards[deck.at], n: deck.at + 1, of: deck.cards.length } : null);
   const renderDeck = () => {
-    position.textContent = deck.cards.length ? `Card ${deck.at + 1} of ${deck.cards.length}` : 'No cards yet';
+    setText(position, deck.cards.length ? `Card ${deck.at + 1} of ${deck.cards.length}` : 'No cards yet');
     prev.disabled = deck.at <= 0;
     next.disabled = deck.at >= deck.cards.length - 1;
     const v = cardView();
