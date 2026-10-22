@@ -36,3 +36,16 @@ export async function openCamera(video: MediaTrackConstraints | true = true, { a
 export function stopStream(s: MediaStream | null | undefined): void {
   s?.getTracks().forEach((t) => t.stop());
 }
+
+/**
+ * Let go of a video the host played only to read frames from. A playing video stays alive, and keeps
+ * decoding, after the last reference to it is dropped, even off the page, until it is paused or emptied.
+ */
+export function dropVideo(v: HTMLVideoElement | null | undefined): void {
+  if (!v) return;
+  v.pause();
+  if (v.src.startsWith('blob:')) URL.revokeObjectURL(v.src);
+  v.srcObject = null;
+  v.removeAttribute('src');
+  v.load();
+}

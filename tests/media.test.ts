@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cameraProblem, openCamera, stopStream } from '../src/host/media';
+import { cameraProblem, dropVideo, openCamera, stopStream } from '../src/host/media';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -36,5 +36,29 @@ describe('opening the camera', () => {
     stopStream({ getTracks: () => [{ stop }, { stop }] } as unknown as MediaStream);
     expect(stop).toHaveBeenCalledTimes(2);
     stopStream(null);
+  });
+});
+
+describe('letting go of a video', () => {
+  const fakeVideo = (src: string) => {
+    const v = { src, srcObject: {} as unknown, pause: vi.fn(), load: vi.fn(), removeAttribute: vi.fn((a: string) => a === 'src' && (v.src = '')) };
+    return v;
+  };
+
+  it('stops it playing and empties it, so a dropped video is not kept alive decoding', () => {
+    const v = fakeVideo('');
+    dropVideo(v as unknown as HTMLVideoElement);
+    expect(v.pause).toHaveBeenCalled();
+    expect(v.srcObject).toBeNull();
+    expect(v.load).toHaveBeenCalled();
+  });
+
+  it('frees a picked file once, and tolerates no video', () => {
+    const revoke = vi.fn();
+    vi.stubGlobal('URL', { revokeObjectURL: revoke });
+    const v = fakeVideo('blob:abc');
+    dropVideo(v as unknown as HTMLVideoElement);
+    expect(revoke).toHaveBeenCalledWith('blob:abc');
+    expect(() => dropVideo(null)).not.toThrow();
   });
 });

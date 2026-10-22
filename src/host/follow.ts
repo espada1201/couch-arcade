@@ -8,7 +8,7 @@ import { canvas2d } from '../ui/canvas';
 import { errorText, h, plural, segmented, setText, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import type { Director, Hold } from './director';
-import { openCamera, stopStream } from './media';
+import { dropVideo, openCamera, stopStream } from './media';
 import { panel, stopButton } from './panel';
 import type { HostSession } from './session';
 import { captureFrames } from './capture';
@@ -92,6 +92,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   let deck: Deck = { cards: [], at: 0 };
   let loop: Broadcast | null = null;
   let stream: MediaStream | null = null;
+  let video: HTMLVideoElement | null = null;
   let recognition: Recognition | null = null;
   let seq = 0;
   // Bumped by every start and stop, so a permission prompt that resolves late is dropped.
@@ -176,6 +177,8 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     go.disabled = false;
     loop?.stop();
     loop = null;
+    dropVideo(video);
+    video = null;
     stopStream(stream);
     stream = null;
     if (recognition) {
@@ -200,9 +203,9 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     }
     if (mine !== gen) return stopStream(s);
     stream = s;
-    const video = h('video', { muted: true, playsinline: true });
-    video.muted = true;
-    video.srcObject = s;
+    const v = (video = h('video', { muted: true, playsinline: true }));
+    v.muted = true;
+    v.srcObject = s;
     // Stopping from the browser's own "Stop sharing" bar ends the broadcast too.
     s.getVideoTracks()[0]?.addEventListener('ended', () => {
       if (mine !== gen) return;
@@ -210,7 +213,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       say(kind === 'screen' ? 'Screen sharing ended.' : 'The camera stopped.');
     });
     try {
-      await video.play();
+      await v.play();
     } catch {
       if (mine === gen) {
         hold?.end();
@@ -218,8 +221,8 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       }
       return;
     }
-    if (mine !== gen) return;
-    loop = streamFrames(video, s.getVideoTracks()[0], fps, (src) => {
+    if (mine !== gen) return dropVideo(v);
+    loop = streamFrames(v, s.getVideoTracks()[0], fps, (src) => {
       show({ show: 'picture', src, seq: ++seq });
       say(`Showing ${kind === 'screen' ? 'your screen' : 'the camera'} on ${phones()} · up to ${fps} fps · last frame ${Math.round(dataUrlBytes(src) / 1024)} KB.`);
     });

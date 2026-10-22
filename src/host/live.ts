@@ -5,7 +5,7 @@ import { BLACK } from '../core/effects';
 import { sampleCrowd, type RGB } from '../core/layout';
 import { errorText, h, plural, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
-import { openCamera, stopStream } from './media';
+import { dropVideo, openCamera, stopStream } from './media';
 import { panel, requirePlaced, stopButton } from './panel';
 import { every, type Broadcast } from './ticker';
 import type { HostSession } from './session';
@@ -113,7 +113,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
 
   const drop = (s: MediaStream | null, v: HTMLVideoElement | null) => {
     stopStream(s);
-    if (v?.src) URL.revokeObjectURL(v.src);
+    dropVideo(v);
   };
 
   /** Opens the selected source; on failure says why and returns null. */
