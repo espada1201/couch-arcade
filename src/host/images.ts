@@ -54,36 +54,108 @@ export function presets(): Stunt[] {
       });
     }),
     make('Heart', (ctx, s) => {
-      ctx.fillStyle = '#0e0d0b';
+      ctx.fillStyle = INK;
       ctx.fillRect(0, 0, s, s);
-      ctx.fillStyle = '#ff3b4f';
-      ctx.beginPath();
-      ctx.moveTo(s / 2, s * 0.85);
-      ctx.bezierCurveTo(s * 0.05, s * 0.55, s * 0.12, s * 0.12, s / 2, s * 0.3);
-      ctx.bezierCurveTo(s * 0.88, s * 0.12, s * 0.95, s * 0.55, s / 2, s * 0.85);
-      ctx.fill();
+      heart(ctx, 0, 0, s);
     }),
   ]);
 }
 
-export function textStunt(text: string, aspect: number): Stunt {
+const INK = '#0e0d0b';
+const GOLD = '#ffb000';
+const ROSE = '#ff3b4f';
+
+/** A heart filling the s-by-s square at (x, y). */
+function heart(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
+  ctx.fillStyle = ROSE;
+  ctx.beginPath();
+  ctx.moveTo(x + s / 2, y + s * 0.85);
+  ctx.bezierCurveTo(x + s * 0.05, y + s * 0.55, x + s * 0.12, y + s * 0.12, x + s / 2, y + s * 0.3);
+  ctx.bezierCurveTo(x + s * 0.88, y + s * 0.12, x + s * 0.95, y + s * 0.55, x + s / 2, y + s * 0.85);
+  ctx.fill();
+}
+
+/** A heart in a line of words. */
+export const HEART = Symbol('heart');
+type Piece = string | typeof HEART;
+
+/**
+ * Lines of big words (and hearts) shaped to the crowd: the canvas takes the room's
+ * aspect so nothing is cropped, each line gets an equal band, and each is shrunk to fit.
+ */
+function wordsStunt(name: string, lines: Piece[][], aspect: number, color = GOLD): Stunt {
   const w = STUNT_SIZE * Math.max(1, aspect);
   const hgt = STUNT_SIZE * Math.max(1, 1 / aspect);
   const [c, ctx] = canvas2d(Math.round(w), Math.round(hgt));
-  ctx.fillStyle = '#0e0d0b';
+  ctx.fillStyle = INK;
   ctx.fillRect(0, 0, c.width, c.height);
-  ctx.fillStyle = '#ffb000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  let size = c.height * 0.8;
-  ctx.font = `900 ${size}px "Archivo Variable", sans-serif`;
-  while (size > 8 && ctx.measureText(text).width > c.width * 0.92) {
-    size *= 0.9;
-    ctx.font = `900 ${size}px "Archivo Variable", sans-serif`;
-  }
-  ctx.fillText(text, c.width / 2, c.height / 2);
-  return { name: text, canvas: c, image: toImage(c) };
+  const band = c.height / lines.length;
+  const font = (size: number) => (ctx.font = `900 ${size}px "Archivo Variable", sans-serif`);
+  lines.forEach((line, row) => {
+    const gap = (size: number) => size * 0.2;
+    const widths = (size: number) => (font(size), line.map((p) => (p === HEART ? size * 0.9 : ctx.measureText(p).width)));
+    const total = (size: number) => widths(size).reduce((a, b) => a + b, 0) + gap(size) * (line.length - 1);
+    let size = band * 0.8;
+    while (size > 8 && total(size) > c.width * 0.92) size *= 0.9;
+    const ws = widths(size);
+    const cy = band * (row + 0.5);
+    let x = (c.width - total(size)) / 2;
+    line.forEach((p, i) => {
+      if (p === HEART) heart(ctx, x, cy - ws[i] * 0.55, ws[i]);
+      else {
+        ctx.fillStyle = color;
+        ctx.fillText(p, x + ws[i] / 2, cy);
+      }
+      x += ws[i] + gap(size);
+    });
+  });
+  return { name, canvas: c, image: toImage(c) };
 }
+
+export function textStunt(text: string, aspect: number): Stunt {
+  return wordsStunt(text, [[text]], aspect);
+}
+
+/** The year a New Year party is counting down to (or, just after midnight, has just begun). */
+export function comingYear(d = new Date()): number {
+  return d.getFullYear() + (d.getMonth() >= 6 ? 1 : 0);
+}
+
+/** An event template: a card stunt built from the host's names, laid out for the room's shape. */
+export interface Moment {
+  name: string;
+  /** How many of the custom names it uses. */
+  names: 0 | 1 | 2;
+  make(names: [string, string], aspect: number): Stunt;
+}
+
+/** Wide rooms read one long line; deep rooms stack the words. */
+const wide = (aspect: number) => aspect >= 1.6;
+
+export const MOMENTS: Moment[] = [
+  {
+    name: 'Names with a heart',
+    names: 2,
+    make: ([a, b], aspect) => wordsStunt('Names with a heart', wide(aspect) ? [[a, HEART, b]] : [[a], [HEART], [b]], aspect),
+  },
+  {
+    name: 'Just married',
+    names: 0,
+    make: (_, aspect) => wordsStunt('Just married', wide(aspect) ? [['JUST MARRIED']] : [['JUST'], ['MARRIED']], aspect, '#f2ead8'),
+  },
+  {
+    name: 'Happy birthday',
+    names: 1,
+    make: ([a], aspect) => wordsStunt('Happy birthday', [...(wide(aspect) ? [['HAPPY BIRTHDAY']] : [['HAPPY'], ['BIRTHDAY']]), ...(a ? [[a]] : [])], aspect),
+  },
+  {
+    name: String(comingYear()),
+    names: 0,
+    make: (_, aspect) => wordsStunt(String(comingYear()), [[String(comingYear())]], aspect),
+  },
+];
 
 export async function fileStunt(file: File): Promise<Stunt> {
   const bmp = await createImageBitmap(file);

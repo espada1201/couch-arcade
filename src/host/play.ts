@@ -7,13 +7,17 @@ import { teamSizes, type TerritoryState } from '../core/territory';
 import { css, h, plural, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
-import { fileStunt, presets, textStunt, type Stunt } from './images';
+import { MOMENTS, fileStunt, presets, textStunt, type Moment, type Stunt } from './images';
 import { panel, requirePlaced, stopButton } from './panel';
+import { recorder } from './record';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
 
+/** How long the crowd counts down before a card stunt flips. */
+const FLIP_LEAD_MS = 3200;
+
 /** Show `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
-export function flipCards(session: HostSession, image: Image, leadMs = 3200): void {
+export function flipCards(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): void {
   // Each phone averages the patch of picture it stands in for.
   const colors = sampleCrowd(image, session.layout, Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, session.layout.positions.size))));
   const at = session.now() + leadMs;
@@ -23,13 +27,27 @@ export function flipCards(session: HostSession, image: Image, leadMs = 3200): vo
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
   const all = presets();
   let chosen: Stunt = all[0];
+  /** The event template behind the current picture, rebuilt when the names change. */
+  let moment: Moment | null = null;
   const preview = h('div.stunt-preview');
   const show = () => preview.replaceChildren(chosen.canvas);
-  const pick = (s: Stunt) => {
+  const pick = (s: Stunt, m: Moment | null = null) => {
     chosen = s;
+    moment = m;
     show();
-    thumbs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.name === s.name)));
+    thumbs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(!m && b.dataset.name === s.name)));
+    moments.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.name === m?.name)));
   };
+  const names = [h('input', { type: 'text', id: 'stunt-name-1', maxlength: 12, placeholder: 'SAM', autocomplete: 'off' }), h('input', { type: 'text', id: 'stunt-name-2', maxlength: 12, placeholder: 'ALEX', autocomplete: 'off' })];
+  const typed = (): [string, string] => names.map((n) => (n.value.trim() || n.placeholder).toUpperCase()) as [string, string];
+  const useMoment = (m: Moment) => pick(m.make(typed(), session.layout.aspect), m);
+  for (const n of names) n.addEventListener('input', () => moment && moment.names > 0 && useMoment(moment));
+  const moments = h(
+    'div.moments',
+    { role: 'group', 'aria-label': 'Event templates' },
+    ...MOMENTS.map((m) => h('button.btn.small', { type: 'button', 'data-name': m.name, 'aria-pressed': 'false', onclick: () => useMoment(m) }, m.name)),
+  );
+  const rec = recorder();
   const thumbs = h(
     'div.thumbs',
     { role: 'group', 'aria-label': 'Pictures' },
@@ -55,8 +73,10 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', () => {
     if (!requirePlaced(session, say)) return;
-    director.take();
+    director.take(rec?.end);
     flipCards(session, chosen.image);
+    // Film the countdown, the flip, and a few seconds of the crowd holding it.
+    rec?.begin(FLIP_LEAD_MS + 8000);
     const n = session.playRoom().positions.size;
     say(`3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'flips' : 'flip'} together.`);
   });
@@ -64,9 +84,12 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const { el, say } = panel(
     'A stadium card stunt from any picture. Every phone shows its own patch of the image, then the whole crowd flips at the same instant.',
     thumbs,
+    moments,
+    h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
     h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: () => words.value.trim() && pick(textStunt(words.value.trim().toUpperCase(), session.layout.aspect)) }, 'Use words')),
     h('label.file', { for: 'stunt-file' }, 'Or upload a picture', file),
     preview,
+    rec?.el,
     flip,
   );
   return el;

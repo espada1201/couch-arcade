@@ -23,7 +23,7 @@ test('three phones vote, the host counts them, and Reveal turns the room into th
   await host.getByRole('button', { name: 'Start the poll' }).click();
 
   for (const p of phones) await expect(p.getByRole('heading', { name: 'Pizza or tacos?' })).toBeVisible();
-  // The leftmost phone votes Tacos, then changes its mind and changes back: still one vote.
+  // The leftmost phone votes Pizza, then changes its mind to Tacos: still one vote.
   await phones[0].getByRole('button', { name: /Pizza/ }).click();
   await phones[0].getByRole('button', { name: /Tacos/ }).click();
   await expect(phones[0].getByRole('button', { name: /Tacos/ })).toHaveAttribute('aria-pressed', 'true');

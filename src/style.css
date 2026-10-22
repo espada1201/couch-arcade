@@ -311,3 +311,6 @@ body.phone { overscroll-behavior: none; }
 .vote[aria-pressed='true'] .vote-name::after { content: ' ✓'; }
 .vote:disabled { cursor: not-allowed; opacity: 0.55; }
 .ballot-note { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+.moments { display: flex; flex-wrap: wrap; gap: 6px; }
+.record { display: grid; gap: 6px; }
+.record a[hidden] { display: none; }
