@@ -6,7 +6,7 @@ import { sampleCrowd, type RGB } from '../core/layout';
 import { errorText, h, plural, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
 import { dropVideo, openCamera, stopStream } from './media';
-import { cardStuntPointer, panel, requirePlaced, stopButton } from './panel';
+import { cardStuntPointer, panel, placementNote, requirePlaced, stopButton } from './panel';
 import { every, type Broadcast } from './ticker';
 import type { HostSession } from './session';
 
@@ -201,6 +201,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
 
   const { el, say, fail } = panel(
     'Turn the crowd into a live screen. Point your camera at the stage, play a video, or let a generated animation run, and every phone becomes one pixel of the moving picture.',
+    placementNote(session, 'Live screen needs phones on the map.'),
     cardStuntPointer('This is for moving pictures, not a still photo.'),
     segmented<SourceKind>('Source', [['aurora', 'Aurora'], ['fire', 'Fire'], ['camera', 'Camera'], ['video', 'Video']], kind, (v) => {
       kind = v;

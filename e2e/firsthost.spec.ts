@@ -193,6 +193,45 @@ test('Card stunt says what to expect from few phones', async ({ context }) => {
   expect(errors).toEqual([]);
 });
 
+for (const [w, h] of [[1280, 800], [820, 1180]]) {
+  test(`${w}px: Card stunt says up front that it needs phones on the map, with a live count`, async ({ context }) => {
+    const errors: string[] = [];
+    const { host, code } = await openHost(context, errors);
+    await host.setViewportSize({ width: w, height: h });
+    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    const need = host.locator('.needs');
+    await expect(need).toContainText('No phones have joined yet');
+    for (let i = 0; i < 3; i++) await joinPhone(context, code, i, errors);
+    await expect(need).toContainText('0 of 3 phones are on the map');
+    await expect(need.getByRole('button', { name: 'Go to Locate' })).toBeVisible();
+    expect(await inViewport(host, '.needs')).toBe(true);
+    // Placing phones by hand moves the count; Flip still refuses with its own message for a host who skips the note.
+    await host.locator('.tray .chip').first().click();
+    const box = (await host.locator('.stage-canvas').boundingBox())!;
+    await host.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.5);
+    await expect(need).toContainText('1 of 3 phones are on the map');
+    await expect(need.getByRole('button', { name: 'Go to Locate' })).toBeVisible();
+    for (const n of [2, 3]) {
+      await host.locator('.tray .chip').first().click();
+      await host.mouse.click(box.x + box.width * (0.3 + n * 0.15), box.y + box.height * 0.5);
+    }
+    await expect(need).toContainText('All 3 phones are on the map');
+    await expect(need.getByRole('button', { name: 'Go to Locate' })).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
+
+test('every panel that needs phones on the map says so up front', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  for (const tab of [/Music/, /Show/, /Live screen/, /Wave/, /Territory/, /Hot Potato/]) {
+    await host.getByRole('tab', { name: tab }).click();
+    if (tab.source === 'Music') await host.getByRole('radio', { name: 'Spatial tones' }).check();
+    await expect(host.getByRole('tabpanel').locator('.needs')).toBeVisible();
+  }
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

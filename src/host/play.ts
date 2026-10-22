@@ -8,7 +8,7 @@ import { css, h, plural, segmented, setText, slider } from '../ui/dom';
 import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
-import { panel, requirePlaced, stopButton } from './panel';
+import { panel, placementNote, requirePlaced, stopButton } from './panel';
 import { recorder } from './record';
 import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
@@ -93,6 +93,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   show();
   const { el, say, fail } = panel(
     'Spread your photo, or your words, across the phones. Each phone shows one piece of it, then every phone flips together on a 3, 2, 1 countdown.',
+    placementNote(session, 'Card stunt needs phones on the map.'),
     h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
     h('p.note', {}, 'Or pick one of these ready-made designs:'),
     thumbs,
@@ -211,6 +212,7 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
   const controls = waveControls(stage, {}, wave.retune, true);
   const { el, say, fail } = panel(
     'A band of light rolls through the room in real space: a sweep from wall to wall, a ping-pong, or a ripple spreading out from any spot you tap on the map.',
+    placementNote(session, 'The wave needs phones on the map.'),
     controls.el,
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: () => go(controls.get()) }, 'Start the wave'), stopButton(director, () => say(''))),
   );
@@ -236,6 +238,7 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
   };
   const { el, say, fail } = panel(
     'Every phone is one speaker on the shared clock, so sound moves through the crowd. The header shows how closely the phones’ clocks agree, and a Bluetooth speaker on a phone adds its own delay. Each phone sings its own note, set by where it sits.',
+    placementNote(session, 'Spatial tones need phones on the map.'),
     h(
       'div.sound-list',
       { role: 'radiogroup', 'aria-label': 'Sound' },
@@ -289,6 +292,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
     });
   const { el, say, fail } = panel(
     'A no-TV icebreaker: the room is the scoreboard. It splits down the middle into Amber and Teal. Every tap shoves the front line into the other side, and any phone the line passes over defects. Push it to the wall to win.',
+    placementNote(session, 'Territory needs at least 2 phones on the map.'),
     bar,
     score,
     h('div.row', {}, h('label.num', { for: 'terr-dur' }, 'Round', duration), h('button.btn.primary', { type: 'button', onclick: start }, 'Start Territory')),
@@ -312,6 +316,7 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
     });
   const { el, say, fail } = panel(
     'A no-TV icebreaker: the game plays out on the phones themselves. A glowing ball flies across the crowd from phone to phone. When it lands on yours, tap before the fuse runs out to throw it to a neighbour. Miss and your phone burns out. The fuse gets shorter every throw.',
+    placementNote(session, 'Hot Potato needs at least 2 phones on the map.'),
     h('div.legend', {}, h('span', { style: `--c:${css([255, 96, 16])}` }, 'Ball'), h('span', { style: `--c:${css(EMBER)}` }, 'Burnt out')),
     score,
     h('button.btn.primary', { type: 'button', onclick: start }, 'Start Hot Potato'),

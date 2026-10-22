@@ -1,4 +1,4 @@
-import { h, type Child } from '../ui/dom';
+import { h, plural, type Child } from '../ui/dom';
 import type { Director } from './director';
 import type { HostSession } from './session';
 
@@ -66,6 +66,27 @@ export function cardStuntPointer(lead: string): HTMLElement {
     h('p', {}, lead ? `${lead} ` : '', 'For one photo spread across the phones, each showing its own piece, use ', h('strong', {}, 'Card stunt'), '.'),
     h('button.btn.small', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'card') }, 'Go to Card stunt'),
   );
+}
+
+/**
+ * The up-front version of `requirePlaced`: how many connected phones are on the map right now, kept
+ * live, with the way to Locate while some are not. For every panel that only works on placed phones.
+ */
+export function placementNote(session: HostSession, needs: string): HTMLElement {
+  const text = h('p', {});
+  const go = h('button.btn.small', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'locate') }, 'Go to Locate');
+  const el = h('div.needs', { role: 'status' }, text, go);
+  const update = () => {
+    const online = session.online.length;
+    const onMap = session.playRoom().positions.size;
+    go.hidden = online === 0 || onMap === online;
+    if (online === 0) text.textContent = `${needs} No phones have joined yet. Scan the QR code with a phone to join.`;
+    else if (onMap === online) text.textContent = `${needs} ${online === 1 ? 'Your phone is' : `All ${online} phones are`} on the map.`;
+    else text.textContent = `${needs} ${onMap} of ${plural(online, 'phone')} ${online === 1 && onMap === 0 ? 'is' : 'are'} on the map.`;
+  };
+  session.subscribe(update);
+  update();
+  return el;
 }
 
 export function stopButton(director: Director, after?: () => void): HTMLButtonElement {
