@@ -42,7 +42,7 @@ step is skipped. (The repo name `couch-arcade` is a leftover; feel free to renam
 - `src/core/blinkcode.ts`: Manchester-coded 7-bit ids plus CRC-4, looping behind a sync mark (three lit, three dark half-slots).
 - `src/core/localize.ts`: decodes every changing camera pixel on its own and groups them by id; the sync mark lets it recover any camera delay up to one loop (~3.4 s) without calibration.
 - `src/core/homography.ts`: four clicked floor corners to a true floor plan.
-- `src/core/clock.ts`: NTP-style offsets from the fastest round trips.
+- `src/core/clock.ts`: NTP-style offsets bounded by each direction's fastest trip.
 - `src/net/`: one `Transport` seam with PeerJS (internet), WebSocket relay (Wi-Fi) and BroadcastChannel (tests).
 - `?camera=synthetic&transport=local` runs a whole room in browser tabs on one computer.
 

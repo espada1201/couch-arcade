@@ -87,8 +87,8 @@ export class PhoneClient {
       this.link = link;
       // Acks were for the old link: the host starts this one afresh, and the music re-acks on welcome.
       this.waiting.clear();
-      // The host's clock restarts if the host page reloads; never mix samples across links.
-      this.clock.reset();
+      // Usually the same host page on a new link, so the clock estimate carries over; the first pong checks.
+      this.clock.relink();
       link.onMessage((m) => this.receive(m as HostMsg));
       link.onClose(() => this.lost());
       this.send({ t: 'hello', token: this.token });

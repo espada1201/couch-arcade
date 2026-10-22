@@ -54,6 +54,72 @@ describe('clock sync', () => {
   });
 });
 
+/** The stress proxy's bad Wi-Fi: 150 ms each way plus up to 200 ms of jitter, 2% stalls of 0.2-1 s, order kept per direction. */
+function badWifi(trueOffset: number, seed: number, pings = 60) {
+  const r = rng(seed);
+  const est = new ClockEstimator();
+  const errors: { err: number; u: number }[] = [];
+  let up = 0;
+  let down = 0;
+  const leg = () => 150 + r() * 200 + (r() < 0.02 ? 200 + r() * 800 : 0);
+  for (let i = 0, t0 = 1000; i < pings; i++, t0 += i < 16 ? 150 : 2000) {
+    const arrive = (up = Math.max(t0 + leg(), up));
+    const back = (down = Math.max(arrive + leg(), down));
+    est.add(sampleFrom(t0, arrive + trueOffset, arrive + trueOffset, back));
+    if (i >= 20) errors.push({ err: Math.abs(est.offset - trueOffset), u: est.uncertainty });
+  }
+  return { est, errors };
+}
+
+describe('clock sync on bad Wi-Fi', () => {
+  it('stays within a few ms of the truth under 300 ms round trips with 200 ms of jitter', () => {
+    const errs = Array.from({ length: 30 }, (_, k) => badWifi(2500, k + 1).errors.map((e) => e.err)).flat().sort((a, b) => a - b);
+    expect(errs[Math.floor(errs.length * 0.5)]).toBeLessThan(3);
+    expect(errs[Math.floor(errs.length * 0.95)]).toBeLessThan(10);
+  });
+
+  it('reports a typical error, not the worst-case half round trip, and it is usually right', () => {
+    const all = Array.from({ length: 30 }, (_, k) => badWifi(-800, k + 1).errors).flat();
+    const us = all.map((e) => e.u).sort((a, b) => a - b);
+    expect(us[Math.floor(us.length / 2)]).toBeLessThan(20);
+    expect(all.filter((e) => e.err <= e.u).length / all.length).toBeGreaterThan(0.8);
+  });
+
+  it('is at least 1 ms on a quiet link', () => {
+    const est = new ClockEstimator();
+    for (let i = 0; i < 10; i++) est.add({ offset: 100, rtt: 2 });
+    expect(est.offset).toBe(100);
+    expect(est.uncertainty).toBe(1);
+  });
+});
+
+describe('clock across links', () => {
+  it('keeps what it learned when the link is replaced and the host is the same page', () => {
+    const { est } = badWifi(300, 7);
+    const n = est.count;
+    est.relink();
+    est.add({ offset: est.offset + 3, rtt: 400 });
+    expect(est.count).toBe(n + 1 > 60 ? 60 : n + 1);
+    expect(Math.abs(est.offset - 300)).toBeLessThan(10);
+  });
+
+  it('starts over when the first pong on a new link rules the old estimate out (the host page restarted)', () => {
+    const { est } = badWifi(300, 7);
+    est.relink();
+    est.add({ offset: 9000, rtt: 20 });
+    expect(est.count).toBe(1);
+    expect(est.offset).toBe(9000);
+  });
+
+  it('drops old pongs once the clocks have drifted or jumped past them', () => {
+    const est = new ClockEstimator();
+    for (let i = 0; i < 10; i++) est.add({ offset: 0, rtt: 4 });
+    est.add({ offset: 50, rtt: 4 });
+    expect(est.offset).toBe(50);
+    expect(est.count).toBe(1);
+  });
+});
+
 describe('clock reset', () => {
   it('keeps showing the last offset until new samples land, with unknown uncertainty', () => {
     const est = simulate(500, 3);

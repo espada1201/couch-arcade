@@ -11,6 +11,14 @@ import type { Director, Hold } from './director';
 import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** A phone's clock is still locking on until its typical error is under this (ms): the first few pongs. */
+const LOCKING_MS = 40;
+/**
+ * A typical clock error over this (ms) means a weak connection. Measured through an impairment proxy:
+ * a quiet link reports 1 ms, 80 ms round trips with 60 ms of jitter 3 ms, and 300 ms round trips with
+ * 400 ms of jitter and stalls 8-25 ms.
+ */
+const WEAK_SYNC_MS = 8;
 
 export function locatePanel(session: HostSession, params: URLSearchParams, director: Director): HTMLElement {
   const synthetic = params.get('camera') === 'synthetic';
@@ -137,12 +145,12 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       },
     });
     // Phones flash on the shared clock, so give late joiners a moment to lock on first.
-    for (let i = 0; i < 30 && session.worstSync > 40; i++) {
+    for (let i = 0; i < 30 && session.worstSync > LOCKING_MS; i++) {
       setText(result, 'Waiting for every phone’s clock to lock on…');
       await sleep(100);
       if (cancelled) return;
     }
-    const shaky = session.online.filter((s) => s.sync > 40).map((s) => s.seat + 1);
+    const shaky = session.online.filter((s) => s.sync > WEAK_SYNC_MS).map((s) => s.seat + 1);
     const schedule: BlinkSchedule = { t0: session.now() + 1200, halfMs: DEFAULT_HALF_MS, repeats: DEFAULT_REPEATS };
     const frames: GrayFrame[] = [];
     src.onFrame = (f) => {
