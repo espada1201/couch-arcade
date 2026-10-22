@@ -272,7 +272,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
       },
     });
   const { el, say } = panel(
-    'The room splits down the middle into Amber and Teal. Every tap shoves the front line into the other side, and any phone the line passes over defects. Push it to the wall to win.',
+    'A no-TV icebreaker: the room is the scoreboard. It splits down the middle into Amber and Teal. Every tap shoves the front line into the other side, and any phone the line passes over defects. Push it to the wall to win.',
     bar,
     score,
     h('div.row', {}, h('label.num', { for: 'terr-dur' }, 'Round', duration), h('button.btn.primary', { type: 'button', onclick: start }, 'Start Territory')),
@@ -295,7 +295,7 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
       },
     });
   const { el, say } = panel(
-    'A glowing ball flies across the crowd from phone to phone. When it lands on yours, tap before the fuse runs out to throw it to a neighbour. Miss and your phone burns out. The fuse gets shorter every throw.',
+    'A no-TV icebreaker: the game plays out on the phones themselves. A glowing ball flies across the crowd from phone to phone. When it lands on yours, tap before the fuse runs out to throw it to a neighbour. Miss and your phone burns out. The fuse gets shorter every throw.',
     h('div.legend', {}, h('span', { style: `--c:${css([255, 96, 16])}` }, 'Ball'), h('span', { style: `--c:${css(EMBER)}` }, 'Burnt out')),
     score,
     h('button.btn.primary', { type: 'button', onclick: start }, 'Start Hot Potato'),

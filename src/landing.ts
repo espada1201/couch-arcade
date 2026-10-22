@@ -72,7 +72,12 @@ export function landing(app: HTMLElement, params: URLSearchParams): void {
         'div.landing-copy',
         {},
         h('h1.wordmark', {}, 'Swarm ', h('span', {}, 'Screen')),
-        h('p.lede', {}, 'Every phone in the room is a pixel and a speaker. A camera works out where each one is sitting, then the crowd becomes one display: card stunts, light waves rolling across the floor, sound that travels from seat to seat, and games played with your body’s place in the room.'),
+        h('p.lede', {}, h('strong', {}, 'Turn the phones in the room into a speaker, a screen and a light show. No app, no projector.')),
+        h(
+          'p.lede',
+          {},
+          'Everyone scans a QR code and their phone joins in seconds. Play sound across every phone, put words and pictures on every screen, flip a card stunt for a wedding or a birthday, count down to midnight together, ask the room a question and watch the answer light up the crowd, or play icebreaker games that need no TV.',
+        ),
         h(
           'div.landing-actions',
           {},
