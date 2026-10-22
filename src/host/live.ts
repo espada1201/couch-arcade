@@ -41,15 +41,29 @@ export function aurora(ctx: CanvasRenderingContext2D, t: number) {
   ctx.putImageData(img, 0, 0);
 }
 
+// Heat rises from a fuel line below the picture, averaging its neighbours and cooling as it climbs.
+// Fuel comes in gusts a few columns wide: per-pixel fuel noise averages out within a few rows, which
+// left the upper rows flat, while a gust survives the climb, so every row of phones keeps flickering.
 const heat = new Float32Array(W * (H + 2));
-export function fire(ctx: CanvasRenderingContext2D) {
-  for (let x = 0; x < W; x++) heat[(H + 1) * W + x] = Math.random() > 0.45 ? 1 : 0.2;
+const fuel = new Float32Array(W).fill(0.6);
+let lit = false;
+function rise() {
+  const at = Math.floor(Math.random() * W);
+  const r = 3 + Math.floor(Math.random() * 6);
+  const v = 0.3 + Math.random() * 0.8;
+  for (let d = -r; d <= r; d++) fuel[(at + d + W) % W] = v;
+  for (let x = 0; x < W; x++) heat[(H + 1) * W + x] = fuel[x] * (Math.random() > 0.45 ? 1 : 0.3);
   for (let y = 0; y <= H; y++)
     for (let x = 0; x < W; x++) {
       const b = (y + 1) * W;
       const s = heat[b + x] + heat[b + ((x + W - 1) % W)] + heat[b + ((x + 1) % W)] + heat[Math.min(H + 1, y + 2) * W + x];
-      heat[y * W + x] = Math.max(0, (s / 4) * 0.985 - 0.004);
+      heat[y * W + x] = Math.max(0, (s / 4) * 0.995 - 0.003);
     }
+}
+export function fire(ctx: CanvasRenderingContext2D) {
+  // Heat climbs one row per step: warm up the whole height at once, then climb a few rows a frame.
+  for (let n = lit ? 3 : 2 * H; n > 0; n--) rise();
+  lit = true;
   const img = buffer(ctx);
   const px = img.data;
   for (let i = 0, j = 0; i < W * H; i++, j += 4) {
