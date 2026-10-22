@@ -6,7 +6,8 @@ import { FollowScreen } from '../ui/follow';
 import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
-import { showBallot } from './poll';
+import { showFirst } from './layers';
+import { overlays } from './overlays';
 import { PartySpeaker } from './music';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
@@ -42,11 +43,11 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
 
   const label = h('div.label', { 'aria-live': 'polite' });
   const status = h('div.status', { role: 'status' });
-  const overlay = h('div.overlay', { hidden: true });
+  const layers = overlays(client, (choice) => (navigator.vibrate?.(12), client.vote(choice)));
   const follow = new FollowScreen();
   const party = new PartySpeaker(client, speaker);
   client.onChunk = (m) => party.chunk(m);
-  const screen = h('div.screen', {}, label, follow.el, party.el, status, overlay);
+  const screen = h('div.screen', {}, label, follow.el, party.el, status, ...layers.map((l) => l.el));
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
@@ -127,48 +128,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       wasOut = out;
     }
 
-    if (client.status === 'failed' || client.status === 'full' || client.status === 'replaced') {
-      overlay.hidden = false;
-      const why = { full: 'This room is full.', replaced: 'This phone joined again in another tab, so this one has stepped aside.', failed: `Can’t reach the host. ${client.error}` }[client.status];
-      overlay.replaceChildren(
-        h('p', {}, why),
-        ...(client.status === 'failed' ? [h('button.btn.primary', { type: 'button', onclick: () => client.retry() }, 'Try again')] : []),
-      );
-    } else if (p.kind === 'grid' && client.status === 'live') {
-      const ask = `${p.rows}x${p.seats}`;
-      if (overlay.hidden || overlay.dataset.ask !== ask) {
-        overlay.dataset.ask = ask;
-        overlay.hidden = false;
-        const row = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: p.rows, required: true, id: 'row' });
-        const seat = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: p.seats, required: true, id: 'seatno' });
-        const done = h('p.done', { hidden: true }, 'Got it. Hold tight.');
-        overlay.replaceChildren(
-          h(
-            'form.seat-form',
-            {
-              onsubmit: (e: Event) => {
-                e.preventDefault();
-                client.enterSeat(Number(row.value), Number(seat.value));
-                done.hidden = false;
-              },
-            },
-            h('h2', {}, 'Where are you sitting?'),
-            h('label', { for: 'row' }, `Row (1 = front, up to ${p.rows})`),
-            row,
-            h('label', { for: 'seatno' }, `Seat (1 = far left, up to ${p.seats})`),
-            seat,
-            h('button.btn.primary', { type: 'submit' }, 'Done'),
-            done,
-          ),
-        );
-      }
-    } else if (p.kind === 'poll' && !p.result && client.status === 'live') {
-      showBallot(overlay, p, (choice) => (navigator.vibrate?.(12), client.vote(choice)));
-    } else {
-      overlay.hidden = true;
-      delete overlay.dataset.ask;
-      overlay.replaceChildren();
-    }
+    showFirst(layers, p, client);
   };
   client.onChange = showStatus;
   showStatus();

@@ -4,18 +4,7 @@ import type { PollProgram } from '../core/effects';
 import { LETTERS, POLL_COLORS } from '../core/poll';
 import { css, h } from '../ui/dom';
 
-/** Put the ballot in `overlay`, rebuilding only when it changed and keeping keyboard focus on the pick. */
-export function showBallot(overlay: HTMLElement, p: PollProgram, vote: (choice: number) => void): void {
-  const key = JSON.stringify([p.question, p.options, p.phase, p.mine]);
-  if (!overlay.hidden && overlay.dataset.ask === key) return;
-  const focused = overlay.contains(document.activeElement);
-  overlay.dataset.ask = key;
-  overlay.hidden = false;
-  overlay.replaceChildren(ballot(p, vote));
-  if (focused) overlay.querySelector<HTMLElement>('.vote[aria-pressed="true"]')?.focus();
-}
-
-function ballot(p: PollProgram, vote: (choice: number) => void): HTMLElement {
+export function ballot(p: PollProgram, vote: (choice: number) => void): HTMLElement {
   const open = p.phase === 'open';
   const buttons = p.options.map((name, i) =>
     h(
