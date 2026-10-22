@@ -188,6 +188,29 @@ const AUDIO_TAP = () => {
   };
 };
 
+/**
+ * Records when each song source on the page will really be heard: the wall-clock ms at which track
+ * position 0 leaves the speaker, from the browser's own output timestamp. Phones sharing one machine
+ * share its wall clock, so comparing these is the true sync, not the app's own data-anchor.
+ */
+const SPEAKER_TAP = () => {
+  window.__heard = [];
+  const orig = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function (when = 0, offset = 0, ...rest) {
+    const ctx = this.context;
+    const w = Math.max(when, ctx.currentTime);
+    const st = ctx.getOutputTimestamp?.();
+    const heard = st?.performanceTime ? st.performanceTime + (w - st.contextTime) * 1000 : performance.now() + (w - ctx.currentTime + (ctx.outputLatency || ctx.baseLatency || 0)) * 1000;
+    if (this.buffer && this.buffer.duration > 5) window.__heard.push(performance.timeOrigin + heard - offset * 1000);
+    return orig.call(this, when, offset, ...rest);
+  };
+};
+/** The latest true anchor of every phone, and how far apart they are (ms). */
+const trueSpread = async (phones) => {
+  const a = await Promise.all(phones.map((p) => p.evaluate(() => window.__heard.at(-1) ?? null)));
+  return a.every((x) => x !== null) ? Math.max(...a) - Math.min(...a) : Infinity;
+};
+
 /** Start logging every change of a phone's colour and label, in wall-clock ms. */
 const watchScreens = (phones) =>
   Promise.all(
@@ -588,7 +611,7 @@ const CHECKS = {
   async 'play-song'(run, file) {
     const song = file ? { name: basename(file), mimeType: '', buffer: readFileSync(file) } : { name: 'Test Tone.wav', mimeType: 'audio/wav', buffer: wav(12) };
     run.note('song', `${song.name} (${Math.round(song.buffer.length / 1024)} KB)`);
-    const room = await openRoom(run, { sims: [[0.1, 0.5], [0.2, 0.5], [0.3, 0.5]] });
+    const room = await openRoom(run, { sims: [[0.1, 0.5], [0.2, 0.5], [0.3, 0.5]], init: SPEAKER_TAP });
     const { host, phones } = room;
     await tab(room, 'Music');
     await expect(host.getByRole('radio', { name: 'Party speaker' })).toBeChecked();
@@ -607,6 +630,9 @@ const CHECKS = {
     const spread = Math.max(...a) - Math.min(...a);
     run.note('anchor spread ms', +spread.toFixed(1));
     if (spread >= 50) run.issue(`phones ${spread.toFixed(0)} ms apart`);
+    const heard = await trueSpread(phones);
+    run.note('true spread ms (when each phone is really heard)', +heard.toFixed(1));
+    if (!(heard < 50)) run.issue(`phones are really heard ${heard.toFixed(0)} ms apart`);
     const p0 = Number(await phones[0].locator('.nowplaying').getAttribute('data-pos'));
     await sleep(1000);
     const p1 = Number(await phones[0].locator('.nowplaying').getAttribute('data-pos'));
@@ -618,7 +644,9 @@ const CHECKS = {
     await expect(host.getByText(/4 of 4 phones ready/)).toBeVisible({ timeout: 60_000 });
     await expect(late.locator('.nowplaying')).toHaveAttribute('data-state', 'playing', { timeout: 5000 });
     await expect.poll(async () => { const x = await anchors(); return Math.max(...x) - Math.min(...x); }, { timeout: 10_000 }).toBeLessThan(50);
+    await expect.poll(() => trueSpread([...phones, late]), { timeout: 10_000 }).toBeLessThan(50);
     run.note('late joiner in step', true);
+    run.note('true spread ms with the late joiner', +(await trueSpread([...phones, late])).toFixed(1));
     await host.getByRole('button', { name: 'Pause' }).click();
     for (const p of phones) await expect(p.locator('.np-state')).toHaveText('Paused', { timeout: 3000 });
     await run.shot(host, 'host-paused');

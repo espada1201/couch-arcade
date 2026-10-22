@@ -47,7 +47,7 @@ Each check is a function in `drive.mjs` (`CHECKS`), one per feature-map entry. S
 `{ host, phones, seats, code, addPhone }`; `scan(room)` from `e2e/room.ts` runs the simulated-camera
 scan; `bg(page)` reads a phone's colour; `QUADRANTS_PNG`, `wav()` and `pictureSpread()` also come
 from `e2e/room.ts`, shared with the Playwright specs; `AUDIO_TAP` records every Web Audio note a
-phone schedules; `watchScreens(phones)` + `flipMoments(phones)` time each phone's 3-2-1 flip;
+phone schedules; `SPEAKER_TAP` + `trueSpread(phones)` give when each phone really plays the song; `watchScreens(phones)` + `flipMoments(phones)` time each phone's 3-2-1 flip;
 `colours(page, ms)` counts the colours a phone shows; `slowPhone(run, room, {kbps, latencyMs, jitterMs})`
 adds a phone on bad Wi-Fi through `impair.mjs`, a TCP proxy that caps bandwidth and adds latency. Handles are ARIA roles and names
 (`getByRole('tab', { name: /Poll/ })`, `'Join the swarm'`, `'Scan the room'`) plus the app's
