@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { normalize, type Point } from '../src/core/layout';
 import { DIM, render, type Program } from '../src/core/effects';
 import { POLL_COLORS, apportion, leaders, liveTally, pollReduce, startPoll, tally, zones } from '../src/core/poll';
 import { parsePhoneMsg } from '../src/core/protocol';
+import { roomOf } from './harness';
 
-function roomOf(points: [number, number][]) {
-  return normalize(new Map(points.map(([x, y], i) => [i, { x, y } as Point])));
-}
 
 const poll = () => startPoll('Pizza or tacos?', ['Pizza', 'Tacos', 'Both']);
 

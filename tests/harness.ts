@@ -1,20 +1,39 @@
 import { vi } from 'vitest';
 import type { Program } from '../src/core/effects';
+import { normalize, type Point } from '../src/core/layout';
 import type { HostMsg, PhoneMsg } from '../src/core/protocol';
 import { Director } from '../src/host/director';
 import { HostSession } from '../src/host/session';
 import { BasicLink, type HostEnd, type Link, type Transport } from '../src/net/transport';
 
-/** A real HostSession over an in-memory transport, with phones placed across one row. */
-export async function room(xs: number[]) {
+/** In-memory transport: `accept` hands the host a new link, `server` reports the relay up or down. */
+export function testTransport() {
   let accept: (l: Link) => void = () => {};
+  let server: (up: boolean) => void = () => {};
   const transport: Transport = {
     name: 'test',
-    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: () => {}, close: () => {} }),
+    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), close: () => {} }),
     join: async () => {
       throw new Error('unused');
     },
   };
+  return { transport, accept: (l: Link) => accept(l), server: (up: boolean) => server(up) };
+}
+
+/** A Map-backed stand-in for localStorage. */
+export function memoryStorage() {
+  const m = new Map<string, string>();
+  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+}
+
+/** Room space for phones at the given raw points, seated 0, 1, 2… in order. */
+export function roomOf(points: [number, number][]) {
+  return normalize(new Map(points.map(([x, y], i) => [i, { x, y } as Point])));
+}
+
+/** A real HostSession over an in-memory transport, with phones placed across one row. */
+export async function room(xs: number[]) {
+  const { transport, accept } = testTransport();
   let clock = 1000;
   const session = new HostSession(transport, 'TEST', () => clock);
   await session.open();

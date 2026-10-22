@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { forget, loadJson, saveJson, stableId } from '../src/storage';
 import { randomId } from '../src/net/transport';
+import { memoryStorage } from './harness';
 
-function memory() {
-  const m = new Map<string, string>();
-  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
-}
 
 const blocked = {
   getItem: () => {
@@ -23,7 +20,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('storage', () => {
   it('round-trips JSON and forgets it', () => {
-    vi.stubGlobal('localStorage', memory());
+    vi.stubGlobal('localStorage', memoryStorage());
     expect(loadJson('k')).toBeNull();
     saveJson('k', { a: [1, 2] });
     expect(loadJson('k')).toEqual({ a: [1, 2] });
@@ -32,7 +29,7 @@ describe('storage', () => {
   });
 
   it('keeps a stable id per key, stored as plain text', () => {
-    const store = memory();
+    const store = memoryStorage();
     vi.stubGlobal('localStorage', store);
     const a = stableId('id-a', 16);
     expect(a).toHaveLength(16);
@@ -47,7 +44,7 @@ describe('storage', () => {
     expect(() => saveJson('k', 1)).not.toThrow();
     expect(() => forget('k')).not.toThrow();
     expect(stableId('k', 8)).toHaveLength(8);
-    const junk = memory();
+    const junk = memoryStorage();
     junk.setItem('k', '{nope');
     vi.stubGlobal('localStorage', junk);
     expect(loadJson('k')).toBeNull();

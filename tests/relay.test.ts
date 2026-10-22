@@ -1,22 +1,10 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { connect, createServer } from 'node:net';
-import { fileURLToPath } from 'node:url';
+import type { ChildProcess } from 'node:child_process';
+import { connect } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { freePort, startRelay } from './relayserver';
 
-const SCRIPT = fileURLToPath(new URL('../server/relay.mjs', import.meta.url));
 let child: ChildProcess;
 let port = 0;
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const s = createServer();
-    s.once('error', reject);
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address() as { port: number };
-      s.close(() => resolve(port));
-    });
-  });
-}
 
 /** Sends a raw WebSocket handshake, returns the status code, then writes `after` if it was accepted. */
 function upgrade(query: string, after?: Buffer): Promise<number> {
@@ -44,11 +32,7 @@ async function relayJsonStatus(): Promise<number> {
 
 beforeAll(async () => {
   port = await freePort();
-  child = spawn(process.execPath, [SCRIPT], { env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'inherit'] });
-  await new Promise<void>((resolve, reject) => {
-    child.once('exit', (code) => reject(new Error(`relay exited with ${code}`)));
-    child.stdout!.on('data', (d) => String(d).includes('running') && resolve());
-  });
+  child = await startRelay(port);
 });
 
 afterAll(() => {

@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalize, type Point } from '../src/core/layout';
+import type { Point } from '../src/core/layout';
 import { FIRST_FUSE, MIN_FUSE, ballAt, potatoTap, potatoTick, startPotato } from '../src/core/potato';
 import { PUSH_PER_TAP, startTerritory, teamOf, teamSizes, territoryTap, territoryTick } from '../src/core/territory';
+import { roomOf } from './harness';
 import { rng } from './rng';
 
-function roomOf(points: [number, number][]) {
-  return normalize(new Map(points.map(([x, y], i) => [i, { x, y } as Point])));
-}
 
 // 3 x 4 grid of phones.
 const ROOM = roomOf(Array.from({ length: 12 }, (_, i) => [(i % 4) / 3, Math.floor(i / 4) / 2] as [number, number]));

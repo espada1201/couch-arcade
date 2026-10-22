@@ -1,19 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HostSession } from '../src/host/session';
-import { BasicLink, type HostEnd, type Link, type Transport } from '../src/net/transport';
+import { BasicLink } from '../src/net/transport';
 import type { HostMsg } from '../src/core/protocol';
+import { memoryStorage, testTransport } from './harness';
 
-/** In-memory transport: lets a test play several phones against a real HostSession. */
+/** Several phones against a real HostSession. */
 function harness() {
-  let accept: (l: Link) => void = () => {};
-  let server: (up: boolean) => void = () => {};
-  const transport: Transport = {
-    name: 'test',
-    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), close: () => {} }),
-    join: async () => {
-      throw new Error('unused');
-    },
-  };
+  const { transport, accept, server } = testTransport();
   let clock = 1000;
   const session = new HostSession(transport, 'TEST', () => clock);
   const phone = () => {
@@ -22,7 +15,7 @@ function harness() {
     accept(hostSide);
     return { inbox, say: (m: unknown) => hostSide.deliver(m), drop: () => hostSide.ended() };
   };
-  return { session, phone, server: (up: boolean) => server(up), tick: (ms: number) => (clock += ms) };
+  return { session, phone, server, tick: (ms: number) => (clock += ms) };
 }
 
 describe('host session', () => {
@@ -121,8 +114,7 @@ describe('host session', () => {
   });
 
   it('a room is saved as soon as it opens, so a reload before anyone joins keeps the code', async () => {
-    const m = new Map<string, string>();
-    vi.stubGlobal('localStorage', { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) });
+    vi.stubGlobal('localStorage', memoryStorage());
     try {
       const { session } = harness();
       await session.open();
@@ -169,8 +161,7 @@ describe('room server outage', () => {
 
 describe('backpressure', () => {
   it('a message that may be skipped is not queued on a link already holding too much', async () => {
-    let accept: (l: Link) => void = () => {};
-    const transport: Transport = { name: 'test', host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: () => {}, close: () => {} }), join: async () => Promise.reject(new Error('unused')) };
+    const { transport, accept } = testTransport();
     const session = new HostSession(transport, 'TEST', () => 0);
     await session.open();
     const phones = [0, 500_000].map((backlog, i) => {

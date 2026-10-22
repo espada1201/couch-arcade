@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POLL_COLORS } from '../src/core/poll';
 import { runPoll, savedPoll } from '../src/host/poll';
-import { lastProgram, room } from './harness';
+import { lastProgram, memoryStorage, room } from './harness';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -93,8 +93,7 @@ describe('room poll on the host', () => {
   });
 
   it('a running poll survives a host reload, votes and all, and is forgotten once stopped', async () => {
-    const m = new Map<string, string>();
-    vi.stubGlobal('localStorage', { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) });
+    vi.stubGlobal('localStorage', memoryStorage());
     try {
       const r = await room([0, 1]);
       const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {}, true);

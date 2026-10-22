@@ -1,32 +1,11 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
-import { fileURLToPath } from 'node:url';
+import type { ChildProcess } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { RelayTransport } from '../src/net/relay';
 import type { Link } from '../src/net/transport';
+import { freePort, startRelay } from './relayserver';
 
-const SCRIPT = fileURLToPath(new URL('../server/relay.mjs', import.meta.url));
 let relay: ChildProcess;
 let port = 0;
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const s = createServer();
-    s.once('error', reject);
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address() as { port: number };
-      s.close(() => resolve(port));
-    });
-  });
-}
-
-function startRelay(): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [SCRIPT], { env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'inherit'] });
-  return new Promise((resolve, reject) => {
-    child.once('exit', (code) => reject(new Error(`relay exited with ${code}`)));
-    child.stdout!.on('data', (d) => String(d).includes('running') && resolve(child));
-  });
-}
 
 function stopRelay(child: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
@@ -41,7 +20,7 @@ const until = (ok: () => boolean, ms = 15_000) => vi.waitFor(() => expect(ok()).
 beforeAll(async () => {
   port = await freePort();
   vi.stubGlobal('location', new URL(`http://127.0.0.1:${port}/`));
-  relay = await startRelay();
+  relay = await startRelay(port);
 });
 
 afterAll(async () => {
@@ -65,7 +44,7 @@ describe('relay host end', () => {
 
     await stopRelay(relay);
     await until(() => phoneClosed && server.at(-1) === false);
-    relay = await startRelay();
+    relay = await startRelay(port);
     await until(() => server.at(-1) === true);
 
     const again = await t.join('BACK');
