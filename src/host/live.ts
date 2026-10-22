@@ -2,7 +2,7 @@
 // or a generated animation) is sampled several times a second and every phone gets
 // its own pixel, all switching on the same synced instant so the picture never tears.
 import { BLACK } from '../core/effects';
-import { sampleCover, type RGB } from '../core/layout';
+import { sampleCrowd, type RGB } from '../core/layout';
 import { h, segmented, slider } from '../ui/dom';
 import type { Director } from './play';
 import type { HostSession } from './session';
@@ -61,11 +61,8 @@ export function fire(ctx: CanvasRenderingContext2D) {
 
 /** Sample the picture on `ctx` for every placed phone and schedule the swap; returns the colours sent. */
 export function castFrame(session: HostSession, ctx: CanvasRenderingContext2D, prev: Map<number, RGB>): Map<number, RGB> {
-  const { positions, aspect } = session.layout;
   const image = { w: W, h: H, data: ctx.getImageData(0, 0, W, H).data };
-  const patch = Math.min(0.2, 0.5 / Math.sqrt(Math.max(1, positions.size)));
-  const next = new Map<number, RGB>();
-  for (const [seat, p] of positions) next.set(seat, sampleCover(image, p, aspect, patch));
+  const next = sampleCrowd(image, session.layout, Math.min(0.2, 0.5 / Math.sqrt(Math.max(1, session.layout.positions.size))));
   // Leave enough headroom for the slowest link before everyone flips.
   const at = session.now() + 140;
   session.setProgram((seat) => ({ kind: 'live', rgb: next.get(seat) ?? BLACK, prev: prev.get(seat) ?? BLACK, at }));

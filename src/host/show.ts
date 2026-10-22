@@ -1,6 +1,6 @@
 // One button for the whole evening: a looping choreography that walks the crowd through
 // pictures, waves, sound and live animation, so the host can put the laptop down.
-import { AMBER, TEAL, WHITE, type WaveProgram } from '../core/effects';
+import { AMBER, TEAL, WHITE, makeWave, type WaveParams } from '../core/effects';
 import type { RGB } from '../core/layout';
 import { h } from '../ui/dom';
 import { presets, textStunt } from './images';
@@ -15,9 +15,8 @@ interface Cue {
   run(session: HostSession, opts: { title: string; sound: boolean }): (() => void) | void;
 }
 
-function wave(w: Partial<WaveProgram> & { rgb: RGB }): Cue['run'] {
-  return (session, { sound }) =>
-    session.setProgram({ kind: 'wave', t0: session.now() + 200, period: 2400, shape: 'sweep', angle: 0, origin: { x: 0.5, y: 0.5 }, width: 0.12, ...w, voice: sound ? (w.voice ?? 'pluck') : 'off' });
+function wave(w: Partial<WaveParams> & { rgb: RGB }): Cue['run'] {
+  return (session, { sound }) => session.setProgram(makeWave(session.now() + 200, { ...w, voice: sound ? (w.voice ?? 'pluck') : 'off' }));
 }
 
 function live(draw: (ctx: CanvasRenderingContext2D, t: number) => void): Cue['run'] {

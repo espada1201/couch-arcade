@@ -56,6 +56,15 @@ export const AMBER: RGB = [255, 176, 0];
 export const TEAL: RGB = [0, 196, 180];
 export const EMBER: RGB = [120, 18, 8];
 
+/** Everything about a wave except when it starts. */
+export type WaveParams = Omit<WaveProgram, 'kind' | 't0'>;
+
+export const WAVE_DEFAULTS: WaveParams = { period: 2400, shape: 'sweep', angle: 0, origin: { x: 0.5, y: 0.5 }, width: 0.12, rgb: AMBER, voice: 'off' };
+
+export function makeWave(t0: number, w: Partial<WaveParams> = {}): WaveProgram {
+  return { kind: 'wave', t0, ...WAVE_DEFAULTS, ...w };
+}
+
 const CORNERS: Point[] = [
   { x: 0, y: 0 },
   { x: 1, y: 0 },

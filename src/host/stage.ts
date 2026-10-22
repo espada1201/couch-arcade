@@ -4,6 +4,7 @@
 import { cssFloor, luma, render } from '../core/effects';
 import { distance, type Point } from '../core/layout';
 import { clamp01 } from '../core/math';
+import { fitCanvas } from '../ui/canvas';
 import { h } from '../ui/dom';
 import type { HostSession } from './session';
 
@@ -16,8 +17,7 @@ interface Box {
 
 export class Stage {
   readonly el: HTMLElement;
-  /** When set, clicking empty floor reports a room-space point (used to aim ripples). */
-  onPick: ((p: Point) => void) | null = null;
+  private pick: ((p: Point) => void) | null = null;
   private canvas = h('canvas.stage-canvas', { tabindex: 0, role: 'img', 'aria-describedby': 'stage-keys' });
   private empty = h('div.stage-empty');
   private tray = h('div.tray', { role: 'group', 'aria-label': 'Phones not placed yet' });
@@ -40,11 +40,22 @@ export class Stage {
     this.canvas.addEventListener('blur', () => (this.hint.hidden = true));
     session.subscribe(() => this.sync());
     this.sync();
+    this.onPick = null;
     const loop = () => {
       this.draw();
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
+  }
+
+  /** When set, clicking empty floor reports a room-space point (used to aim ripples). */
+  get onPick(): ((p: Point) => void) | null {
+    return this.pick;
+  }
+
+  set onPick(cb: ((p: Point) => void) | null) {
+    this.pick = cb;
+    this.hint.textContent = `Keys: [ ] pick a phone, arrows move it, Shift for big steps, Esc lets go${cb ? '. With no phone picked, arrows aim the ripple and Enter sets it' : ''}.`;
   }
 
   private sync(): void {
@@ -136,9 +147,9 @@ export class Stage {
     if (this.selected !== null && !this.session.layout.positions.has(this.selected)) {
       this.session.placeManually(this.selected, p);
       this.selected = null;
-    } else if (this.onPick && p.x >= -0.05 && p.x <= 1.05 && p.y >= -0.05 && p.y <= 1.05) {
+    } else if (this.pick && p.x >= -0.05 && p.x <= 1.05 && p.y >= -0.05 && p.y <= 1.05) {
       this.aim = p;
-      this.onPick(p);
+      this.pick(p);
     }
   }
 
@@ -157,8 +168,8 @@ export class Stage {
       const n = placed.length;
       this.select(placed[e.key === ']' ? (i + 1) % n : i < 0 ? n - 1 : (i - 1 + n) % n]);
     } else if (e.key === 'Escape' && seat !== null) this.select(null);
-    else if (e.key === 'Enter' && seat === null && this.onPick) {
-      this.onPick({ ...this.aim });
+    else if (e.key === 'Enter' && seat === null && this.pick) {
+      this.pick({ ...this.aim });
       this.said.textContent = `Ripple centre set at ${Math.round(this.aim.x * 100)}% across, ${Math.round(this.aim.y * 100)}% deep`;
     } else {
       const step = e.shiftKey ? 0.1 : 0.02;
@@ -167,7 +178,7 @@ export class Stage {
       if (seat !== null) {
         const at = this.session.layout.positions.get(seat) ?? { x: 0.5, y: 0.5 };
         this.session.placeManually(seat, { x: at.x + d[0], y: at.y + d[1] });
-      } else if (this.onPick) {
+      } else if (this.pick) {
         this.aim = { x: clamp01(this.aim.x + d[0]), y: clamp01(this.aim.y + d[1]) };
       } else return;
     }
@@ -176,13 +187,8 @@ export class Stage {
 
   private draw(): void {
     const c = this.canvas;
-    const r = c.getBoundingClientRect();
-    if (r.width === 0) return;
-    const dpr = devicePixelRatio || 1;
-    if (c.width !== Math.round(r.width * dpr) || c.height !== Math.round(r.height * dpr)) {
-      c.width = Math.round(r.width * dpr);
-      c.height = Math.round(r.height * dpr);
-    }
+    const dpr = fitCanvas(c);
+    if (!dpr) return;
     const ctx = c.getContext('2d')!;
     ctx.clearRect(0, 0, c.width, c.height);
     const { positions, aspect } = this.session.layout;
@@ -208,10 +214,8 @@ export class Stage {
       ctx.lineTo(this.box.x + w, gy);
       ctx.stroke();
     }
-    const aiming = this.onPick && this.selected === null && document.activeElement === c;
-    const hint = `Keys: [ ] pick a phone, arrows move it, Shift for big steps, Esc lets go${this.onPick ? '. With no phone picked, arrows aim the ripple and Enter sets it' : ''}.`;
-    if (this.hint.textContent !== hint) this.hint.textContent = hint;
-    if (this.onPick) {
+    const aiming = this.pick && this.selected === null && document.activeElement === c;
+    if (this.pick) {
       ctx.fillStyle = 'rgba(255, 176, 0, 0.7)';
       ctx.font = `${12 * dpr}px "Archivo Variable", sans-serif`;
       ctx.fillText('Tap the floor to set the ripple centre', this.box.x, this.box.y - 10 * dpr);
@@ -233,12 +237,17 @@ export class Stage {
     }
 
     const size = Math.max(14 * dpr, Math.min(72 * dpr, (Math.sqrt((w * hh) / n) * 0.5)));
+    const pw = size * 0.62;
     const now = this.session.now();
+    ctx.font = `600 ${Math.max(9 * dpr, size * 0.3)}px "Archivo Variable", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const solid: number[] = [];
+    const dashed = [3 * dpr, 3 * dpr];
     for (const [seat, p0] of positions) {
       const s = this.session.seats.get(seat);
       const p = this.drag?.seat === seat ? this.drag.p : p0;
       const f = render(this.session.programOf(seat), { seat, pos: p, aspect }, now);
-      const pw = size * 0.62;
       const x = this.box.x + p.x * w - pw / 2;
       const y = this.box.y + p.y * hh - size / 2;
       ctx.beginPath();
@@ -249,13 +258,10 @@ export class Stage {
       }
       ctx.lineWidth = (seat === this.selected ? 2.5 : 1) * dpr;
       ctx.strokeStyle = seat === this.selected ? '#ffb000' : s?.link ? 'rgba(242,234,216,0.25)' : 'rgba(242,234,216,0.5)';
-      ctx.setLineDash(s?.link ? [] : [3 * dpr, 3 * dpr]);
+      ctx.setLineDash(s?.link ? solid : dashed);
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.setLineDash(solid);
       ctx.fillStyle = s?.link && luma(f.rgb) > 140 ? '#0e0d0b' : '#f2ead8';
-      ctx.font = `600 ${Math.max(9 * dpr, size * 0.3)}px "Archivo Variable", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
       ctx.fillText(String(seat + 1), x + pw / 2, y + size / 2);
     }
   }

@@ -1,7 +1,7 @@
 // Step two: the experiences. Each panel turns the located crowd into something:
 // a picture, a wave of light, sound moving through the room, or a game.
-import { AMBER, BLACK, EMBER, TEAL, WHITE, type Voice, type WaveProgram, type WaveShape } from '../core/effects';
-import { sampleCover, type Image, type Point, type RGB } from '../core/layout';
+import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type WaveParams, type WaveProgram, type WaveShape } from '../core/effects';
+import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
 import { startPotato, potatoTap, potatoTick, type PotatoState } from '../core/potato';
 import { startTerritory, teamSizes, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
 import { css, h, segmented, slider } from '../ui/dom';
@@ -20,11 +20,8 @@ function needPlaced(session: HostSession): string | null {
 
 /** Show `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
 export function flipCards(session: HostSession, image: Image, leadMs = 3200): void {
-  const { positions, aspect } = session.layout;
   // Each phone averages the patch of picture it stands in for.
-  const patch = Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, positions.size)));
-  const colors = new Map<number, RGB>();
-  for (const [seat, p] of positions) colors.set(seat, sampleCover(image, p, aspect, patch));
+  const colors = sampleCrowd(image, session.layout, Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, session.layout.positions.size))));
   const at = session.now() + leadMs;
   session.setProgram((seat) => ({ kind: 'card', rgb: colors.get(seat) ?? BLACK, at }));
 }
@@ -91,8 +88,8 @@ const COLORS: [string, RGB][] = [
   ['Red', [255, 70, 40]],
 ];
 
-function waveControls(stage: Stage, initial: Partial<WaveProgram>, onChange: (w: Omit<WaveProgram, 't0' | 'kind'>) => void, withColor: boolean) {
-  const w: Omit<WaveProgram, 't0' | 'kind'> = { period: 2400, shape: 'sweep', angle: 0, origin: { x: 0.5, y: 0.5 }, width: 0.12, rgb: AMBER, voice: 'off', ...initial };
+function waveControls(stage: Stage, initial: Partial<WaveParams>, onChange: (w: WaveParams) => void, withColor: boolean) {
+  const w: WaveParams = { ...WAVE_DEFAULTS, ...initial };
   const emit = () => onChange({ ...w });
   const picking = () => {
     stage.onPick =
@@ -153,7 +150,7 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
     sentAt = performance.now();
     if (wave) session.setProgram({ ...wave });
   };
-  const go = (w: Omit<WaveProgram, 't0' | 'kind'>) => {
+  const go = (w: WaveParams) => {
     const err = needPlaced(session);
     if (err) return void (msg.textContent = err);
     director.take(() => {
@@ -163,18 +160,18 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
       stage.onPick = null;
     });
     controls.arm();
-    wave = { kind: 'wave', t0: session.now() + 250, ...w };
+    wave = makeWave(session.now() + 250, w);
     send();
     msg.textContent = 'Rolling. Change anything and it updates live.';
   };
   // Live edits keep the wave's phase so the band never jumps and phones keep their audio
   // schedule; a new speed rebases t0 so the band stays where it is (pingpong parity included).
-  const retune = (w: Omit<WaveProgram, 't0' | 'kind'>) => {
+  const retune = (w: WaveParams) => {
     if (!wave) return;
     const now = session.now();
     let t0 = wave.t0;
     if (w.period !== wave.period && now > t0) t0 = now - (((now - t0) / wave.period) % 2) * w.period;
-    wave = { kind: 'wave', t0, ...w };
+    wave = makeWave(t0, w);
     // Slider drags fire per pixel; at most one broadcast per 150 ms, trailing edge included.
     const wait = 150 - (performance.now() - sentAt);
     if (wait <= 0) send();
@@ -191,7 +188,7 @@ export function wavePanel(session: HostSession, stage: Stage, director: Director
   );
 }
 
-const SOUNDS: { name: string; blurb: string; w: Partial<WaveProgram> }[] = [
+const SOUNDS: { name: string; blurb: string; w: Partial<WaveParams> & Pick<WaveParams, 'shape' | 'voice' | 'period' | 'rgb'> }[] = [
   { name: 'Pluck sweep', blurb: 'A rising run of notes travels from one wall to the other.', w: { shape: 'sweep', voice: 'pluck', period: 2400, rgb: AMBER } },
   { name: 'Bell ping-pong', blurb: 'Bells bounce back and forth across the room.', w: { shape: 'pingpong', voice: 'bell', period: 3200, rgb: WHITE } },
   { name: 'Drum ripple', blurb: 'A drumbeat spreads out from the centre like a stone in a pond.', w: { shape: 'ripple', voice: 'drum', period: 1600, rgb: [255, 70, 40], origin: { x: 0.5, y: 0.5 } } },
@@ -207,8 +204,7 @@ export function soundPanel(session: HostSession, stage: Stage, director: Directo
     if (err) return void (msg.textContent = err);
     director.take();
     stage.onPick = null;
-    const base = { period: 2400, angle: 0, origin: { x: 0.5, y: 0.5 }, width: 0.12, ...current.w } as Omit<WaveProgram, 'kind' | 't0'>;
-    session.setProgram({ kind: 'wave', t0: session.now() + 400, ...base, voice: current.w.voice as Voice, period: base.period / tempo });
+    session.setProgram(makeWave(session.now() + 400, { ...current.w, period: current.w.period / tempo }));
     msg.textContent = `Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`;
   };
   return h(

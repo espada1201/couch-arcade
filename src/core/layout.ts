@@ -99,3 +99,10 @@ export function sampleCover(img: Image, p: Point, aspect: number, patch = 0): RG
     }
   return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
 }
+
+/** Every placed phone's colour for `img`, each averaging a patch `patch` of the room wide. */
+export function sampleCrowd(img: Image, room: Room, patch: number): Map<number, RGB> {
+  const out = new Map<number, RGB>();
+  for (const [seat, p] of room.positions) out.set(seat, sampleCover(img, p, room.aspect, patch));
+  return out;
+}

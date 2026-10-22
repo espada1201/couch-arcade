@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distance, nearest, normalize, sampleCover, seatGridPoint, type Image } from '../src/core/layout';
+import { distance, nearest, normalize, sampleCover, sampleCrowd, seatGridPoint, type Image } from '../src/core/layout';
 
 function quadrants(w: number, h: number): Image {
   const data = new Uint8ClampedArray(w * h * 4);
@@ -69,5 +69,16 @@ describe('room layout', () => {
     expect(r).toBeGreaterThan(100);
     expect(g).toBeGreaterThan(100);
     expect(b).toBe(0);
+  });
+
+  it('gives every placed phone the colour of the patch it covers', () => {
+    const img = quadrants(40, 40);
+    const room = { positions: new Map([[3, { x: 0.1, y: 0.1 }], [8, { x: 0.9, y: 0.9 }], [5, { x: 0.5, y: 0.1 }]]), aspect: 1 };
+    const colours = sampleCrowd(img, room, 0.5);
+    expect([...colours.keys()]).toEqual([3, 8, 5]);
+    expect(colours.get(3)).toEqual(sampleCover(img, { x: 0.1, y: 0.1 }, 1, 0.5));
+    expect(colours.get(8)).toEqual(sampleCover(img, { x: 0.9, y: 0.9 }, 1, 0.5));
+    expect(colours.get(5)).toEqual(sampleCover(img, { x: 0.5, y: 0.1 }, 1, 0.5));
+    expect(sampleCrowd(img, { positions: new Map(), aspect: 1 }, 0.1).size).toBe(0);
   });
 });

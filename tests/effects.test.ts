@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrivals, frontAt, noteFor, render, travel, waveLevel, type WaveProgram } from '../src/core/effects';
+import { WAVE_DEFAULTS, arrivals, frontAt, makeWave, noteFor, render, travel, waveLevel, type WaveProgram } from '../src/core/effects';
 import { startTerritory } from '../src/core/territory';
 import { normalize } from '../src/core/layout';
 
@@ -43,6 +43,11 @@ describe('waves', () => {
     expect(frontAt(w, 1000 + 100)!).toBeLessThan(frontAt(w, 1000 + 1900)!);
     expect(frontAt(w, 3000 + 100)!).toBeGreaterThan(frontAt(w, 3000 + 1900)!);
     expect(frontAt(w, 999)).toBeNull();
+  });
+
+  it('makeWave fills in the defaults and keeps what it is given', () => {
+    expect(makeWave(5)).toEqual({ kind: 'wave', t0: 5, ...WAVE_DEFAULTS });
+    expect(makeWave(5, { shape: 'ripple', period: 900 })).toMatchObject({ t0: 5, shape: 'ripple', period: 900, width: WAVE_DEFAULTS.width });
   });
 
   it('a ripple reaches phones in order of distance from its origin', () => {
