@@ -2,11 +2,11 @@
 // a picture, a wave of light, sound moving through the room, or a game.
 import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type WaveParams, type WaveProgram, type WaveShape } from '../core/effects';
 import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
-import { startPotato, potatoTap, potatoTick, type PotatoState } from '../core/potato';
-import { startTerritory, teamSizes, territoryTap, territoryTick, type TerritoryState } from '../core/territory';
+import type { PotatoState } from '../core/potato';
+import { teamSizes, type TerritoryState } from '../core/territory';
 import { css, h, segmented, slider } from '../ui/dom';
 import type { Director } from './director';
-import { runGame } from './game';
+import { POTATO_RULES, runGame, territoryRules } from './game';
 import { fileStunt, presets, textStunt, type Stunt } from './images';
 import { panel, requirePlaced, stopButton } from './panel';
 import type { HostSession } from './session';
@@ -218,14 +218,7 @@ export function territoryPanel(session: HostSession, director: Director): HTMLEl
   const duration = h('select', { id: 'terr-dur' }, ...[30, 45, 60, 90].map((s) => h('option', { value: s, selected: s === 45 }, `${s} seconds`)));
   const start = () =>
     runGame<TerritoryState>(session, director, say, {
-      name: 'Territory',
-      start: (room, now) => startTerritory(room, now, Number(duration.value) * 1000),
-      tap: (s, room, seat, now) => territoryTap(s, room, seat, now),
-      tick: (s, _room, now) => territoryTick(s, now),
-      program: (state) => ({ kind: 'territory', state, colors: TEAMS }),
-      tickMs: 100,
-      throttleMs: 40,
-      resendMs: 120,
+      ...territoryRules(Number(duration.value) * 1000, TEAMS),
       show: (s, _prev, room) => {
         bar.style.setProperty('--b', String(s.boundary));
         const [a, b] = teamSizes(s, room);
@@ -251,13 +244,7 @@ export function potatoPanel(session: HostSession, director: Director): HTMLEleme
   const score = h('p.score', { role: 'status', 'aria-live': 'polite' }, 'A ball of fire jumps between neighbours. Tap when it lands on you.');
   const start = () =>
     runGame<PotatoState>(session, director, say, {
-      name: 'Hot Potato',
-      // Two or more placed phones always give a game.
-      start: (room, now) => startPotato(room, now + 1500, Math.random)!,
-      tap: (s, room, seat, now) => potatoTap(s, room, seat, now, Math.random),
-      tick: potatoTick,
-      program: (state) => ({ kind: 'potato', state }),
-      tickMs: 50,
+      ...POTATO_RULES,
       show: (s, prev, room) => {
         if (s === prev) return;
         if (s.phase === 'over') score.textContent = s.winner === null ? 'Everyone burnt out!' : `Phone ${s.winner + 1} is the last one standing after ${s.passes} throws.`;
