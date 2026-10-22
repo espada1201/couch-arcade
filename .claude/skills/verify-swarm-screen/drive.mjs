@@ -1419,6 +1419,47 @@ const CHECKS = {
     }
   },
 
+  async pocket(run) {
+    // A phone goes into a pocket: its page stops running (no timers, no pings) but its socket stays up
+    // and the browser still answers the relay's pings. The host must keep it, not drop it after 15 s.
+    const SENDS = () => {
+      window.__sends = [];
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (d) {
+        window.__sends.push(Date.now());
+        return send.call(this, d);
+      };
+    };
+    const room = await openRoom(run, { sims: [[0.3, 0.5], [0.6, 0.5]], init: SENDS });
+    const { host, phones } = room;
+    const cdp = await room.context.newCDPSession(phones[1]);
+    // Paused in the debugger: no script runs, as on a locked phone, while the socket stays open.
+    await cdp.send('Debugger.enable');
+    await cdp.send('Debugger.pause');
+    const t = Date.now();
+    let dropped = null;
+    while (Date.now() - t < 40_000) {
+      if (!/^2 phones /.test(await host.locator('.count').textContent())) {
+        dropped = Math.round((Date.now() - t) / 1000);
+        break;
+      }
+      await sleep(1000);
+    }
+    run.note('pocketed phone dropped from the count after s', dropped ?? 'kept for 40 s');
+    await cdp.send('Debugger.resume');
+    const paused = Date.now() - t;
+    const gap = await phones[1].evaluate((t0) => {
+      const s = [t0, ...window.__sends.filter((x) => x > t0), Date.now()];
+      return Math.max(...s.slice(1).map((x, i) => x - s[i]));
+    }, t);
+    run.note('longest silence from the pocketed phone s', Math.round(gap / 1000));
+    if (gap < paused - 3000) run.inconclusive('the page did not stop: it kept sending');
+    await expect(phones[1].locator('.status')).toContainText('Seat', { timeout: 20_000 });
+    await expect(host.locator('.count')).toHaveText(/^2 phones /, { timeout: 20_000 });
+    await run.shot(host, 'host-after-pocket');
+    if (dropped !== null) run.issue(`the host dropped a pocketed phone after ${dropped} s`);
+  },
+
   async 'room-taken'(run) {
     run.allowErrors = /WebSocket|relay|ERR_|Failed to load/;
     const room = await openRoom(run, { sims: [[0.3, 0.5]] });

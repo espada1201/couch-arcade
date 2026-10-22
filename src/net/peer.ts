@@ -79,7 +79,7 @@ export class PeerTransport implements Transport {
       if (tries) onServer('up');
       tries = 0;
     });
-    return { onLink: (cb) => (onLink = cb), onServer: (cb) => (onServer = cb), broadcast: sendEach, close: () => peer.destroy() };
+    return { heartbeat: false, onLink: (cb) => (onLink = cb), onServer: (cb) => (onServer = cb), broadcast: sendEach, close: () => peer.destroy() };
   }
 
   async join(room: string): Promise<Link> {

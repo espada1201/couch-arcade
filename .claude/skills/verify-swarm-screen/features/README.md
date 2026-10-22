@@ -30,4 +30,4 @@ H1 and one paragraph, then four H2s: `Sub-features`, `How to get to it (user POV
 - [Wave](./wave.md): `wave`
 - [Territory](./territory.md): `territory`, `masher`
 - [Hot Potato](./hot-potato.md): `potato`
-- [Reconnect and seat keep](./reconnect.md): `reconnect`, `ghost`
+- [Reconnect and seat keep](./reconnect.md): `reconnect`, `ghost`, `pocket`

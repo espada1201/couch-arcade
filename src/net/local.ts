@@ -33,6 +33,7 @@ export class LocalTransport implements Transport {
       }
     };
     return {
+      heartbeat: false,
       onLink: (cb) => (onLink = cb),
       // Same-browser channel: there is no server to lose.
       onServer: () => {},

@@ -6,13 +6,16 @@ import { Director } from '../src/host/director';
 import { HostSession } from '../src/host/session';
 import { BasicLink, sendEach, type HostEnd, type Link, type ServerState, type Transport } from '../src/net/transport';
 
-/** In-memory transport: `accept` hands the host a new link, `server` reports the relay up or down. */
-export function testTransport() {
+/**
+ * In-memory transport: `accept` hands the host a new link, `server` reports the relay up or down.
+ * `heartbeat`: the server closes dead links itself, as the relay does.
+ */
+export function testTransport({ heartbeat = false } = {}) {
   let accept: (l: Link) => void = () => {};
   let server: (state: ServerState) => void = () => {};
   const transport: Transport = {
     name: 'test',
-    host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), broadcast: sendEach, close: () => {} }),
+    host: async (): Promise<HostEnd> => ({ heartbeat, onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), broadcast: sendEach, close: () => {} }),
     join: async () => {
       throw new Error('unused');
     },

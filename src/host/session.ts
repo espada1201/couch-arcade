@@ -54,7 +54,10 @@ interface Conn {
   seat: Seat | null;
 }
 
-/** A seated phone the host hasn't heard from for this long has gone (a Wi-Fi dead spot, a dead battery). */
+/**
+ * A seated phone the host hasn't heard from for this long has gone (a Wi-Fi dead spot, a dead
+ * battery), on a transport whose server doesn't notice that itself.
+ */
 const SILENT_MS = 15_000;
 /** Shortest wait for a frame's ack before the next frame goes anyway; slow phones get eight round trips. */
 const ACK_WAIT_MS = 2000;
@@ -340,12 +343,13 @@ export class HostSession {
   }
 
   /**
-   * Close links that went quiet (a phone pings every 2 s) and links still without a seat
-   * HELLO_MS after they opened, whatever they sent since.
+   * Close links that went quiet (a phone pings every 2 s) where the server can't tell, and links
+   * still without a seat HELLO_MS after they opened, whatever they sent since.
    */
   sweep(): void {
     const now = this.now();
-    for (const c of this.conns) if (c.seat ? now - c.heard > SILENT_MS : now - c.opened > HELLO_MS) c.link.close();
+    const silent = this.end?.heartbeat ? Infinity : SILENT_MS;
+    for (const c of this.conns) if (c.seat ? now - c.heard > silent : now - c.opened > HELLO_MS) c.link.close();
     // A frame whose ack never came (a lost message, a phone that forgot) must not freeze that phone's picture.
     for (const s of this.online) if (s.awaiting && now - s.sentAt > Math.max(ACK_WAIT_MS, 8 * s.ackRtt)) this.release(s);
   }

@@ -134,7 +134,8 @@ server.on('upgrade', (req, socket, head) => {
   if (status) return refuse(socket, status);
   servers[role].handleUpgrade(req, socket, head, (ws) => {
     ws.on('error', () => ws.terminate());
-    ws.on('pong', () => (ws.missed = false));
+    ws.answered = Date.now();
+    ws.on('pong', () => (ws.answered = Date.now()));
     // Re-check: the room may have changed while the handshake completed.
     if (admit(room, role, key, addr)) return ws.close(1013, 'refused');
     if (!LOOPBACK.test(addr)) track(ws, addr, role);
@@ -258,19 +259,18 @@ function attachPhone(ws, r) {
 }
 
 // A phone that walked out of Wi-Fi range leaves its socket open with nobody behind it. Ping every
-// socket; one that hasn't answered the last ping by the next is gone, and closing it lets the host
-// (or the phones, if it was the host) know.
+// socket three times a window; one that hasn't answered for a whole window is gone, and closing it
+// lets the host (or the phones, if it was the host) know. The host relies on this alone, so a locked
+// phone, whose browser still answers pings, keeps its seat. A pong can queue behind a slow phone's
+// song chunks, so the whole window decides, not one round.
 const HEARTBEAT_MS = Number(process.env.RELAY_HEARTBEAT_MS) || 15_000;
 setInterval(() => {
   for (const [room, tomb] of tombs) if (tomb.until <= Date.now()) tombs.delete(room);
   for (const ws of [...servers.host.clients, ...servers.phone.clients]) {
-    if (ws.missed) ws.terminate();
-    else {
-      ws.missed = true;
-      ws.ping();
-    }
+    if (Date.now() - ws.answered > HEARTBEAT_MS) ws.terminate();
+    else ws.ping();
   }
-}, HEARTBEAT_MS);
+}, HEARTBEAT_MS / 3);
 
 server.listen(PORT, () => {
   console.log(`\n  Swarm Screen is running.\n`);

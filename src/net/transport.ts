@@ -18,6 +18,11 @@ export interface Link {
 export type ServerState = 'up' | 'down' | 'moved' | 'taken';
 
 export interface HostEnd {
+  /**
+   * The room server pings every link and closes dead ones itself (the relay), so the host must not
+   * time out a phone that merely went quiet: a locked phone runs no script but its socket answers.
+   */
+  readonly heartbeat: boolean;
   onLink(cb: (link: Link) => void): void;
   onServer(cb: (state: ServerState) => void): void;
   /** One message to many of this end's links; a transport that can fans it out on the server. */

@@ -151,6 +151,7 @@ export class RelayTransport implements Transport {
 
     attach(first);
     return {
+      heartbeat: true,
       onLink: (cb) => (onLink = cb),
       onServer: (cb) => (onServer = cb),
       broadcast,

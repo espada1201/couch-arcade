@@ -7,8 +7,8 @@ import { memoryStorage, testTransport } from './harness';
 import { PHONE_BUDGET, PHONE_MESSAGE_BYTES } from '../src/net/limits.js';
 
 /** Several phones against a real HostSession. */
-function harness() {
-  const { transport, accept, server } = testTransport();
+function harness(opts: { heartbeat?: boolean } = {}) {
+  const { transport, accept, server } = testTransport(opts);
   let clock = 1000;
   const session = new HostSession(transport, 'TEST', () => clock);
   const phone = () => {
@@ -164,7 +164,7 @@ describe('pings', () => {
 });
 
 describe('links that go quiet', () => {
-  it('drops a seated phone the host has not heard from for 15 s, and keeps one that pings', async () => {
+  it('drops a seated phone the host has not heard from for 15 s, and keeps one that pings (no server heartbeat)', async () => {
     const { session, phone, tick } = harness();
     await session.open();
     const [quiet, chatty] = [phone(), phone()];
@@ -176,6 +176,25 @@ describe('links that go quiet', () => {
       session.sweep();
     }
     expect(session.online.map((x) => x.token)).toEqual(['chatty']);
+  });
+
+  it('keeps a quiet seated phone when the room server pings every link itself, as the relay does', async () => {
+    const { session, phone, tick } = harness({ heartbeat: true });
+    await session.open();
+    const pocketed = phone();
+    pocketed.say({ t: 'hello', token: 'pocket' });
+    for (let s = 0; s < 60; s++) {
+      tick(1000);
+      session.sweep();
+    }
+    expect(session.online.map((x) => x.token)).toEqual(['pocket']);
+    // A link that never says hello still goes.
+    const mute = phone();
+    let closed = false;
+    mute.onClose(() => (closed = true));
+    tick(11_000);
+    session.sweep();
+    expect(closed).toBe(true);
   });
 
   it('closes a link that never says hello', async () => {
