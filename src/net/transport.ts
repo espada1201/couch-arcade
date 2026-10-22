@@ -18,10 +18,16 @@ export interface Link {
   close(): void;
 }
 
+/**
+ * The room server (relay or broker) as the host sees it. 'down': gone, and the host keeps trying
+ * to take the room back. 'moved': this page opened the room in another tab, which now owns it.
+ * 'taken': while the host was away another host took the room code. 'moved' and 'taken' are final.
+ */
+export type ServerState = 'up' | 'down' | 'moved' | 'taken';
+
 export interface HostEnd {
   onLink(cb: (link: Link) => void): void;
-  /** The room server (relay or broker) went away (false) or took the room back (true). */
-  onServer(cb: (up: boolean) => void): void;
+  onServer(cb: (state: ServerState) => void): void;
   /** One message to many of this end's links; a transport that can fans it out on the server. */
   broadcast(links: Link[], msg: unknown, opts?: SendOptions): void;
   close(): void;

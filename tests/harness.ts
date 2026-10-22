@@ -4,12 +4,12 @@ import { normalize, type Point } from '../src/core/layout';
 import type { HostMsg, PhoneMsg } from '../src/core/protocol';
 import { Director } from '../src/host/director';
 import { HostSession } from '../src/host/session';
-import { BasicLink, sendEach, type HostEnd, type Link, type Transport } from '../src/net/transport';
+import { BasicLink, sendEach, type HostEnd, type Link, type ServerState, type Transport } from '../src/net/transport';
 
 /** In-memory transport: `accept` hands the host a new link, `server` reports the relay up or down. */
 export function testTransport() {
   let accept: (l: Link) => void = () => {};
-  let server: (up: boolean) => void = () => {};
+  let server: (state: ServerState) => void = () => {};
   const transport: Transport = {
     name: 'test',
     host: async (): Promise<HostEnd> => ({ onLink: (cb) => (accept = cb), onServer: (cb) => (server = cb), broadcast: sendEach, close: () => {} }),
@@ -17,7 +17,7 @@ export function testTransport() {
       throw new Error('unused');
     },
   };
-  return { transport, accept: (l: Link) => accept(l), server: (up: boolean) => server(up) };
+  return { transport, accept: (l: Link) => accept(l), server: (state: ServerState) => server(state) };
 }
 
 /** A Map-backed stand-in for localStorage. */

@@ -7,7 +7,7 @@ import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
-import { randomId, type HostEnd, type Link, type SendOptions, type Transport } from '../net/transport';
+import { randomId, type HostEnd, type Link, type SendOptions, type ServerState, type Transport } from '../net/transport';
 import { forget, loadJson, saveJson } from '../storage';
 
 export type Source = 'camera' | 'grid' | 'manual';
@@ -70,8 +70,8 @@ export class HostSession {
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
-  /** The room server is down and the host is reconnecting to it; phones can't reach the room meanwhile. */
-  serverDown = false;
+  /** Phones can reach the room only while the room server is 'up'. */
+  server: ServerState = 'up';
 
   constructor(
     readonly transport: Transport,
@@ -102,8 +102,8 @@ export class HostSession {
   async open(): Promise<void> {
     this.end = await this.transport.host(this.room);
     this.end.onLink((link) => this.accept(link));
-    this.end.onServer((up) => {
-      this.serverDown = !up;
+    this.end.onServer((state) => {
+      this.server = state;
       this.changed();
     });
     // Saved now, not at the first join, so reloading an empty new room keeps its code.
@@ -261,12 +261,6 @@ export class HostSession {
     link.onMessage((raw) => {
       const m = parsePhoneMsg(raw);
       if (!m) return;
-      if (m.t === 'ping') {
-        const h1 = this.now();
-        link.send({ t: 'pong', c0: m.c0, h1, h2: this.now() } satisfies HostMsg);
-        if (me && m.u !== undefined) me.sync = m.u;
-        return;
-      }
       if (m.t === 'hello') {
         // One seat per connection, so a single client can't fill the room.
         if (me) return;
@@ -282,8 +276,13 @@ export class HostSession {
         this.changed();
         return;
       }
+      // Pongs only to a seated phone: one the host doesn't know goes quiet, times out and says hello again.
       if (!me) return;
-      if (m.t === 'tap') {
+      if (m.t === 'ping') {
+        const h1 = this.now();
+        link.send({ t: 'pong', c0: m.c0, h1, h2: this.now() } satisfies HostMsg);
+        if (m.u !== undefined) me.sync = m.u;
+      } else if (m.t === 'tap') {
         const now = this.now();
         if (now - me.lastTap < 40) return;
         me.lastTap = now;

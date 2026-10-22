@@ -1017,6 +1017,29 @@ const CHECKS = {
     await run.shot(room.host, 'host-potato');
   },
 
+  async 'host-moved'(run) {
+    // The host opens the same room in a second tab: phones must follow it, the first tab must say so.
+    const room = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });
+    const { host, phones } = room;
+    const host2 = await room.context.newPage();
+    run.watch(host2);
+    await host2.setViewportSize({ width: 1440, height: 900 });
+    await host2.goto(host.url());
+    await expect(host2.locator('[data-room]')).toHaveAttribute('data-room', room.code);
+    const t = Date.now();
+    await expect(host2.locator('.count')).toHaveText(/^3 phones /, { timeout: 20_000 });
+    run.note('phones in the new tab after ms', Date.now() - t);
+    await expect(host.locator('.count')).toHaveText('This room moved to another tab', { timeout: 5000 });
+    run.note('old tab says', await host.locator('.count').textContent());
+    await host2.getByRole('tab', { name: /Big screen/ }).click();
+    await host2.getByLabel(/Cards, one per line/).fill('Hello from the new tab');
+    await host2.getByRole('button', { name: 'Show on phones' }).click();
+    for (const p of phones) await expect(p.locator('.follow-text')).toHaveText('Hello from the new tab');
+    await run.shot(host, 'old-tab-moved');
+    await run.shot(host2, 'new-tab');
+    await run.shot(phones[0], 'phone-follows-new-tab');
+  },
+
   async reconnect(run) {
     run.allowErrors = /WebSocket|relay|ERR_|Failed to load/;
     const sockets = [];

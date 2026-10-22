@@ -1,7 +1,7 @@
 // LAN transport: a WebSocket relay served by `npm start` on the host computer, so a
 // room works on any Wi-Fi network with no internet at all.
 import { stableId } from '../storage';
-import { BasicLink, backoff, type HostEnd, type Link, type SendOptions, type Transport } from './transport';
+import { BasicLink, backoff, type HostEnd, type Link, type SendOptions, type ServerState, type Transport } from './transport';
 
 // The host's socket carries every phone. Up (host to relay): `msg` for one phone, `all` for the
 // same message to many (one copy on the host's socket, fanned out by the relay), `close`. Down:
@@ -76,7 +76,7 @@ export class RelayTransport implements Transport {
     const phones = new Map<string, RelayPhone>();
     const byLink = new Map<Link, RelayPhone>();
     let onLink: (l: Link) => void = () => {};
-    let onServer: (up: boolean) => void = () => {};
+    let onServer: (state: ServerState) => void = () => {};
     let ws = first;
     let closed = false;
     let tries = 0;
@@ -105,9 +105,9 @@ export class RelayTransport implements Transport {
       };
       sock.onclose = (e) => {
         phones.forEach(drop);
-        // 'replaced': this page opened the room again in another tab, which now owns it.
-        if (closed || e.reason === 'replaced') return;
-        onServer(false);
+        if (closed) return;
+        if (e.reason === 'replaced') return onServer('moved');
+        onServer('down');
         retry();
       };
     };
@@ -134,7 +134,7 @@ export class RelayTransport implements Transport {
       }
       if (closed) return sock.close();
       attach(sock);
-      onServer(true);
+      onServer('up');
     };
 
     attach(first);

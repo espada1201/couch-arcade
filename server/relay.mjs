@@ -144,10 +144,14 @@ function parse(raw) {
 
 function attachHost(ws, room, key) {
   let r = rooms.get(room);
-  if (r) r.host.close(1000, 'replaced');
-  else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
+  if (r) {
+    // The same host page in a new tab (or back after a blip the relay missed). Its phones said
+    // hello to the old tab, so 1012 sends them to reconnect and say hello to this one.
+    r.host.close(1000, 'replaced');
+    for (const p of r.phones.values()) p.ws.close(1012, 'host moved');
+    r.phones.clear();
+  } else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
   r.host = ws;
-  for (const id of r.phones.keys()) ws.send(JSON.stringify({ t: 'open', id }));
   ws.on('message', (raw) => {
     const m = parse(raw);
     if (!m || typeof m !== 'object') return;
@@ -179,10 +183,12 @@ function attachPhone(ws, r) {
   r.host.send(JSON.stringify({ t: 'open', id }));
   ws.on('message', (raw) => {
     const data = parse(raw);
-    if (data === undefined) return;
+    if (data === undefined || r.phones.get(id)?.ws !== ws) return;
     r.host.send(JSON.stringify({ t: 'msg', id, data }));
   });
   ws.on('close', () => {
+    // Already gone when its host moved: the new host never knew this phone.
+    if (r.phones.get(id)?.ws !== ws) return;
     r.phones.delete(id);
     r.host.send(JSON.stringify({ t: 'close', id }));
   });

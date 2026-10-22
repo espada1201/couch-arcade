@@ -147,15 +147,29 @@ describe('host session', () => {
   });
 });
 
+describe('pings', () => {
+  it('only a seated phone gets pongs, so one the host never met times out and says hello', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    a.say({ t: 'ping', c0: 1 });
+    expect(a.inbox).toEqual([]);
+    a.say({ t: 'hello', token: 'aaa' });
+    a.say({ t: 'ping', c0: 2, u: 7 });
+    expect(a.inbox.at(-1)).toMatchObject({ t: 'pong', c0: 2 });
+    expect(session.seats.get(0)!.sync).toBe(7);
+  });
+});
+
 describe('room server outage', () => {
   it('tells listeners while the room server is down, and when it is back', async () => {
     const { session, server } = harness();
     await session.open();
-    const seen: boolean[] = [];
-    session.subscribe(() => seen.push(session.serverDown));
-    server(false);
-    server(true);
-    expect(seen).toEqual([true, false]);
+    const seen: string[] = [];
+    session.subscribe(() => seen.push(session.server));
+    server('down');
+    server('up');
+    expect(seen).toEqual(['down', 'up']);
   });
 });
 

@@ -1,6 +1,7 @@
 import qrcode from 'qrcode-generator';
 import { carry } from '../landing';
 import { RoomTakenError } from '../net/peer';
+import type { ServerState } from '../net/transport';
 import { pickTransport } from '../net/pick';
 import { errorText, h, plural, setText } from '../ui/dom';
 import { followPanel } from './follow';
@@ -28,6 +29,14 @@ function qrSvg(text: string): SVGSVGElement {
   svg.innerHTML = `<rect width="100%" height="100%" fill="#f2ead8"/><path d="${d}" fill="#0e0d0b" shape-rendering="crispEdges"/>`;
   return svg;
 }
+
+/** What the header says while phones can't reach the room. */
+const SERVER_SAYS: Record<ServerState, string> = {
+  up: '',
+  down: 'Reconnecting to the room server…',
+  moved: 'This room moved to another tab',
+  taken: 'Another host took this room code while this page was away. Start a new room.',
+};
 
 const TRANSPORTS: Record<string, { badge: string; note: string }> = {
   local: { badge: 'This browser', note: 'Test mode: open the link in other tabs of this browser.' },
@@ -84,7 +93,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
 
   const count = h('span.count', { role: 'status' });
   const updateCount = () => {
-    if (session.serverDown) return setText(count, 'Reconnecting to the room server…');
+    const server = SERVER_SAYS[session.server];
+    if (server) return setText(count, server);
     const online = session.online.length;
     const placed = [...session.layout.positions.keys()].filter((s) => session.seats.get(s)?.link).length;
     const sync = session.worstSync;

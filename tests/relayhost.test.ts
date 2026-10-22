@@ -37,9 +37,9 @@ describe('relay host end', () => {
   it('reclaims its room after the relay restarts, says so while down, and takes phones again', async () => {
     const t = new RelayTransport();
     const end = await t.host('BACK');
-    const server: boolean[] = [];
+    const server: string[] = [];
     const links: Link[] = [];
-    end.onServer((up) => server.push(up));
+    end.onServer((state) => server.push(state));
     end.onLink((l) => links.push(l));
 
     const phone = await t.join('BACK');
@@ -48,9 +48,9 @@ describe('relay host end', () => {
     phone.onClose(() => (phoneClosed = true));
 
     await stopRelay(relay);
-    await until(() => phoneClosed && server.at(-1) === false);
+    await until(() => phoneClosed && server.at(-1) === 'down');
     relay = await startRelay(port);
-    await until(() => server.at(-1) === true);
+    await until(() => server.at(-1) === 'up');
 
     const again = await t.join('BACK');
     await until(() => links.length === 2);
@@ -59,15 +59,15 @@ describe('relay host end', () => {
     again.send({ t: 'hello' });
     await until(() => got.length === 1);
     expect(got[0]).toEqual({ t: 'hello' });
-    expect(server).toEqual([false, true]);
+    expect(server).toEqual(['down', 'up']);
     end.close();
   }, 30_000);
 
   it('stops reconnecting once closed', async () => {
     const t = new RelayTransport();
     const end = await t.host('GONE');
-    const server: boolean[] = [];
-    end.onServer((up) => server.push(up));
+    const server: string[] = [];
+    end.onServer((state) => server.push(state));
     end.close();
     await new Promise((r) => setTimeout(r, 1500));
     expect(server).toEqual([]);
@@ -135,4 +135,35 @@ describe('Big screen frames through the relay', () => {
     expect(seen).toEqual([seq]);
     slow.destroy();
   }, 60_000);
+});
+
+describe('the same room opened in a second host tab', () => {
+  it('moves every phone to the new tab, and the old tab says the room moved', async () => {
+    const first = new HostSession(new RelayTransport(), 'MOVE');
+    await first.open();
+    const t = new RelayTransport();
+    // A phone that, like PhoneClient, says hello on every link and rejoins when one closes.
+    const phone = (token: string) => {
+      const state = { links: 0, live: true };
+      const join = async () => {
+        if (!state.live) return;
+        const link = await t.join('MOVE').catch(() => null);
+        if (!link) return void setTimeout(join, 200);
+        state.links++;
+        link.onClose(() => setTimeout(join, 200));
+        link.send({ t: 'hello', token });
+      };
+      void join();
+      return state;
+    };
+    const phones = [phone('MOVE-a'), phone('MOVE-b')];
+    await until(() => first.online.length === 2);
+
+    const second = new HostSession(new RelayTransport(), 'MOVE');
+    await second.open();
+    await until(() => second.online.length === 2, 8000);
+    expect(second.online.map((s) => s.token).sort()).toEqual(['MOVE-a', 'MOVE-b']);
+    await until(() => first.server === 'moved');
+    for (const p of phones) p.live = false;
+  }, 20_000);
 });
