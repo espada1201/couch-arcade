@@ -1212,6 +1212,37 @@ const CHECKS = {
     await run.shot(room.host, 'host-potato');
   },
 
+  async squat(run) {
+    // Someone opens 40 sockets that ping but never say hello: a real phone must still get in,
+    // and the host must let go of every squatter about 10 s after it opened, pings or not.
+    const room = await openRoom(run, { sims: [[0.3, 0.5]] });
+    const { host } = room;
+    const t0 = Date.now();
+    const squatters = Array.from({ length: 40 }, () => {
+      const ws = new WebSocket(`${base().replace('http', 'ws')}relay?room=${room.code}&role=phone`);
+      const s = { closedAfter: null };
+      const timer = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ t: 'ping', c0: Date.now() })), 1000);
+      ws.on('close', () => (clearInterval(timer), (s.closedAfter = Date.now() - t0)));
+      ws.on('error', () => {});
+      s.ws = ws;
+      return s;
+    });
+    try {
+      await sleep(1500);
+      const t = Date.now();
+      await room.addPhone([0.6, 0.5]);
+      run.note('real phone seated among 40 squatters after ms', Date.now() - t);
+      await expect(host.locator('.count')).toHaveText(/^2 phones /);
+      await expect.poll(() => squatters.every((s) => s.closedAfter !== null), { timeout: 20_000 }).toBe(true);
+      const after = squatters.map((s) => s.closedAfter);
+      run.note('squatters closed after ms (first, last)', [Math.min(...after), Math.max(...after)]);
+      if (Math.max(...after) > 13_000) run.issue(`a pinging squatter stayed ${Math.max(...after)} ms`);
+      await run.shot(room.phones[1], 'real-phone-seated');
+    } finally {
+      for (const s of squatters) s.ws.terminate();
+    }
+  },
+
   async ghost(run) {
     // A phone walks into a Wi-Fi dead spot: its packets vanish, no FIN, no reset. The host must
     // stop counting it soon, not a minute later.

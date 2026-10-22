@@ -11,6 +11,7 @@
 - `relay-guard` a second host without the room key gets 409; a phone for an unhosted room gets 404.
 - `relay-room-held` when the host tab closes, its room code is held for it for a minute (another host gets 409) and a reopened host tab gets its room and phones back; if the relay restarts and another host takes the code first, the host says "Another host took this room code…" instead of reconnecting forever.
 - `relay-untrusted` a phone socket that sends over 2 KB in one message (1009) or floods past 30 messages a second (1008) is closed; the real phones are untouched.
+- `relay-squat` 40 sockets that ping but never say hello: a real phone still gets a seat at once, and the host closes every squatter about 10 s after it opened (the oldest first when more keep coming).
 - `relay-host-left` closing the host page drops its phones into reconnecting.
 - `relay-host-moved` opening the same room in a second host tab moves every phone to it; the first tab says "This room moved to another tab".
 
@@ -22,8 +23,8 @@
 
 Preconditions: Doctor healthy (it already proves the 404 refusal).
 
-- **Run.** `drive.mjs lan`; `drive.mjs host-moved` for a second host tab; `drive.mjs room-taken` (needs a server the run launched, as it restarts the relay).
-- **Proof.** Readings `relay.json lanUrl`, `join url` (starts with lanUrl), `phone websockets` (relay URL with frames received), `second host, wrong key = 409`, `phone, unknown room = 404`, `phone sends 3 KB: close code` (1009), `phone sends 200 taps at once: close code` (1008); `host-lan.png`, `phone-lan.png`, `phone-host-left.png`. host-moved: `phones in the new tab after ms`, `old tab says`, every phone shows the new tab's card. room-taken: `another host, host just left` (409), `host back in its room with its phone`, `host says the room was taken after ms`; `host-room-taken.png`.
+- **Run.** `drive.mjs lan`; `drive.mjs host-moved` for a second host tab; `drive.mjs room-taken` (needs a server the run launched, as it restarts the relay); `drive.mjs squat`.
+- **Proof.** Readings `relay.json lanUrl`, `join url` (starts with lanUrl), `phone websockets` (relay URL with frames received), `second host, wrong key = 409`, `phone, unknown room = 404`, `phone sends 3 KB: close code` (1009), `phone sends 200 taps at once: close code` (1008); `host-lan.png`, `phone-lan.png`, `phone-host-left.png`. host-moved: `phones in the new tab after ms`, `old tab says`, every phone shows the new tab's card. room-taken: `another host, host just left` (409), `host back in its room with its phone`, `host says the room was taken after ms`; `host-room-taken.png`. squat: `real phone seated among 40 squatters after ms`, `squatters closed after ms (first, last)` (ISSUES over 13 s); `real-phone-seated.png`.
 
 ## Gotchas
 

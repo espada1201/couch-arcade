@@ -190,6 +190,25 @@ describe('links that go quiet', () => {
     session.sweep();
     expect(closed).toBe(true);
   });
+
+  it('closes a link that has no seat 10 s after it opened, however much it sends', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const chatter = phone();
+    let closed = false;
+    chatter.onClose(() => (closed = true));
+    for (let s = 0; s < 9; s++) {
+      tick(1000);
+      chatter.say({ t: 'ping', c0: s });
+      chatter.say({ t: 'tap' });
+      session.sweep();
+    }
+    expect(closed).toBe(false);
+    tick(1500);
+    chatter.say({ t: 'ping', c0: 99 });
+    session.sweep();
+    expect(closed).toBe(true);
+  });
 });
 
 describe('untrusted phones', () => {
@@ -212,19 +231,45 @@ describe('untrusted phones', () => {
     expect(session.gridEntries.get(0)).toEqual({ row: 2, seat: 7 });
   });
 
-  it('refuses new links while 32 are open without a seat', async () => {
+  it('makes room for a new link by closing the oldest of 32 that never said hello', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const idle = Array.from({ length: 32 }, () => {
+      tick(10);
+      const p = phone();
+      let closed = false;
+      p.onClose(() => (closed = true));
+      return { ...p, closed: () => closed };
+    });
+    const honest = phone();
+    expect(idle.map((p) => p.closed())).toEqual([true, ...Array(31).fill(false)]);
+    honest.say({ t: 'hello', token: 'aaa' });
+    expect(honest.inbox[0]).toMatchObject({ t: 'welcome' });
+    // A seated phone is no longer waiting, so the next link closes nobody.
+    phone();
+    expect(idle.filter((p) => p.closed())).toHaveLength(1);
+    phone();
+    expect(idle.filter((p) => p.closed())).toHaveLength(2);
+    expect(idle[1].closed()).toBe(true);
+  });
+
+  it('does not count phones the full room turned away against new links', async () => {
     const { session, phone } = harness();
     await session.open();
-    const idle = Array.from({ length: 32 }, () => phone());
-    const extra = phone();
-    extra.say({ t: 'hello', token: 'xxx' });
-    expect(extra.inbox).toEqual([]);
-    // One of them takes a seat, which frees a place.
-    idle[0].say({ t: 'hello', token: 'aaa' });
-    const next = phone();
-    next.say({ t: 'hello', token: 'bbb' });
-    expect(next.inbox[0]).toMatchObject({ t: 'welcome' });
-    expect(session.online).toHaveLength(2);
+    for (let i = 0; i < MAX_IDS; i++) phone().say({ t: 'hello', token: `t${i}` });
+    const turned = Array.from({ length: 32 }, (_, i) => {
+      const p = phone();
+      let closed = false;
+      p.onClose(() => (closed = true));
+      p.say({ t: 'hello', token: `late${i}` });
+      return { ...p, closed: () => closed };
+    });
+    expect(turned.every((p) => p.inbox[0]?.t === 'full')).toBe(true);
+    // 32 new links all stay open: each is still there to hear its answer.
+    const waiting = Array.from({ length: 32 }, () => phone());
+    for (const [i, p] of waiting.entries()) p.say({ t: 'hello', token: `new${i}` });
+    expect(waiting.map((p) => p.inbox[0]?.t)).toEqual(Array(32).fill('full'));
+    expect(turned.some((p) => p.closed())).toBe(false);
   });
 });
 

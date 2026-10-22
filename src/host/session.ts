@@ -37,16 +37,19 @@ type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
 
 interface Conn {
   link: Link;
+  opened: number;
   heard: number;
+  /** Said hello: seated, or told the room is full. */
+  greeted: boolean;
   seat: Seat | null;
 }
 
 /** A seated phone the host hasn't heard from for this long has gone (a Wi-Fi dead spot, a dead battery). */
 const SILENT_MS = 15_000;
-/** A link that hasn't said hello by now never will. */
+/** A link without a seat this long after it opened never gets one (a phone says hello at once). */
 const HELLO_MS = 10_000;
-/** Links open at once without a seat yet; more than this are refused. */
-const MAX_UNSEATED = 32;
+/** Links open at once that have not said hello; a new one past this closes the oldest. */
+const MAX_UNGREETED = 32;
 
 const clampInt = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(v)));
 
@@ -313,16 +316,21 @@ export class HostSession {
     return !!link && this.deliver(link, m);
   }
 
-  /** Close links that went quiet: a phone pings every 2 s, and a new link says hello at once. */
+  /**
+   * Close links that went quiet (a phone pings every 2 s) and links still without a seat
+   * HELLO_MS after they opened, whatever they sent since.
+   */
   sweep(): void {
     const now = this.now();
-    for (const c of this.conns) if (now - c.heard > (c.seat ? SILENT_MS : HELLO_MS)) c.link.close();
+    for (const c of this.conns) if (c.seat ? now - c.heard > SILENT_MS : now - c.opened > HELLO_MS) c.link.close();
   }
 
   private accept(link: Link): void {
-    // Links say hello at once, so a pile of unseated ones is someone opening sockets to fill the room.
-    if ([...this.conns].filter((c) => !c.seat).length >= MAX_UNSEATED) return link.close();
-    const conn: Conn = { link, heard: this.now(), seat: null };
+    // Links say hello at once, so a pile that hasn't is someone opening sockets to fill the room:
+    // the oldest goes, so the squatter can't lock a real phone out.
+    const waiting = [...this.conns].filter((c) => !c.greeted);
+    if (waiting.length >= MAX_UNGREETED) waiting[0].link.close();
+    const conn: Conn = { link, opened: this.now(), heard: this.now(), greeted: false, seat: null };
     this.conns.add(conn);
     let me: Seat | null = null;
     link.onMessage((raw) => {
@@ -332,6 +340,7 @@ export class HostSession {
       if (m.t === 'hello') {
         // One seat per connection, so a single client can't fill the room.
         if (me) return;
+        conn.greeted = true;
         me = conn.seat = this.claim(m.token, link);
         if (!me) {
           this.deliver(link, { t: 'full' });

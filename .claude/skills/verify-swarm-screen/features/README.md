@@ -18,7 +18,7 @@ H1 and one paragraph, then four H2s: `Sub-features`, `How to get to it (user POV
 ## Features
 
 - [Landing page](./landing.md): `landing`
-- [LAN relay](./lan-relay.md): `lan`, `host-moved`, `room-taken`, `doctor`
+- [LAN relay](./lan-relay.md): `lan`, `host-moved`, `room-taken`, `squat`, `doctor`
 - [Locate](./locate.md): `scan`, `real-camera`, `seat-grid`, `drag`
 - [Music](./music.md): `play-song [file]`, `slow-song`, `tones`
 - [Big screen](./big-screen.md): `cards`, `camera`, `big-room`, `slow-follow`, `screen-share`, `captions`
