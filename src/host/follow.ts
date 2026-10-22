@@ -9,7 +9,7 @@ import { canvas2d } from '../ui/canvas';
 import { errorText, h, plural, segmented, setText, slider } from '../ui/dom';
 import { FollowScreen } from '../ui/follow';
 import type { Director, Hold } from './director';
-import { dropVideo, openCamera, stopStream } from './media';
+import { dropVideo, openCamera, secureOnlyAdvice, stopStream } from './media';
 import { panel, stopButton } from './panel';
 import type { HostSession } from './session';
 import { captureFrames } from './capture';
@@ -167,7 +167,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   const captionsBox = h(
     'div.follow-source',
     { hidden: true },
-    h('p.note', {}, 'Speak near this computer’s microphone; phones show the last few lines as you talk. Captions need an internet connection: in Chrome and Edge the browser maker’s online service turns the speech into text.'),
+    h('p.note', {}, 'Speak near this computer’s microphone and phones show the last few lines as you talk. Live captions need Chrome or Edge on this computer and an internet connection, because the browser sends your speech to its maker’s online service to turn it into text.'),
   );
 
   const go = h('button.btn.primary', { type: 'button' }, 'Show on phones');
@@ -198,7 +198,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     } catch (e) {
       if (mine === gen) {
         hold?.end();
-        say(kind === 'screen' ? 'Screen sharing was cancelled or is not allowed in this browser.' : errorText(e));
+        fail(kind === 'screen' ? (secureOnlyAdvice() ?? 'Screen sharing was cancelled or is not allowed in this browser.') : errorText(e));
       }
       return;
     }
@@ -218,7 +218,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
     } catch {
       if (mine === gen) {
         hold?.end();
-        say('The picture could not be played.');
+        fail('The picture could not be played.');
       }
       return;
     }
@@ -251,12 +251,12 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       fatal = true;
       if (mine !== gen) return;
       hold?.end();
-      say(
+      fail(
         e.error === 'not-allowed' || e.error === 'service-not-allowed'
-          ? 'The microphone is blocked. Allow it in the address bar and try again.'
+          ? (secureOnlyAdvice() ?? 'The microphone is blocked. Allow it in the address bar and try again.')
           : e.error === 'network'
-            ? 'Captions need an internet connection in this browser.'
-            : `Captions stopped (${e.error}).`,
+            ? 'Live captions need an internet connection in this browser.'
+            : `Live captions stopped (${e.error}).`,
       );
     };
     // Recognition ends by itself after a pause; keep listening until the host stops.
@@ -273,15 +273,15 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       r.start();
     } catch {
       hold?.end();
-      return say('Captions could not start. Check the microphone and the internet connection.');
+      return fail('Live captions could not start. Check the microphone and the internet connection.');
     }
-    say(`Captioning to ${phones()}. Phones that join later see the captions too.`);
+    say(`Live captions are on for ${phones()}. Phones that join later see them too.`);
   };
 
   const start = () => {
     // Nothing to show: say so before taking the room, so whatever runs keeps running.
     const card = cardView();
-    if (source === 'cards' && !card) return say('Type at least one line first.');
+    if (source === 'cards' && !card) return fail('Type at least one line first.');
     const first: FollowView | null =
       source === 'cards' ? card : source === 'captions' ? { show: 'captions', lines: [], interim: false } : { show: 'wait', text: source === 'screen' ? 'The host is about to share their screen…' : 'The camera is starting…' };
     hold = director.run({ stop, program: first ? { kind: 'follow', view: first } : undefined });
@@ -307,7 +307,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
   if (Recognition) sources.push(['captions', 'Live captions']);
   const boxes: Record<FollowSource, HTMLElement> = { cards: cardsBox, screen: mediaBox, camera: mediaBox, captions: captionsBox };
 
-  const { el, say } = panel(
+  const { el, say, fail } = panel(
     'Every phone shows the whole picture. Share your screen to put your slides on every phone, type song lyrics or an agenda as big text cards, show live captions of what you say, or show the camera. For rooms where not everyone can see the screen, or there is no screen at all.',
     segmented<FollowSource>('Show', sources, source, (v) => {
       source = v;
@@ -317,7 +317,7 @@ export function followPanel(session: HostSession, director: Director): HTMLEleme
       // Switching source while live starts the new one at once.
       if (running) start();
     }),
-    Recognition ? null : h('p.note', {}, 'Live captions need a browser with speech recognition, such as Chrome, Edge or Safari.'),
+    Recognition ? null : h('p.note', {}, 'Live captions need Chrome or Edge on this computer.'),
     cardsBox,
     mediaBox,
     captionsBox,
