@@ -106,10 +106,7 @@ const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 const TOMB_MS = Number(process.env.RELAY_TOMB_MS) || 10 * 60_000;
 const tombs = new Map();
 
-/**
- * room -> { host: WebSocket, key: string, phones: Map<id, Phone> }; exists only while a host is attached.
- * Phone: { ws, written, since }: messages written to the phone's socket, and chars since the last `drain`.
- */
+/** room -> { host: WebSocket, key: string, phones: Map<id, WebSocket> }; exists only while a host is attached. */
 const rooms = new Map();
 let nextId = 1;
 // Hosts send frames and song chunks of up to 60 KB; phones send only small control messages.
@@ -181,23 +178,6 @@ function envelope(raw) {
   return c?.t === 'close' && typeof c.id === 'string' ? { ids: [c.id] } : null;
 }
 
-/** Chars written to a phone between two `drain` reports to its host. */
-const REPORT_CHARS = 4096;
-
-/**
- * Write `data` to a phone and, once enough has gone out, tell the host how many messages the phone's
- * socket has taken: that is how the host sees each phone's own backlog through its one socket.
- */
-function forward(r, id, p, data) {
-  p.ws.send(data, { binary: false }, () => {
-    p.written++;
-    p.since += data.length;
-    if (p.since < REPORT_CHARS) return;
-    p.since = 0;
-    r.host.send(JSON.stringify({ t: 'drain', id, n: p.written }));
-  });
-}
-
 /** JSON from a socket, or undefined when it does not parse (JSON itself has no undefined). */
 function parse(raw) {
   try {
@@ -213,7 +193,7 @@ function attachHost(ws, room, key) {
     // The same host page in a new tab (or back after a blip the relay missed). Its phones said
     // hello to the old tab, so 1012 sends them to reconnect and say hello to this one.
     r.host.close(1000, 'replaced');
-    for (const p of r.phones.values()) p.ws.close(1012, 'host moved');
+    for (const p of r.phones.values()) p.close(1012, 'host moved');
     r.phones.clear();
   } else rooms.set(room, (r = { host: ws, key, phones: new Map() }));
   tombs.delete(room);
@@ -226,13 +206,13 @@ function attachHost(ws, room, key) {
     for (const id of env.ids) {
       const p = r.phones.get(id);
       if (!p) continue;
-      if (data) forward(r, id, p, data);
-      else p.ws.close(1000);
+      if (data) p.send(data, { binary: false });
+      else p.close(1000);
     }
   });
   ws.on('close', () => {
     if (r.host !== ws) return;
-    for (const p of r.phones.values()) p.ws.close(1001, 'host left');
+    for (const p of r.phones.values()) p.close(1001, 'host left');
     rooms.delete(room);
     tombs.set(room, { key: r.key, until: Date.now() + TOMB_MS });
   });
@@ -240,19 +220,19 @@ function attachHost(ws, room, key) {
 
 function attachPhone(ws, r) {
   const id = String(nextId++);
-  r.phones.set(id, { ws, written: 0, since: 0 });
+  r.phones.set(id, ws);
   r.host.send(JSON.stringify({ t: 'open', id }));
   // The outer wall: the host enforces the same limit on every transport.
   const wall = tokenBucket(PHONE_LIMIT, Date.now());
   ws.on('message', (raw) => {
     if (!wall.take(Date.now())) return ws.close(1008, 'too many messages');
     const data = parse(raw);
-    if (data === undefined || r.phones.get(id)?.ws !== ws) return;
+    if (data === undefined || r.phones.get(id) !== ws) return;
     r.host.send(JSON.stringify({ t: 'msg', id, data }));
   });
   ws.on('close', () => {
     // Already gone when its host moved: the new host never knew this phone.
-    if (r.phones.get(id)?.ws !== ws) return;
+    if (r.phones.get(id) !== ws) return;
     r.phones.delete(id);
     r.host.send(JSON.stringify({ t: 'close', id }));
   });

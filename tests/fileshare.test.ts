@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostMsg } from '../src/core/protocol';
-import { CHUNK_BACKLOG, FileShare } from '../src/host/fileshare';
+import { FileShare } from '../src/host/fileshare';
 import { CHUNK_BYTES } from '../src/net/chunks';
 import { room } from './harness';
 
@@ -32,27 +32,21 @@ describe('sharing a file with the room', () => {
     share.stop();
   });
 
-  it('queues no more song for a phone whose link is backed up, and resumes as it drains', async () => {
+  it('keeps at most two chunks a phone has not acked in flight to it, however long it waits', async () => {
     const r = await room([]);
-    // The link holds every chunk sent to it until the test lets `drained` bytes through.
-    let drained = -CHUNK_BACKLOG;
-    const phone = r.join('slow', () => chunks(phone.inbox).length * 60_000 - drained);
+    const phone = r.join('slow');
     const share = new FileShare(r.session, 'song', new Uint8Array(CHUNK_BYTES * 20));
     share.start();
     r.session.input({ have: (seat, m) => share.have(seat, m) });
     phone.say({ t: 'have', id: 'song', next: 0, got: 0 });
-    vi.advanceTimersByTime(1000);
-    expect(chunks(phone.inbox)).toHaveLength(0);
-    drained = 60_000 - CHUNK_BACKLOG;
-    vi.advanceTimersByTime(300);
-    // Room for one chunk on the link, though the window allows two.
-    expect(chunks(phone.inbox)).toHaveLength(1);
-    drained = 120_000 - CHUNK_BACKLOG;
-    vi.advanceTimersByTime(300);
-    expect(chunks(phone.inbox)).toHaveLength(2);
-    drained = 2 * 60_000;
-    phone.say({ t: 'have', id: 'song', next: 2, got: 2 });
-    expect(chunks(phone.inbox).map((m) => m.i)).toEqual([0, 1, 2, 3]);
+    expect(chunks(phone.inbox).map((m) => m.i)).toEqual([0, 1]);
+    // The resend timer runs, but nothing more goes until an ack (or the stall backstop).
+    vi.advanceTimersByTime(3000);
+    expect(chunks(phone.inbox).map((m) => m.i)).toEqual([0, 1]);
+    phone.say({ t: 'have', id: 'song', next: 1, got: 1 });
+    expect(chunks(phone.inbox).map((m) => m.i)).toEqual([0, 1, 2]);
+    phone.say({ t: 'have', id: 'song', next: 3, got: 3 });
+    expect(chunks(phone.inbox).map((m) => m.i)).toEqual([0, 1, 2, 3, 4]);
     share.stop();
   });
 

@@ -2,15 +2,9 @@
 // (starting with "nothing"), and each ack slides that phone's window along. A phone that
 // joins late or reconnects acks again on its new link and is resumed from what it has.
 import { ChunkSender, chunkCount, chunkMsg, type ChunkMsg } from '../net/chunks';
-import { MAX_MESSAGE_BYTES, type HaveState, type PhoneMsg } from '../core/protocol';
+import type { HaveState, PhoneMsg } from '../core/protocol';
 import type { Link } from '../net/transport';
 import type { HostSession } from './session';
-
-/**
- * A phone's backlog past which no more chunks are queued for it: about two chunks, so its
- * pongs and programs never wait behind a whole window of song on slow Wi-Fi.
- */
-export const CHUNK_BACKLOG = 2 * MAX_MESSAGE_BYTES;
 
 export interface PhoneProgress {
   seat: number;
@@ -92,11 +86,8 @@ export class FileShare {
   private pump(seat: number, peer: Peer): void {
     // Gone or back on a new link: forget it (a new link acks again and starts afresh).
     if (this.session.seats.get(seat)?.link !== peer.link) return void this.peers.delete(seat);
-    const now = performance.now();
-    while (peer.link.buffered() < CHUNK_BACKLOG) {
-      const [i] = peer.sender.due(now, 1);
-      if (i === undefined) return;
-      this.session.send(seat, (this.chunks[i] ??= chunkMsg(this.id, this.data, i)));
-    }
+    // At most the sender's window (two chunks) unacked per phone, so its pongs and programs never
+    // wait behind a pile of song on slow Wi-Fi.
+    for (const i of peer.sender.due(performance.now())) this.session.send(seat, (this.chunks[i] ??= chunkMsg(this.id, this.data, i)));
   }
 }

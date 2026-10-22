@@ -418,9 +418,3 @@ describe('room server outage', () => {
   });
 });
 
-describe('links', () => {
-  it('local links never report a backlog', () => {
-    expect(new BasicLink(() => {}).buffered()).toBe(0);
-  });
-});
-

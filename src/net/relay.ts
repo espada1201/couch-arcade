@@ -5,42 +5,15 @@ import { BasicLink, RoomTakenError, backoff, type HostEnd, type Link, type Serve
 
 // The host's socket carries every phone. Up (host to relay): `msg` for one phone, `all` for the
 // same message to many (one copy on the host's socket, fanned out by the relay), `close`. Down:
-// `open`, `msg` and `close` per phone, and `drain`: the relay has written the first `n` messages
-// it got for that phone onto the phone's socket, so the host knows each phone's own backlog.
-type Down = { t: 'open'; id: string } | { t: 'msg'; id: string; data: unknown } | { t: 'close'; id: string } | { t: 'drain'; id: string; n: number };
+// `open`, `msg` and `close` per phone.
+type Down = { t: 'open'; id: string } | { t: 'msg'; id: string; data: unknown } | { t: 'close'; id: string };
 
-/** A phone as the host sees it through the relay: sizes of the messages the relay hasn't written yet. */
-class RelayPhone {
-  readonly link: BasicLink;
-  private sizes: number[] = [];
-  private confirmed = 0;
-  private backlog = 0;
-
-  constructor(
-    readonly id: string,
-    sock: WebSocket,
-  ) {
-    this.link = new BasicLink(
-      (data) => {
-        const json = JSON.stringify(data);
-        this.queued(json.length);
-        sock.send(`{"t":"msg","id":${JSON.stringify(id)},"data":${json}}`);
-      },
-      () => sock.send(JSON.stringify({ t: 'close', id })),
-      () => this.backlog,
-    );
-  }
-
-  /** A message of `size` chars is on its way to this phone. */
-  queued(size: number): void {
-    this.sizes.push(size);
-    this.backlog += size;
-  }
-
-  /** The relay has written `n` messages in all to the phone. */
-  drain(n: number): void {
-    for (; this.confirmed < n && this.sizes.length; this.confirmed++) this.backlog -= this.sizes.shift()!;
-  }
+/** A phone as the host sees it through the relay. */
+function relayPhone(id: string, sock: WebSocket): BasicLink {
+  return new BasicLink(
+    (data) => sock.send(`{"t":"msg","id":${JSON.stringify(id)},"data":${JSON.stringify(data)}}`),
+    () => sock.send(JSON.stringify({ t: 'close', id })),
+  );
 }
 
 function socketUrl(room: string, role: 'host' | 'phone', key?: string): string {
@@ -86,18 +59,19 @@ export class RelayTransport implements Transport {
       if (await taken(url)) throw new RoomTakenError(`Room code ${room} is already in use on this relay. Start a new room.`);
       throw e;
     }
-    const phones = new Map<string, RelayPhone>();
-    const byLink = new Map<Link, RelayPhone>();
+    /** Phone id -> its link, and back. */
+    const phones = new Map<string, BasicLink>();
+    const ids = new Map<Link, string>();
     let onLink: (l: Link) => void = () => {};
     let onServer: (state: ServerState) => void = () => {};
     let ws = first;
     let closed = false;
     let tries = 0;
 
-    const drop = (p: RelayPhone) => {
-      phones.delete(p.id);
-      byLink.delete(p.link);
-      p.link.ended();
+    const drop = (link: BasicLink, id: string) => {
+      phones.delete(id);
+      ids.delete(link);
+      link.ended();
     };
     const attach = (sock: WebSocket) => {
       ws = sock;
@@ -105,16 +79,15 @@ export class RelayTransport implements Transport {
       sock.onerror = null;
       sock.onmessage = (e) => {
         const m = JSON.parse(e.data as string) as Down;
-        const p = phones.get(m.id);
+        const link = phones.get(m.id);
         if (m.t === 'open') {
-          const phone = new RelayPhone(m.id, sock);
+          const phone = relayPhone(m.id, sock);
           phones.set(m.id, phone);
-          byLink.set(phone.link, phone);
-          onLink(phone.link);
-        } else if (!p) return;
-        else if (m.t === 'msg') p.link.deliver(m.data);
-        else if (m.t === 'drain') p.drain(m.n);
-        else drop(p);
+          ids.set(phone, m.id);
+          onLink(phone);
+        } else if (!link) return;
+        else if (m.t === 'msg') link.deliver(m.data);
+        else drop(link, m.id);
       };
       sock.onclose = (e) => {
         phones.forEach(drop);
@@ -125,11 +98,8 @@ export class RelayTransport implements Transport {
       };
     };
     const broadcast = (links: Link[], msg: unknown) => {
-      const to = links.flatMap((l) => byLink.get(l) ?? []);
-      if (!to.length) return;
-      const json = JSON.stringify(msg);
-      for (const p of to) p.queued(json.length);
-      ws.send(`{"t":"all","ids":${JSON.stringify(to.map((p) => p.id))},"data":${json}}`);
+      const to = links.flatMap((l) => ids.get(l) ?? []);
+      if (to.length) ws.send(`{"t":"all","ids":${JSON.stringify(to)},"data":${JSON.stringify(msg)}}`);
     };
     // The relay restarted (or the Wi-Fi dropped): reclaim the same room with the same key.
     // Phones keep retrying on their side and get their seats back by token.
@@ -165,7 +135,7 @@ export class RelayTransport implements Transport {
   async join(room: string): Promise<Link> {
     const ws = new WebSocket(socketUrl(room, 'phone'));
     await opened(ws, `No host is running room ${room} on this network.`);
-    const link = new BasicLink((data) => ws.send(JSON.stringify(data)), () => ws.close(), () => ws.bufferedAmount);
+    const link = new BasicLink((data) => ws.send(JSON.stringify(data)), () => ws.close());
     ws.onerror = null;
     ws.onmessage = (e) => link.deliver(JSON.parse(e.data as string));
     ws.onclose = () => link.ended();

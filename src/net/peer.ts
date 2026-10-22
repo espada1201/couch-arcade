@@ -44,7 +44,7 @@ async function makePeer(id?: string): Promise<PeerType> {
  * link at its first oversized piece instead of holding pieces of a message no phone sends.
  */
 export function wrap(conn: DataConnection, limit = Infinity): BasicLink {
-  const link = new BasicLink((m) => conn.send(m), () => conn.close(), () => conn.dataChannel?.bufferedAmount ?? 0);
+  const link = new BasicLink((m) => conn.send(m), () => conn.close());
   conn.dataChannel.addEventListener('message', (e: MessageEvent<ArrayBuffer>) => e.data.byteLength > limit && link.close());
   conn.on('data', (d) => link.deliver(d));
   conn.on('close', () => link.ended());
