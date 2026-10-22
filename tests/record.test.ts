@@ -1,31 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recorder } from '../src/host/record';
-
-/** Just enough of an element for the recorder's checkbox, status line and link. */
-function fakeElement() {
-  const listeners = new Map<string, (() => void)[]>();
-  const el = {
-    className: '',
-    textContent: '' as string | null,
-    hidden: false,
-    checked: false,
-    href: '',
-    download: '',
-    kids: [] as unknown[],
-    setAttribute: (k: string) => k === 'hidden' && (el.hidden = true),
-    addEventListener: (type: string, cb: () => void) => listeners.set(type, [...(listeners.get(type) ?? []), cb]),
-    append: (...kids: unknown[]) => el.kids.push(...kids),
-    fire: async (type: string) => {
-      for (const cb of listeners.get(type) ?? []) await cb();
-    },
-  };
-  return el;
-}
-type Fake = ReturnType<typeof fakeElement>;
+import { fakeDocument, type FakeElement } from './harness';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-let made: Fake[];
+let made: FakeElement[];
 let failures: { construct: number; start: number };
 let recorders: FakeRecorder[];
 
@@ -51,11 +30,12 @@ class FakeRecorder {
 }
 
 beforeEach(() => {
-  made = [];
+  const doc = fakeDocument();
+  made = doc.made;
   recorders = [];
   failures = { construct: 0, start: 0 };
   vi.stubGlobal('window', globalThis);
-  vi.stubGlobal('document', { createElement: () => (made.push(fakeElement()), made.at(-1)) });
+  vi.stubGlobal('document', doc.document);
   vi.stubGlobal('MediaRecorder', FakeRecorder);
   const track = { readyState: 'live', stop: () => {} };
   vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => ({ getVideoTracks: () => [track], getTracks: () => [track] }) } });

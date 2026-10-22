@@ -61,3 +61,34 @@ export function lastProgram<K extends Program['kind']>(inbox: HostMsg[], kind: K
   }
   return null;
 }
+
+/** Just enough of an element for UI code under test: text, flags, attributes, listeners and children. */
+function fakeElement() {
+  const listeners = new Map<string, (() => unknown)[]>();
+  const el = {
+    className: '',
+    textContent: '' as string | null,
+    hidden: false,
+    checked: false,
+    href: '',
+    download: '',
+    style: {} as Record<string, string>,
+    dataset: {} as Record<string, string>,
+    attrs: {} as Record<string, string>,
+    kids: [] as unknown[],
+    setAttribute: (k: string, v: string) => ((el.attrs[k] = v), k === 'hidden' && (el.hidden = true)),
+    addEventListener: (type: string, cb: () => unknown) => listeners.set(type, [...(listeners.get(type) ?? []), cb]),
+    append: (...kids: unknown[]) => el.kids.push(...kids),
+    fire: async (type: string) => {
+      for (const cb of listeners.get(type) ?? []) await cb();
+    },
+  };
+  return el;
+}
+export type FakeElement = ReturnType<typeof fakeElement>;
+
+/** A stand-in `document` whose createElement makes fake elements, kept in `made` in creation order. */
+export function fakeDocument() {
+  const made: FakeElement[] = [];
+  return { made, document: { createElement: () => (made.push(fakeElement()), made.at(-1)) } };
+}

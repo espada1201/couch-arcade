@@ -38,6 +38,7 @@ export class PartySpeaker {
   private load: Load = 'loading';
   private voices: Voice[] = [];
   private applied = '';
+  private ackedJoins = 0;
   private lastCheck = 0;
   private master: GainNode | null = null;
   private input: GainNode | null = null;
@@ -55,7 +56,7 @@ export class PartySpeaker {
     private readonly speaker: Speaker,
   ) {
     this.el = h('section.nowplaying', { hidden: true, 'aria-label': 'Now playing' }, h('p.np-eyebrow', {}, 'Party speaker'), this.title, this.bar, this.time, this.state);
-    setInterval(() => this.tick(false), 250);
+    setInterval(() => this.tick(), 250);
   }
 
   private get program(): SpeakerProgram | null {
@@ -63,19 +64,20 @@ export class PartySpeaker {
     return p.kind === 'speaker' ? p : null;
   }
 
-  /** The client changed (new program, an offer, a reconnect): pick up a new song and re-ack, which also resumes a download. */
+  /** The client changed (new program, an offer, a reconnect): pick up a new song, and ack it or a rejoin, which resumes a download. */
   sync(): void {
     // The song playing, or the one the host has offered: phones fetch it in the background before Play.
     const t = this.program?.track ?? this.client.offer;
-    if (t && t.id !== this.track?.id) {
+    const fresh = t && t.id !== this.track?.id;
+    if (fresh) {
       this.silence();
       this.track = t;
       this.asm = new Reassembler(t.n);
       this.buffer = null;
       this.load = 'loading';
     }
-    if (t) this.ack();
-    this.tick(true);
+    if (t && (fresh || this.client.joins !== this.ackedJoins)) this.ack();
+    this.tick();
   }
 
   chunk(m: ChunkMsg): void {
@@ -103,12 +105,13 @@ export class PartySpeaker {
       this.load = 'error';
     }
     this.ack();
-    this.tick(true);
+    this.tick();
   }
 
   private ack(): void {
     const t = this.track;
     if (!t) return;
+    this.ackedJoins = this.client.joins;
     const asm = this.asm;
     this.client.have({
       t: 'have',
@@ -137,7 +140,8 @@ export class PartySpeaker {
     return c.toHost(v.ctxFrom) - v.offset * 1000;
   }
 
-  private tick(force: boolean): void {
+  /** Re-plans when the timeline or the song changes (silence() clears `applied`), and checks drift every CHECK_MS. */
+  private tick(): void {
     const p = this.program;
     const ctx = this.speaker.context;
     const ok = p && this.buffer && p.track?.id === this.track?.id;
@@ -147,7 +151,7 @@ export class PartySpeaker {
       this.route(ctx, p);
       const key = JSON.stringify(p.tl);
       const now = performance.now();
-      if (force || key !== this.applied || now - this.lastCheck > CHECK_MS) {
+      if (key !== this.applied || now - this.lastCheck > CHECK_MS) {
         this.applied = key;
         this.lastCheck = now;
         this.schedule(ctx, p, this.buffer!);

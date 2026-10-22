@@ -23,6 +23,8 @@ export class PhoneClient {
   program: Program = { kind: 'lobby' };
   /** Counts programs as they arrive, so a player can tell a new one from a resend of the same. */
   programSeq = 0;
+  /** Counts welcomes, so a player can tell a fresh (re)join from another message. */
+  joins = 0;
   /** A song the host wants every phone to have ready, whatever is running now. */
   offer: Track | null = null;
   status: Status = 'connecting';
@@ -121,6 +123,7 @@ export class PhoneClient {
         return;
       case 'welcome':
         this.seat = m.seat;
+        this.joins++;
         this.status = 'live';
         this.retries = 0;
         this.error = '';
