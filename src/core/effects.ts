@@ -2,9 +2,11 @@
 // phone's own position, and the shared clock. The host sends one small message per
 // change; every phone renders the whole room's choreography locally, in step.
 import { litAt, type BlinkSchedule } from './blinkcode';
+import type { FollowView } from './follow';
 import { distance, type Point, type RGB } from './layout';
 import { LETTERS, POLL_COLORS, type PollPhase } from './poll';
 import { ballAt, type PotatoState } from './potato';
+import type { SpeakerProgram } from './speaker';
 import { teamOf, type TerritoryState } from './territory';
 
 export type WaveShape = 'sweep' | 'pingpong' | 'ripple';
@@ -34,6 +36,9 @@ export type Program =
   | WaveProgram
   | { kind: 'territory'; state: TerritoryState; colors: [RGB, RGB] }
   | { kind: 'potato'; state: PotatoState }
+  /** Every phone shows the whole picture (see core/follow). */
+  | { kind: 'follow'; view: FollowView }
+  | SpeakerProgram
   | PollProgram
   /** Big numbers from `from` down to 1 on every phone at once, then a burst of light at `at` that settles on `text`. */
   | { kind: 'countdown'; at: number; from: number; text: string };
@@ -196,6 +201,9 @@ export function render(prog: Program, me: Me, t: number): Frame {
       const shimmer = edge < 0.12 ? 0.75 + 0.25 * Math.sin(t / 40) : 1;
       return { rgb: scale(base, shimmer), label: 'TAP', tappable: true };
     }
+    case 'speaker':
+      // The phone's now-playing card sits on top; the screen just stays dark.
+      return { rgb: DIM };
     case 'potato': {
       const s = prog.state;
       if (s.out.includes(me.seat)) return { rgb: EMBER, label: s.phase === 'over' ? '' : 'OUT' };
@@ -238,5 +246,8 @@ export function render(prog: Program, me: Me, t: number): Frame {
       const sparkle = 0.82 + 0.18 * Math.sin(t / 90 + me.seat * 2.3);
       return { rgb: mix(scale(AMBER, 0.35 * sparkle), WHITE, Math.min(1, Math.max(flash, ring))), label: prog.text };
     }
+    case 'follow':
+      // The phone draws the picture itself over a black screen.
+      return { rgb: BLACK };
   }
 }

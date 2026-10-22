@@ -130,4 +130,26 @@ describe('host session', () => {
       vi.unstubAllGlobals();
     }
   });
+  it('passes well-formed file acks to the speaker, and only from seated phones', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const seen: [number, unknown][] = [];
+    session.onHave = (seat, m) => seen.push([seat, m]);
+    const a = phone();
+    a.say({ t: 'have', id: 'trk', next: 0, got: 0 }); // not seated yet
+    a.say({ t: 'hello', token: 'aaa' });
+    a.say({ t: 'have', id: 'trk', next: 2, got: 3, state: 'ready' });
+    a.say({ t: 'have', id: 'trk', next: -1, got: 3 });
+    a.say({ t: 'have', id: 'trk', next: 1.5, got: 3 });
+    a.say({ t: 'have', id: 7, next: 1, got: 3 });
+    a.say({ t: 'have', id: 'trk', next: 1, got: 1, state: 'bogus' });
+    expect(seen).toEqual([
+      [0, { t: 'have', id: 'trk', next: 2, got: 3, state: 'ready' }],
+      [0, { t: 'have', id: 'trk', next: 1, got: 1, state: undefined }],
+    ]);
+    expect(session.send(0, { t: 'full' })).toBe(true);
+    expect(a.inbox.at(-1)).toEqual({ t: 'full' });
+    a.drop();
+    expect(session.send(0, { t: 'full' })).toBe(false);
+  });
 });

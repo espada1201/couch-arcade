@@ -2,10 +2,12 @@ import { DIM, luma, render, type Frame } from '../core/effects';
 import { pickTransport } from '../net/pick';
 import { OPTICS_CHANNEL, type Optics } from '../core/protocol';
 import { css, h } from '../ui/dom';
+import { FollowScreen } from '../ui/follow';
 import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
 import { showBallot } from './poll';
+import { PartySpeaker } from './music';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
   const m = v?.match(/^([\d.]+),([\d.]+)$/);
@@ -41,7 +43,10 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const label = h('div.label', { 'aria-live': 'polite' });
   const status = h('div.status', { role: 'status' });
   const overlay = h('div.overlay', { hidden: true });
-  const screen = h('div.screen', {}, label, status, overlay);
+  const follow = new FollowScreen();
+  const party = new PartySpeaker(client, speaker);
+  client.onChunk = (m) => party.chunk(m);
+  const screen = h('div.screen', {}, label, follow.el, party.el, status, overlay);
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
@@ -98,6 +103,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   let lastHolder = -1;
   let wasOut = false;
   const showStatus = () => {
+    party.sync();
     const seat = client.seat >= 0 ? `Seat ${client.seat + 1}` : 'Joining';
     const place = client.pos ? 'placed' : 'not placed yet';
     const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', replaced: 'open in another tab', failed: 'disconnected' }[client.status];
@@ -105,6 +111,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     status.dataset.state = client.status;
 
     const p = client.program;
+    follow.show(p.kind === 'follow' ? p.view : null);
     if (p.kind === 'potato') {
       const s = p.state;
       if (s.holder === client.seat && lastHolder !== client.seat && !s.out.includes(client.seat)) {

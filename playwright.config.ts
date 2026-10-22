@@ -3,8 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 // The cloud build box ships its own Chromium; CI installs Playwright's.
 const local = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-// Override with E2E_PORT when several checkouts run end-to-end tests at once.
-const PORT = Number(process.env.E2E_PORT) || 4399;
+const PORT = Number(process.env.PORT) || 4399;
 
 export default defineConfig({
   testDir: 'e2e',

@@ -1,13 +1,18 @@
 import type { Program } from './effects';
 import type { Point } from './layout';
 import { MAX_OPTIONS } from './poll';
+import type { ChunkMsg } from '../net/chunks';
 
 export type PhoneMsg =
   | { t: 'hello'; token: string; sim?: Point }
   | { t: 'ping'; c0: number; u?: number }
   | { t: 'tap' }
   | { t: 'seat'; row: number; seat: number }
-  | { t: 'vote'; choice: number };
+  | { t: 'vote'; choice: number }
+  /** File transfer ack: every chunk below `next` is here, `got` in all; then whether it decoded. */
+  | { t: 'have'; id: string; next: number; got: number; state?: HaveState };
+
+export type HaveState = 'ready' | 'error';
 
 export type HostMsg =
   | { t: 'welcome'; seat: number; room: string }
@@ -15,13 +20,15 @@ export type HostMsg =
   | { t: 'replaced' }
   | { t: 'pong'; c0: number; h1: number; h2: number }
   | { t: 'program'; program: Program }
-  | { t: 'pos'; pos: Point | null; aspect: number };
+  | { t: 'pos'; pos: Point | null; aspect: number }
+  | ChunkMsg;
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const count = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
 
 /** Phones are untrusted: the host only accepts well-formed messages. */
 export function parsePhoneMsg(v: unknown): PhoneMsg | null {
@@ -40,6 +47,11 @@ export function parsePhoneMsg(v: unknown): PhoneMsg | null {
       return num(v.row) && num(v.seat) ? { t: 'seat', row: v.row, seat: v.seat } : null;
     case 'vote':
       return Number.isInteger(v.choice) && (v.choice as number) >= 0 && (v.choice as number) < MAX_OPTIONS ? { t: 'vote', choice: v.choice as number } : null;
+    case 'have': {
+      if (typeof v.id !== 'string' || v.id.length > 32 || !count(v.next) || !count(v.got)) return null;
+      const state = v.state === 'ready' || v.state === 'error' ? v.state : undefined;
+      return { t: 'have', id: v.id, next: v.next, got: v.got, state };
+    }
     default:
       return null;
   }
@@ -55,3 +67,14 @@ export interface Optics {
 }
 
 export const OPTICS_CHANNEL = 'swarm-optics';
+
+/**
+ * Largest message the host may send. PeerJS data channels and the relay's 64 KB
+ * maxPayload both need headroom, so stay well under 64 KB.
+ */
+export const MAX_MESSAGE_BYTES = 60 * 1024;
+
+/** Size of a message on the wire (UTF-8 JSON). */
+export function messageBytes(m: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(m)).length;
+}

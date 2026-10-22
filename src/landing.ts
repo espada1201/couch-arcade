@@ -76,7 +76,7 @@ export function landing(app: HTMLElement, params: URLSearchParams): void {
         h(
           'p.lede',
           {},
-          'Everyone scans a QR code and their phone joins in seconds. Play sound across every phone, put words and pictures on every screen, flip a card stunt for a wedding or a birthday, count down to midnight together, ask the room a question and watch the answer light up the crowd, or play icebreaker games that need no TV.',
+          'Everyone scans a QR code and their phone joins in seconds. Play a song in step on every phone, put words and pictures on every screen, flip a card stunt for a wedding or a birthday, count down to midnight together, ask the room a question and watch the answer light up the crowd, or play icebreaker games that need no TV.',
         ),
         h(
           'div.landing-actions',
