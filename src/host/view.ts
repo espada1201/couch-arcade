@@ -7,6 +7,7 @@ import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { Director } from './director';
 import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel } from './play';
+import { pollPanel } from './poll';
 import { HostSession } from './session';
 import { showPanel } from './show';
 import { Stage } from './stage';
@@ -111,6 +112,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     ['sound', 'Sound', () => soundPanel(session, director)],
     ['territory', 'Territory', () => territoryPanel(session, director)],
     ['potato', 'Hot Potato', () => potatoPanel(session, director)],
+    ['poll', 'Poll', () => pollPanel(session, director)],
   ];
   const panels = new Map<string, HTMLElement>();
   const tablist = h('div.tabs', { role: 'tablist', 'aria-label': 'Experiences' });

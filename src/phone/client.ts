@@ -70,6 +70,10 @@ export class PhoneClient {
     this.send({ t: 'tap' });
   }
 
+  vote(choice: number): void {
+    this.send({ t: 'vote', choice });
+  }
+
   enterSeat(row: number, seat: number): void {
     this.send({ t: 'seat', row, seat });
   }

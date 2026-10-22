@@ -285,3 +285,29 @@ body.phone { overscroll-behavior: none; }
   * { transition: none !important; }
 }
 .wave-controls { display: grid; gap: 14px; }
+
+/* ---------- Room Poll ---------- */
+.poll-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.poll-option { border-left: 4px solid var(--c); padding-left: 8px; min-width: 0; }
+.poll-option input { width: 100%; min-width: 0; }
+.poll-chart { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.poll-bar { display: grid; grid-template-columns: 28px 1fr auto; gap: 4px 10px; align-items: center; font-size: 14px; }
+.poll-letter { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: var(--c); color: var(--ink); font-weight: 800; }
+.poll-name { overflow-wrap: anywhere; }
+.poll-num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.poll-track { grid-column: 2 / -1; height: 10px; border-radius: 5px; background: var(--ink-3); overflow: hidden; }
+.poll-fill { display: block; height: 100%; width: var(--w); background: var(--c); transition: width 0.3s ease; }
+.ballot { display: grid; gap: 12px; width: min(420px, 100%); }
+.ballot h2 { font-stretch: 75%; font-size: clamp(24px, 7vw, 34px); margin: 0 0 6px; overflow-wrap: anywhere; }
+.vote {
+  display: flex; align-items: center; gap: 14px; min-height: 76px; padding: 10px 16px; text-align: left;
+  border: 3px solid var(--c); border-radius: 14px; background: color-mix(in srgb, var(--c) 18%, var(--ink));
+  color: var(--text); font: 700 22px var(--display); cursor: pointer; touch-action: manipulation;
+}
+.vote-letter { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: var(--c); color: var(--ink); font-weight: 900; }
+.vote-name { overflow-wrap: anywhere; }
+.vote[aria-pressed='true'] { background: var(--c); color: var(--ink); box-shadow: 0 0 0 3px var(--text); }
+.vote[aria-pressed='true'] .vote-letter { background: var(--ink); color: var(--c); }
+.vote[aria-pressed='true'] .vote-name::after { content: ' ✓'; }
+.vote:disabled { cursor: not-allowed; opacity: 0.55; }
+.ballot-note { color: var(--muted); margin: 4px 0 0; font-size: 14px; }

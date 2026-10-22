@@ -5,6 +5,7 @@ import { css, h } from '../ui/dom';
 import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
+import { showBallot } from './poll';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
   const m = v?.match(/^([\d.]+),([\d.]+)$/);
@@ -154,6 +155,8 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
           ),
         );
       }
+    } else if (p.kind === 'poll' && !p.result && client.status === 'live') {
+      showBallot(overlay, p, (choice) => (navigator.vibrate?.(12), client.vote(choice)));
     } else {
       overlay.hidden = true;
       delete overlay.dataset.ask;
