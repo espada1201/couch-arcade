@@ -48,7 +48,7 @@ export async function room(xs: number[]) {
   const phones = xs.map((_, i) => join(`p${i}`));
   session.setRaw(new Map(xs.map((x, i) => [i, { x, y: 0.5 }])), 'camera');
   const say = vi.fn();
-  const director = new Director(session, { onPick: null });
+  const director = new Director(session);
   vi.spyOn(director, 'run');
   return { session, phones, join, say, tick: (ms: number) => (clock += ms), director };
 }

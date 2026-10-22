@@ -1,6 +1,5 @@
 import type { Program } from '../core/effects';
 import type { HostSession, InputHandlers } from './session';
-import type { Stage } from './stage';
 
 const LOBBY: Program = { kind: 'lobby' };
 
@@ -23,11 +22,14 @@ export interface Hold {
 /** Owns what the phones run: starting something stops whatever was running (games, taps, stage picking). */
 export class Director {
   private current: (() => void) | null = null;
+  private readonly handovers: (() => void)[] = [];
 
-  constructor(
-    private readonly session: HostSession,
-    private readonly stage: Pick<Stage, 'onPick'>,
-  ) {}
+  constructor(private readonly session: HostSession) {}
+
+  /** Clears room-wide state no single run owns (the stage's ripple aim) each time the room changes hands. */
+  onHandover(clear: () => void): void {
+    this.handovers.push(clear);
+  }
 
   run({ stop, program, onInput }: Run = {}): Hold {
     this.release();
@@ -55,9 +57,11 @@ export class Director {
 
   private release(): void {
     const stop = this.current;
-    // Cleared first, so a stop that ends its own run (or starts another) can't recurse.
+    // Cleared first, so a stop that ends its own run can't recurse.
     this.current = null;
-    this.stage.onPick = null;
+    for (const clear of this.handovers) clear();
     stop?.();
+    // A run started from a stop would be replaced as soon as this returns, its own stop never called.
+    if (this.current) throw new Error('A run’s stop started another run');
   }
 }

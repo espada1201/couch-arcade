@@ -6,6 +6,7 @@ import { distance, type Point } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { fitCanvas } from '../ui/canvas';
 import { h, plural } from '../ui/dom';
+import type { Director } from './director';
 import type { HostSession } from './session';
 
 interface Box {
@@ -30,7 +31,10 @@ export class Stage {
   private drag: { seat: number; p: Point; start: Point } | null = null;
   private box: Box = { x: 0, y: 0, w: 1, h: 1 };
 
-  constructor(private readonly session: HostSession) {
+  constructor(
+    private readonly session: HostSession,
+    director: Pick<Director, 'onHandover'>,
+  ) {
     this.el = h('section.stage', { 'aria-label': 'Room map' }, h('div.stage-frame', {}, this.canvas, this.empty), this.hint, this.said, this.tray, this.table);
     this.canvas.addEventListener('pointerdown', (e) => this.down(e));
     this.canvas.addEventListener('pointermove', (e) => this.move(e));
@@ -41,6 +45,8 @@ export class Stage {
     session.subscribe(() => this.sync());
     this.sync();
     this.onPick = null;
+    // Aiming belongs to whatever holds the room; the next thing to take it starts unaimed.
+    director.onHandover(() => (this.onPick = null));
     const loop = () => {
       this.draw();
       requestAnimationFrame(loop);

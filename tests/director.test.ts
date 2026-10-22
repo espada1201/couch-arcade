@@ -47,6 +47,22 @@ describe('the director owns what the phones run', () => {
     expect(hold.active).toBe(false);
   });
 
+  it('a stop that starts another run is a bug, and says so instead of orphaning that run', async () => {
+    const r = await room([0]);
+    r.director.run({ stop: () => void r.director.run({ program: { kind: 'identify' } }) });
+    expect(() => r.director.run({})).toThrow(/started another run/);
+  });
+
+  it('room-wide state registered for handovers is cleared whenever the room changes hands', async () => {
+    const r = await room([0]);
+    const handover = vi.fn();
+    r.director.onHandover(handover);
+    r.director.run({});
+    expect(handover).toHaveBeenCalledTimes(1);
+    r.director.idle();
+    expect(handover).toHaveBeenCalledTimes(2);
+  });
+
   it('file acks reach a listener outside the director while another feature runs', async () => {
     const r = await room([0]);
     const have = vi.fn();

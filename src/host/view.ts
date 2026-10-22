@@ -79,8 +79,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   q.delete('camera');
   const joinUrl = `${base}?${q}`;
 
-  const stage = new Stage(session);
-  const director = new Director(session, stage);
+  const director = new Director(session);
+  const stage = new Stage(session, director);
 
   const count = h('span.count', { role: 'status' });
   const updateCount = () => {
