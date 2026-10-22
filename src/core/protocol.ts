@@ -51,3 +51,14 @@ export interface Optics {
 }
 
 export const OPTICS_CHANNEL = 'swarm-optics';
+
+/**
+ * Largest message the host may send. PeerJS data channels and the relay's 64 KB
+ * maxPayload both need headroom, so stay well under 64 KB.
+ */
+export const MAX_MESSAGE_BYTES = 60 * 1024;
+
+/** Size of a message on the wire (UTF-8 JSON). */
+export function messageBytes(m: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(m)).length;
+}
