@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WAVE_DEFAULTS, arrivals, frontAt, makeWave, noteFor, render, travel, waveLevel, type WaveProgram } from '../src/core/effects';
+import { WAVE_DEFAULTS, arrivals, frontAt, luma, makeWave, noteFor, render, travel, waveLevel, type WaveProgram } from '../src/core/effects';
 import { startTerritory } from '../src/core/territory';
 import { normalize } from '../src/core/layout';
 
@@ -89,5 +89,27 @@ describe('rendering', () => {
 
   it('notes rise from left to right', () => {
     expect(noteFor({ x: 1, y: 0.5 })).toBeGreaterThan(noteFor({ x: 0, y: 0.5 }));
+  });
+});
+
+describe('countdown', () => {
+  const cd = { kind: 'countdown', at: 11_000, from: 10, text: '2027' } as const;
+  const me = { seat: 0, pos: { x: 0.5, y: 0.5 }, aspect: 1 };
+
+  it('every phone shows the same big number, counting down to the instant', () => {
+    expect(render(cd, me, 0).label).toBeUndefined();
+    expect(render(cd, me, 1000).label).toBe('10');
+    expect(render(cd, me, 1001).label).toBe('10');
+    expect(render(cd, me, 6500).label).toBe('5');
+    expect(render(cd, me, 10_999).label).toBe('1');
+    expect(render(cd, { ...me, pos: null }, 6500).label).toBe('5');
+  });
+
+  it('then bursts into light and settles on the text', () => {
+    const at = (t: number) => render(cd, me, t);
+    expect(at(11_000).label).toBe('2027');
+    expect(luma(at(11_050).rgb)).toBeGreaterThan(200);
+    expect(luma(at(20_000).rgb)).toBeLessThan(luma(at(11_050).rgb));
+    expect(luma(render(cd, { ...me, pos: null }, 11_050).rgb)).toBeGreaterThan(200);
   });
 });

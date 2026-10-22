@@ -1,11 +1,13 @@
 import type { Program } from './effects';
 import type { Point } from './layout';
+import { MAX_OPTIONS } from './poll';
 
 export type PhoneMsg =
   | { t: 'hello'; token: string; sim?: Point }
   | { t: 'ping'; c0: number; u?: number }
   | { t: 'tap' }
-  | { t: 'seat'; row: number; seat: number };
+  | { t: 'seat'; row: number; seat: number }
+  | { t: 'vote'; choice: number };
 
 export type HostMsg =
   | { t: 'welcome'; seat: number; room: string }
@@ -36,6 +38,8 @@ export function parsePhoneMsg(v: unknown): PhoneMsg | null {
       return { t: 'tap' };
     case 'seat':
       return num(v.row) && num(v.seat) ? { t: 'seat', row: v.row, seat: v.seat } : null;
+    case 'vote':
+      return Number.isInteger(v.choice) && (v.choice as number) >= 0 && (v.choice as number) < MAX_OPTIONS ? { t: 'vote', choice: v.choice as number } : null;
     default:
       return null;
   }

@@ -62,6 +62,7 @@ export class HostSession {
   private frame: Frame = 'source';
   private roomAspect = 1;
   onTap: (seat: number) => void = () => {};
+  onVote: (seat: number, choice: number) => void = () => {};
   private programFor: (seat: number) => Program = () => ({ kind: 'lobby' });
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
@@ -256,7 +257,8 @@ export class HostSession {
         if (now - me.lastTap < 40) return;
         me.lastTap = now;
         this.onTap(me.seat);
-      } else {
+      } else if (m.t === 'vote') this.onVote(me.seat, m.choice);
+      else {
         this.gridEntries.set(me.seat, { row: m.row, seat: m.seat });
         this.changed();
       }

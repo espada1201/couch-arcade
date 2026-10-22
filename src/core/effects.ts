@@ -3,6 +3,7 @@
 // change; every phone renders the whole room's choreography locally, in step.
 import { litAt, type BlinkSchedule } from './blinkcode';
 import { distance, type Point, type RGB } from './layout';
+import { LETTERS, POLL_COLORS, type PollPhase } from './poll';
 import { ballAt, type PotatoState } from './potato';
 import { teamOf, type TerritoryState } from './territory';
 
@@ -32,7 +33,22 @@ export type Program =
   | { kind: 'live'; rgb: RGB; prev: RGB; at: number }
   | WaveProgram
   | { kind: 'territory'; state: TerritoryState; colors: [RGB, RGB] }
-  | { kind: 'potato'; state: PotatoState };
+  | { kind: 'potato'; state: PotatoState }
+  | PollProgram
+  /** Big numbers from `from` down to 1 on every phone at once, then a burst of light at `at` that settles on `text`. */
+  | { kind: 'countdown'; at: number; from: number; text: string };
+
+/** One phone's view of a Room Poll: the ballot, its own vote, and (after Reveal) its zone. */
+export interface PollProgram {
+  kind: 'poll';
+  question: string;
+  options: string[];
+  phase: PollPhase;
+  /** The option this phone voted for. */
+  mine: number | null;
+  /** After Reveal: each option's share (whole percent) and the option whose zone this phone stands in. */
+  result: { pct: number[]; zone: number | null } | null;
+}
 
 export interface Me {
   seat: number;
@@ -200,6 +216,27 @@ export function render(prog: Program, me: Me, t: number): Frame {
         return { rgb: scale([255, 96, 16], pulse), label: 'TAP!', tappable: true };
       }
       return { rgb: mix(base, [255, 120, 20], glow) };
+    }
+    case 'poll': {
+      const r = prog.result;
+      // Before Reveal the phone shows its ballot on top; the glow behind it confirms the pick.
+      if (!r) return { rgb: prog.mine === null ? DIM : scale(POLL_COLORS[prog.mine], 0.3) };
+      // Placed phones form the chart; a phone off the map shows its own answer instead.
+      const option = me.pos ? r.zone : prog.mine;
+      if (option === null) return { rgb: DIM, label: r.pct.some((p) => p > 0) ? '' : 'No votes' };
+      return { rgb: POLL_COLORS[option], label: `${LETTERS[option]} ${r.pct[option]}%` };
+    }
+    case 'countdown': {
+      if (t < prog.at) {
+        const left = Math.ceil((prog.at - t) / 1000);
+        return left > prog.from ? { rgb: DIM } : { rgb: scale(WHITE, 0.08 + 0.12 * ((prog.at - t) % 1000) / 1000), label: String(left) };
+      }
+      // A ring of light bursts out from the middle of the room, then the whole room settles to a warm glow.
+      const dt = t - prog.at;
+      const ring = me.pos ? Math.exp(-(((distance(me.pos, { x: 0.5, y: 0.5 }, me.aspect) - dt / 900) / 0.18) ** 2)) : 0;
+      const flash = Math.exp(-dt / 1800);
+      const sparkle = 0.82 + 0.18 * Math.sin(t / 90 + me.seat * 2.3);
+      return { rgb: mix(scale(AMBER, 0.35 * sparkle), WHITE, Math.min(1, Math.max(flash, ring))), label: prog.text };
     }
   }
 }

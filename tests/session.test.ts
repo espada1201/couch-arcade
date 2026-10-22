@@ -98,6 +98,19 @@ describe('host session', () => {
     expect(taps).toEqual([0, 0]);
   });
 
+  it('passes a seated phone’s vote on, and ignores one from a phone that never said hello', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const votes: [number, number][] = [];
+    session.onVote = (seat, choice) => votes.push([seat, choice]);
+    phone().say({ t: 'vote', choice: 1 });
+    const p = phone();
+    p.say({ t: 'hello', token: 'v' });
+    p.say({ t: 'vote', choice: 2 });
+    p.say({ t: 'vote', choice: 'x' });
+    expect(votes).toEqual([[0, 2]]);
+  });
+
   it('ignores malformed messages from phones', async () => {
     const { session, phone } = harness();
     await session.open();
