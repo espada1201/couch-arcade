@@ -42,6 +42,28 @@ for (const [w, h] of [[1280, 720], [390, 844]]) {
   });
 }
 
+for (const [w, h] of [[1280, 800], [820, 1180]]) {
+  test(`${w}px: the tray of phones not yet on the map stays in view next to the map, and a chip click does not move the page`, async ({ context }) => {
+    const errors: string[] = [];
+    const { host, code } = await openHost(context, errors);
+    await host.setViewportSize({ width: w, height: h });
+    for (let i = 0; i < 3; i++) await joinPhone(context, code, i, errors);
+    // Card stunt is the tallest panel: the one that used to stretch the map away from its tray.
+    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    expect(await inViewport(host, '.tray')).toBe(true);
+    await host.locator('.tray .chip').first().click();
+    expect(await host.evaluate(() => scrollY)).toBe(0);
+    expect(await inViewport(host, '.tray')).toBe(true);
+    const box = (await host.locator('.stage-canvas').boundingBox())!;
+    await host.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.5);
+    expect(await host.evaluate(() => scrollY)).toBe(0);
+    expect(await inViewport(host, '.tray')).toBe(true);
+    await host.locator('.tray .chip').first().click();
+    expect(await inViewport(host, '.tray')).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

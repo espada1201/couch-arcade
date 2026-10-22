@@ -132,6 +132,16 @@ body.host { overflow-x: hidden; }
 .badge[data-transport='lan'] { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, transparent); }
 .top-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
 
+/*
+ * On a screen big enough to show the map and the controls side by side, the console is exactly one screen
+ * tall and the control panel scrolls inside it. Otherwise the grid stretched to the tallest panel, which
+ * pushed the map's tray of unplaced phones far below the fold.
+ */
+@media (min-width: 761px) and (min-height: 600px) {
+  .console { height: 100vh; height: 100dvh; min-height: 0; }
+  .join { overflow-y: auto; min-height: 0; }
+  .stage-frame { min-height: 240px; }
+}
 .join { grid-area: join; padding: 20px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 .qr { background: var(--text); border-radius: var(--radius); padding: 6px; aspect-ratio: 1; }
 .qr svg { display: block; width: 100%; height: 100%; }

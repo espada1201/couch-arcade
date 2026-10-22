@@ -88,7 +88,8 @@ export class Stage {
             onclick: () => {
               this.selected = this.selected === x.seat ? null : x.seat;
               this.sync();
-              this.canvas.focus();
+              // The tray stays where it is: focusing must not scroll the page.
+              this.canvas.focus({ preventScroll: true });
             },
           },
           String(x.seat + 1),
