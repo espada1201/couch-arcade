@@ -4,19 +4,12 @@ const LOOPBACK = /^(::ffff:)?127\.|^::1$/;
 const MAPPED = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i;
 
 /**
- * One device, as one string. An IPv6 device holds a whole /64 of addresses (and rotates among them
- * for privacy), so it is keyed by the /64; an IPv4-mapped address is the IPv4 one.
+ * One device, as one string: its address, with an IPv4-mapped address as the IPv4 one and an IPv6
+ * zone id dropped. Not the IPv6 /64: every device on a home Wi-Fi shares that. A socket that reset
+ * before its address was read has none, and is ''.
  */
-export function deviceKey(addr) {
-  const mapped = MAPPED.exec(addr);
-  if (mapped) return mapped[1];
-  if (!addr.includes(':')) return addr;
-  const [head, tail] = addr.split('%')[0].split('::');
-  const groups = (s) => (s ? s.split(':') : []);
-  const first = groups(head);
-  const last = groups(tail);
-  const all = tail === undefined ? first : [...first, ...Array(8 - first.length - last.length).fill('0'), ...last];
-  return `${all.slice(0, 4).map((g) => parseInt(g || '0', 16).toString(16)).join(':')}::/64`;
+export function deviceKey(addr = '') {
+  return MAPPED.exec(addr)?.[1] ?? addr.split('%')[0];
 }
 
 /**
