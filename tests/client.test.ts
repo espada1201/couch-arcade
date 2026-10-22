@@ -19,12 +19,14 @@ function silentHost() {
   const links: BasicLink[] = [];
   let answering = true;
   let away = false;
+  let joins = 0;
   const transport: Transport = {
     name: 'test',
     host: async () => {
       throw new Error('unused');
     },
     join: async (): Promise<Link> => {
+      joins++;
       if (away) throw new Error('No host is running room ABCD on this network.');
       const link: BasicLink = new BasicLink((m) => {
         const msg = m as { t: string; c0?: number };
@@ -39,6 +41,7 @@ function silentHost() {
   return {
     transport,
     links,
+    joins: () => joins,
     goQuiet: () => (answering = false),
     /** The relay restarted: the room is gone (join refused) until the host reclaims it. */
     setAway: (v: boolean) => {
@@ -105,6 +108,44 @@ describe('phone client', () => {
     await vi.advanceTimersByTimeAsync(6000);
     expect(client.status).toBe('live');
     expect(client.seat).toBe(4);
+  });
+
+  it('a seated phone keeps knocking about every 15 s after the first two minutes, for as long as the host holds the room', async () => {
+    const host = silentHost();
+    const client = new PhoneClient(host.transport, 'ABCD');
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(1000);
+    host.setAway(true);
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    const before = host.joins();
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(host.joins() - before).toBeGreaterThanOrEqual(7);
+    expect(host.joins() - before).toBeLessThanOrEqual(9);
+    expect(client.status).toBe('reconnecting');
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
+    host.setAway(false);
+    await vi.advanceTimersByTimeAsync(16_000);
+    expect(client.status).toBe('live');
+    expect(client.seat).toBe(4);
+  });
+
+  it('a seated phone gives up after 10 minutes without its host and offers to try again', async () => {
+    const host = silentHost();
+    const client = new PhoneClient(host.transport, 'ABCD');
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(1000);
+    host.setAway(true);
+    await vi.advanceTimersByTimeAsync(9 * 60_000);
+    expect(client.status).toBe('reconnecting');
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(client.status).toBe('failed');
+    const joins = host.joins();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(host.joins()).toBe(joins);
+    host.setAway(false);
+    client.retry();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.status).toBe('live');
   });
 
   it('a first join to a room nobody hosts says connecting, then fails soon with the reason', async () => {

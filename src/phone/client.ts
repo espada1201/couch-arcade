@@ -19,6 +19,11 @@ export type Status = 'connecting' | 'live' | 'reconnecting' | 'full' | 'replaced
 const SILENT_MS = 6000;
 /** Shortest gap between two file acks. */
 const HAVE_MS = 40;
+/** A seated phone that lost its host tries at the backoff pace this many times (about two minutes), then every SLOW_RETRY_MS. */
+const FAST_RETRIES = 26;
+const SLOW_RETRY_MS = 15_000;
+/** The relay keeps a dropped host's room ten minutes, so a seated phone knocks that long before asking for a tap. */
+const GIVE_UP_MS = 10 * 60_000;
 /** Budget a message that can wait (a file or frame ack) leaves for taps and pings. */
 const RESERVE = 5;
 
@@ -46,6 +51,8 @@ export class PhoneClient {
   private link: Link | null = null;
   private pingTimer = 0;
   private retries = 0;
+  /** When the connection was first lost in this run of retries. */
+  private lostAt: number | null = null;
   private lastHeard = 0;
   private pendingHave: Extract<PhoneMsg, { t: 'have' }> | null = null;
   private readonly sendHave = throttle(() => {
@@ -183,6 +190,7 @@ export class PhoneClient {
         this.joins++;
         this.status = 'live';
         this.retries = 0;
+        this.lostAt = null;
         this.error = '';
         break;
       case 'full':
@@ -212,10 +220,13 @@ export class PhoneClient {
     this.link = null;
     if (this.status === 'full' || this.status === 'replaced') return this.onChange();
     this.retries++;
+    const now = performance.now();
+    const since = (this.lostAt ??= now);
     // Never seated: most likely a wrong room code, so say so soon. Seated: the host or its relay
-    // may be restarting, so keep trying for about two minutes before asking for a tap.
+    // may be restarting or asleep, so keep trying, slowly after the first two minutes, until its
+    // room would be gone from the relay anyway.
     const joined = this.seat >= 0;
-    this.status = this.retries > (joined ? 26 : 2) ? 'failed' : joined ? 'reconnecting' : 'connecting';
+    this.status = (joined ? now - since > GIVE_UP_MS : this.retries > 2) ? 'failed' : joined ? 'reconnecting' : 'connecting';
     this.onChange();
     if (this.status === 'failed') return;
     const again = () => {
@@ -223,11 +234,12 @@ export class PhoneClient {
       if (document.hidden) document.addEventListener('visibilitychange', again, { once: true });
       else void this.connect();
     };
-    setTimeout(again, backoff(this.retries));
+    setTimeout(again, joined && this.retries > FAST_RETRIES ? SLOW_RETRY_MS : backoff(this.retries));
   }
 
   retry(): void {
     this.retries = 0;
+    this.lostAt = null;
     this.status = 'connecting';
     this.onChange();
     void this.connect();
