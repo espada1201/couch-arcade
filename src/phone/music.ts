@@ -68,6 +68,14 @@ export class PartySpeaker {
   sync(): void {
     // The song playing, or the one the host has offered: phones fetch it in the background before Play.
     const t = this.program?.track ?? this.client.offer;
+    if (!t && this.track) {
+      // The host dropped the song (stopped it, or reloaded without it): let go of the decoded copy.
+      this.silence();
+      this.track = null;
+      this.asm = null;
+      this.buffer = null;
+      this.load = 'loading';
+    }
     const fresh = t && t.id !== this.track?.id;
     if (fresh) {
       this.silence();

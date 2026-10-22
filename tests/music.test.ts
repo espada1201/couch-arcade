@@ -70,6 +70,19 @@ describe('the party speaker on a phone', () => {
     await vi.waitFor(() => expect(p.acks.at(-1)).toMatchObject({ next: 1, got: 1, state: 'ready' }));
   });
 
+  it('lets go of a song the host withdraws, so offering it again starts a fresh download', async () => {
+    const p = phone();
+    p.client.offer = TRACK;
+    p.party.sync();
+    p.party.chunk({ t: 'chunk', id: 'song', i: 0, n: 1, d: toBase64(new Uint8Array([1, 2, 3, 4])) });
+    await vi.waitFor(() => expect(p.acks.at(-1)).toMatchObject({ state: 'ready' }));
+    p.client.offer = null;
+    p.party.sync();
+    p.client.offer = TRACK;
+    p.party.sync();
+    expect(p.acks.at(-1)).toEqual({ t: 'have', id: 'song', next: 0, got: 0, state: undefined });
+  });
+
   it('a resent program is not a drift check: it does not count toward re-scheduling the song', async () => {
     const p = phone();
     const program: SpeakerProgram = { kind: 'speaker', track: TRACK, tl: schedule(PAUSED, p.client.hostNow(), 0, TRACK.duration, 'play'), volume: 1, spread: false };
