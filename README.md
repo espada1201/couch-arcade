@@ -27,8 +27,8 @@ floor plan. The host header shows how tightly phones are synced ("in sync to ±N
 5. Open the printed `http://localhost:4321/` link and click **Host a room**. Phones on the same Wi-Fi scan the QR code.
 
 `npm start` serves the app plus a tiny Wi-Fi relay, so the room works with no internet. Live
-captions are the exception: the browser sends speech to its maker's online service. It uses plain
-http, so phones can't keep their screens awake: set Auto-Lock to Never, or use the online version.
+captions are the exception: the browser sends speech to its maker's online service. Plain http has
+no screen wake lock, so phones loop a tiny silent video to stay awake; if one still dims, set Auto-Lock to Never.
 
 ## Hosting it online
 

@@ -30,16 +30,32 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       h('p.eyebrow', {}, 'Room'),
       h('p.room-code', {}, room),
       h('p.gate-copy', {}, 'This phone becomes part of the room’s screen and speaker. Turn the brightness all the way up, turn the sound on, and keep this page open.'),
-      'wakeLock' in navigator ? null : h('p.gate-copy', {}, 'This phone can’t be kept awake from here, so set Auto-Lock (screen timeout) to Never for the show.'),
       joinBtn,
     ),
   );
 
-  await new Promise<void>((resolve) => joinBtn.addEventListener('click', () => resolve(), { once: true }));
-  speaker.unlock();
-  document.documentElement.requestFullscreen?.().catch(() => {});
-  // Held for the life of the page: a phone that dims drops out of the picture.
-  keepScreenOn();
+  const awakeHint = h('p.awake-hint', { role: 'status', hidden: true }, 'This phone can’t keep itself awake, so set Auto-Lock (screen timeout) to Never for the show.');
+  let hintTimer = 0;
+  // Inside the tap itself: sound, full screen and the wake-lock video may each need one.
+  await new Promise<void>((resolve) =>
+    joinBtn.addEventListener(
+      'click',
+      () => {
+        speaker.unlock();
+        document.documentElement.requestFullscreen?.().catch(() => {});
+        // Held for the life of the page: a phone that dims drops out of the picture.
+        keepScreenOn((awake) => {
+          document.documentElement.dataset.awake = awake;
+          // Shown for a while each time: it comes back whenever the phone wakes from a sleep it couldn't prevent.
+          awakeHint.hidden = awake !== 'none';
+          clearTimeout(hintTimer);
+          hintTimer = window.setTimeout(() => (awakeHint.hidden = true), 30000);
+        });
+        resolve();
+      },
+      { once: true },
+    ),
+  );
 
   const label = h('div.label', { 'aria-live': 'polite' });
   const status = h('div.status', { role: 'status' });
@@ -48,7 +64,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const follow = new FollowScreen();
   const party = new PartySpeaker(client, speaker);
   client.onChunk = (m) => party.chunk(m);
-  const screen = h('div.screen', {}, label, follow.el, party.el, status, mine.el, ...layers.map((l) => l.el));
+  const screen = h('div.screen', {}, label, follow.el, party.el, status, awakeHint, mine.el, ...layers.map((l) => l.el));
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
