@@ -185,6 +185,14 @@ for (const [w, h] of [[1280, 800], [820, 1180]]) {
   });
 }
 
+test('Card stunt says what to expect from few phones', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await expect(host.getByText('Each phone shows one colour of the picture, so the more phones, the sharper it gets.')).toBeAttached();
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');

@@ -100,6 +100,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
     h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: () => words.value.trim() && pick(textStunt(words.value.trim().toUpperCase(), session.layout.aspect)) }, 'Use words')),
     preview,
+    h('p.note', {}, 'Each phone shows one colour of the picture, so the more phones, the sharper it gets.'),
     rec?.el,
     flip,
   );
