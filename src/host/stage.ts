@@ -23,6 +23,7 @@ export class Stage {
   private empty = h('div.stage-empty');
   private tray = h('div.tray', { role: 'group', 'aria-label': 'Phones not placed yet' });
   private table = h('table.sr-only', { 'aria-label': 'Phone positions' });
+  private away = h('p.stage-away', { hidden: true });
   private hint = h('p.stage-hint', { id: 'stage-keys', hidden: true });
   private said = h('p.sr-only', { role: 'status' });
   private selected: number | null = null;
@@ -35,7 +36,7 @@ export class Stage {
     private readonly session: HostSession,
     director: Pick<Director, 'onHandover'>,
   ) {
-    this.el = h('section.stage', { 'aria-label': 'Room map' }, h('h2.sr-only', {}, 'Room map'), h('div.stage-frame', {}, this.canvas, this.empty), this.hint, this.said, this.tray, this.table);
+    this.el = h('section.stage', { 'aria-label': 'Room map' }, h('h2.sr-only', {}, 'Room map'), h('div.stage-frame', {}, this.canvas, this.empty), this.hint, this.said, this.tray, this.away, this.table);
     this.canvas.addEventListener('pointerdown', (e) => this.down(e));
     this.canvas.addEventListener('pointermove', (e) => this.move(e));
     this.canvas.addEventListener('pointerup', (e) => this.up(e));
@@ -80,6 +81,11 @@ export class Stage {
           : `${plural(here.length, 'phone')} ${gone.length ? 'are here' : 'joined'}.` +
             (gone.length ? ` ${plural(gone.length, 'phone')} ${gone.length === 1 ? 'has' : 'have'} left.` : '') +
             ' Scan the room with the camera, or pick a number below and tap the map to place it.';
+    const goneIds = gone.map((x) => x.seat + 1).join(', ');
+    this.away.hidden = gone.length === 0;
+    this.away.textContent = gone.length
+      ? `${gone.length === 1 ? `Phone ${goneIds} has` : `Phones ${goneIds} have`} left (dashed outline). Press “Remove disconnected phones” at the top to take ${gone.length === 1 ? 'it' : 'them'} off the map.`
+      : '';
     this.canvas.setAttribute('aria-label', `Room map with ${plural(placed.length, 'placed phone')}`);
     this.tray.hidden = unplaced.length === 0;
     this.tray.replaceChildren(
@@ -98,7 +104,7 @@ export class Stage {
               this.canvas.focus({ preventScroll: true });
             },
           },
-          String(x.seat + 1),
+          x.link ? String(x.seat + 1) : `${x.seat + 1} (away)`,
         ),
       ),
     );
@@ -275,6 +281,12 @@ export class Stage {
       ctx.setLineDash(solid);
       ctx.fillStyle = s?.link && luma(f.rgb) > 140 ? '#0e0d0b' : '#f2ead8';
       ctx.fillText(String(seat + 1), x + pw / 2, y + size / 2);
+      if (!s?.link) {
+        ctx.font = `600 ${Math.max(9 * dpr, size * 0.22)}px "Archivo Variable", sans-serif`;
+        ctx.fillStyle = '#f2ead8';
+        ctx.fillText('away', x + pw / 2, y + size + 8 * dpr);
+        ctx.font = `600 ${Math.max(9 * dpr, size * 0.3)}px "Archivo Variable", sans-serif`;
+      }
     }
   }
 }

@@ -76,6 +76,19 @@ test('the map text counts the phones that are here, and says when one has left',
   expect(errors).toEqual([]);
 });
 
+test('a phone that left is labelled away on the map and the page says how to remove it', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  const phones = [await joinPhone(context, code, 0, errors), await joinPhone(context, code, 1, errors)];
+  await phones[1].close();
+  await expect(host.locator('.tray .chip', { hasText: '2 (away)' })).toBeVisible();
+  await expect(host.locator('.stage-away')).toContainText(/Phone 2 has left.*Remove disconnected phones/);
+  await host.getByRole('button', { name: 'Remove disconnected phones' }).click();
+  await expect(host.locator('.stage-away')).toBeHidden();
+  await expect(host.locator('.tray .chip', { hasText: 'away' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('Scan the room says to start the camera first, and the header buttons say what they do', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');
