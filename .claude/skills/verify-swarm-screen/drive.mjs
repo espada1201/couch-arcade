@@ -122,11 +122,11 @@ class Run {
     page.on('pageerror', (e) => this.errors.push(`${page.url()}: ${e.message}`));
   }
   async browser(args = [], init) {
-    const internet = opt.transport === 'internet';
-    const b = await chromium.launch({ headless: !opt.headed, executablePath: CHROME_PATH, args: [...BASE_ARGS, ...(internet ? WEBRTC_ARGS : []), ...args] });
+    const b = await chromium.launch({ headless: !opt.headed, executablePath: CHROME_PATH, args: [...BASE_ARGS, ...WEBRTC_ARGS, ...args] });
     this.browsers.push(b);
     const context = await b.newContext({ baseURL: base(), permissions: ['camera', 'microphone'], acceptDownloads: true });
-    if (internet) await (this.broker ??= peerBroker()).install(context);
+    // Any room may run in Internet mode: the broker stands in for 0.peerjs.com.
+    await (this.broker ??= peerBroker()).install(context);
     if (init) await context.addInitScript(init);
     return context;
   }
@@ -1297,6 +1297,40 @@ const CHECKS = {
     } finally {
       for (const s of squatters) s.ws.terminate();
     }
+  },
+
+  async 'internet-guard'(run) {
+    // Internet mode, over real WebRTC: a phone that floods or sends an oversized piece is closed by
+    // the host itself (no relay in between), and comes back into its seat.
+    const DC_TAP = () => {
+      window.__dcs = [];
+      const create = RTCPeerConnection.prototype.createDataChannel;
+      RTCPeerConnection.prototype.createDataChannel = function (...a) {
+        const dc = create.apply(this, a);
+        window.__dcs.push(dc);
+        const send = dc.send.bind(dc);
+        dc.send = (d) => ((window.__first ??= d), send(d));
+        return dc;
+      };
+    };
+    const room = await openRoom(run, { transport: 'internet', sims: [[0.3, 0.5]], init: DC_TAP });
+    const { host, phones } = room;
+    const [phone] = phones;
+    const closedBy = async (label, attack) => {
+      const t = Date.now();
+      await phone.evaluate(attack);
+      await expect(phone.locator('.status')).toContainText(/reconnecting|connecting/, { timeout: 5000 });
+      run.note(`${label}: link closed after ms`, Date.now() - t);
+      await expect(phone.locator('.status')).toContainText('Seat 1', { timeout: 20_000 });
+      await expect(host.locator('.count')).toHaveText(/^1 phone /, { timeout: 20_000 });
+    };
+    await closedBy('200 copies of its hello at once', () => {
+      const dc = window.__dcs.at(-1);
+      for (let i = 0; i < 200; i++) dc.send(window.__first);
+    });
+    await closedBy('one 16 KB piece', () => window.__dcs.at(-1).send(new ArrayBuffer(16_300)));
+    run.note('phone back in its seat each time', true);
+    await run.shot(phone, 'phone-back');
   },
 
   async ghost(run) {
