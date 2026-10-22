@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_IDS } from '../src/core/blinkcode';
 import { HostSession } from '../src/host/session';
-import { BasicLink } from '../src/net/transport';
+import { BasicLink, sendEach, type HostEnd } from '../src/net/transport';
 import { MAX_MESSAGE_BYTES, fits, type HostMsg } from '../src/core/protocol';
 import { memoryStorage, testTransport } from './harness';
 import { PHONE_BUDGET, PHONE_MESSAGE_BYTES } from '../src/net/limits.js';
@@ -14,8 +14,10 @@ function harness(opts: { heartbeat?: boolean } = {}) {
   const phone = () => {
     const inbox: HostMsg[] = [];
     const hostSide = new BasicLink((m) => inbox.push(m as HostMsg));
+    let closed = false;
+    hostSide.onClose(() => (closed = true));
     accept(hostSide);
-    return { inbox, say: (m: unknown) => hostSide.deliver(m), drop: () => hostSide.ended(), onClose: (cb: () => void) => hostSide.onClose(cb) };
+    return { inbox, say: (m: unknown) => hostSide.deliver(m), drop: () => hostSide.ended(), onClose: (cb: () => void) => hostSide.onClose(cb), closed: () => closed };
   };
   return { session, phone, server, tick: (ms: number) => (clock += ms) };
 }
@@ -256,11 +258,31 @@ describe('untrusted phones', () => {
     expect(session.gridEntries.get(0)).toEqual({ row: 2, seat: 7 });
   });
 
-  it('makes room for a new link by closing the oldest of 32 that never said hello', async () => {
+  it('refuses a new link while the oldest of 32 unspoken links is still within its first 1.5 s', async () => {
     const { session, phone, tick } = harness();
     await session.open();
     const idle = Array.from({ length: 32 }, () => {
       tick(10);
+      const p = phone();
+      let closed = false;
+      p.onClose(() => (closed = true));
+      return { ...p, closed: () => closed };
+    });
+    // A flood of sockets must not shove out a link that has had no time to say hello.
+    expect(phone().closed()).toBe(true);
+    expect(idle.some((p) => p.closed())).toBe(false);
+    tick(1500);
+    const honest = phone();
+    expect(idle.map((p) => p.closed())).toEqual([true, ...Array(31).fill(false)]);
+    honest.say({ t: 'hello', token: 'aaa' });
+    expect(honest.inbox[0]).toMatchObject({ t: 'welcome' });
+  });
+
+  it('makes room for a new link by closing the oldest of 32 that never said hello', async () => {
+    const { session, phone, tick } = harness();
+    await session.open();
+    const idle = Array.from({ length: 32 }, () => {
+      tick(100);
       const p = phone();
       let closed = false;
       p.onClose(() => (closed = true));
@@ -276,6 +298,28 @@ describe('untrusted phones', () => {
     phone();
     expect(idle.filter((p) => p.closed())).toHaveLength(2);
     expect(idle[1].closed()).toBe(true);
+  });
+
+  it('gives the room up if it is closed while the transport is still opening it', async () => {
+    vi.useFakeTimers();
+    let finish!: () => void;
+    const close = vi.fn();
+    const transport = {
+      name: 'slow',
+      host: () => new Promise<HostEnd>((r) => (finish = () => r({ heartbeat: false, onLink: () => {}, onServer: () => {}, broadcast: sendEach, close }))),
+      join: async () => {
+        throw new Error('unused');
+      },
+    };
+    const session = new HostSession(transport, 'TEST', () => 0);
+    const opening = session.open();
+    session.close();
+    finish();
+    await opening;
+    const timers = vi.getTimerCount();
+    vi.useRealTimers();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(timers).toBe(0);
   });
 
   it('does not count phones the full room turned away against new links', async () => {

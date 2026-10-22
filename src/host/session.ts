@@ -63,8 +63,10 @@ const SILENT_MS = 15_000;
 const ACK_WAIT_MS = 2000;
 /** A link without a seat this long after it opened never gets one (a phone says hello at once). */
 const HELLO_MS = 10_000;
-/** Links open at once that have not said hello; a new one past this closes the oldest. */
+/** Links open at once that have not said hello; past this a new one waits its turn. */
 const MAX_UNGREETED = 32;
+/** A link that has waited longer than this for its hello makes room for a new one; a younger one is not shoved out. */
+const SQUATTER_MS = 1500;
 
 /**
  * 'source': raw positions are camera or seat-grid coordinates, stretched to fill the room.
@@ -110,6 +112,7 @@ export class HostSession {
   private listeners = new Set<() => void>();
   private end: HostEnd | null = null;
   private sweeper: ReturnType<typeof setInterval> | undefined;
+  private closed = false;
   /** Every open link, seated or not, with when the host last heard from it. */
   private conns = new Set<Conn>();
   /** Numbers frames for their acks. */
@@ -144,7 +147,10 @@ export class HostSession {
   }
 
   async open(): Promise<void> {
-    this.end = await this.transport.host(this.room);
+    const end = await this.transport.host(this.room);
+    // Closed while the transport was still opening the room: let it go again at once.
+    if (this.closed) return end.close();
+    this.end = end;
     this.sweeper = setInterval(() => this.sweep(), 1000);
     this.end.onLink((link) => this.accept(link));
     this.end.onServer((state) => {
@@ -157,6 +163,7 @@ export class HostSession {
 
   /** Stop sweeping and give the room up: its links close and the room server is let go. */
   close(): void {
+    this.closed = true;
     clearInterval(this.sweeper);
     this.sweeper = undefined;
     for (const c of [...this.conns]) c.link.close();
@@ -364,9 +371,13 @@ export class HostSession {
 
   private accept(link: Link): void {
     // Links say hello at once, so a pile that hasn't is someone opening sockets to fill the room:
-    // the oldest goes, so the squatter can't lock a real phone out.
+    // the oldest goes, so the squatter can't lock a real phone out. Unless it is still young: a
+    // flood of fresh sockets must not push out a phone that is about to say hello, so the new link waits.
     const waiting = [...this.conns].filter((c) => !c.greeted);
-    if (waiting.length >= MAX_UNGREETED) waiting[0].link.close();
+    if (waiting.length >= MAX_UNGREETED) {
+      if (this.now() - waiting[0].opened <= SQUATTER_MS) return link.close();
+      waiting[0].link.close();
+    }
     const conn: Conn = { link, opened: this.now(), heard: this.now(), greeted: false, seat: null };
     this.conns.add(conn);
     let me: Seat | null = null;
