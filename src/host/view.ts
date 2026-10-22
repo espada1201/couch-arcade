@@ -156,6 +156,8 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     }
     if (!panels.has(id)) panels.set(id, tabs.find((t) => t[0] === id)![2]());
     panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), panels.get(id)!);
+    // Every tab opens at its top, not wherever the last one was scrolled to.
+    panelHost.scrollTop = 0;
     syncPanelStop();
   };
   // A panel can send the host to another tab ("Go to Locate"); the tab strip lives here.

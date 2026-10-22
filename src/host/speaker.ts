@@ -74,6 +74,8 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     // From here the line under the picker follows the phones (see refresh).
     pickerBusy = false;
     refresh();
+    // Play sits under the song details; bring it into view once there is a song to play.
+    toggle.scrollIntoView({ block: 'nearest' });
   };
 
   const command = (cmd: Command, lead: number) => {
@@ -109,7 +111,7 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
     'label.file.drop',
     { for: 'speaker-file' },
     h('span.pick.btn.primary.big', {}, 'Pick a song'),
-    h('span.drop-hint', {}, `MP3 or M4A, up to ${MAX_TRACK_SECONDS / 60} minutes. You can also drop the file here.`),
+    h('span.drop-hint', {}, `MP3, M4A or WAV, up to ${MAX_TRACK_SECONDS / 60} minutes. You can also drop the file here.`),
     file,
   );
   drop.addEventListener('dragover', (e) => {
@@ -187,7 +189,7 @@ export function speakerPanel(session: HostSession, director: Director): HTMLElem
   const tick = () => (ticking ||= window.setInterval(() => el.isConnected && refresh(), 400));
 
   const { el, say, fail } = panel(
-    'Play one song on every phone at once. Every phone starts at the same moment and needs no install, but the song must be a file (MP3 or M4A), because streaming apps can’t share music.',
+    'Play one song on every phone at once. Every phone starts at the same moment and needs no install, but the song must be a file on this computer (MP3, M4A or WAV), because streaming apps can’t share music.',
     drop,
     picker.el,
     title,
