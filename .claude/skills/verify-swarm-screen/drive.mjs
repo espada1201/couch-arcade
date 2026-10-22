@@ -890,14 +890,37 @@ const CHECKS = {
       for (const x of b) s += String.fromCharCode(x);
       return btoa(s);
     });
-    // Switching to Video while live asks for a file first; pick it, then Go live again.
+    // Switching to Video while live, before any file is chosen, keeps the crowd showing the camera;
+    // picking the file then switches over by itself, with no second Go live.
     await host.getByRole('radio', { name: 'Video' }).check();
-    await expect(host.getByText('Choose a video file first.')).toBeVisible();
+    let waits = false;
+    try {
+      await expect(host.getByText(/Choose a video file to switch to it/)).toBeVisible({ timeout: 5000 });
+      waits = true;
+    } catch {}
+    run.note('host status after picking Video with no file', await host.locator('.panel-body > .note[role=status]').last().textContent().catch(() => null));
+    await run.shot(host, 'host-live-video-no-file');
+    if (!waits) run.issue('switching to Video while live, before a file is chosen, does not keep the broadcast going');
+    counts['Video, no file yet'] = await perPhone();
     await host.locator('#live-file').setInputFiles({ name: 'clip.webm', mimeType: 'video/webm', buffer: Buffer.from(clip, 'base64') });
-    await host.getByRole('button', { name: 'Go live' }).click();
-    await expect(host.getByText(/Broadcasting to 3 phones/)).toBeVisible({ timeout: 15_000 });
+    let resumed = false;
+    try {
+      await expect(host.getByText(/Broadcasting to 3 phones/)).toBeVisible({ timeout: 15_000 });
+      resumed = true;
+    } catch {}
+    run.note('picking the file goes live by itself', resumed);
+    if (!resumed) run.issue('picking a video file while live does not resume the broadcast without pressing Go live');
     await sleep(800);
     counts.Video = await perPhone();
+    // The clip is one flat colour per frame, so phones showing it agree on their colour.
+    let same = false;
+    for (let i = 0; i < 10 && !same; i++) {
+      const c = await Promise.all(phones.map((p) => bg(p)));
+      same = c.every((x) => x.every((v, k) => Math.abs(v - c[0][k]) < 12)) && c[0].some((v) => v > 60);
+      if (!same) await sleep(150);
+    }
+    run.note('phones show the video (same colour everywhere)', same);
+    if (!same) run.issue('after picking the file the phones are not showing the video');
     run.note('distinct colours per phone (top, middle, bottom) in 1.2 s', counts);
     for (const [k, n] of Object.entries(counts)) {
       if (n.every((c) => c < 3)) run.issue(`${k}: no phone's colour moved`);

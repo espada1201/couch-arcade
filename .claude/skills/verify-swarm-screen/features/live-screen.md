@@ -4,7 +4,8 @@ The crowd becomes a moving picture, one pixel per phone: a generated Aurora or F
 
 ## Sub-features
 
-- `live-aurora`, `live-fire`, `live-camera`, `live-video` each source keeps phones' colours changing; switching source while live restarts it.
+- `live-aurora`, `live-fire`, `live-camera`, `live-video` each source keeps phones' colours changing, Fire in the top, middle and bottom of the room too.
+- `live-switch` switching source while live keeps the current picture on the phones until the new one plays, then cuts over. Video with no file yet says "Choose a video file to switch to it" and keeps broadcasting; picking the file switches by itself.
 
 ## How to get to it (user POV)
 
@@ -14,8 +15,8 @@ The crowd becomes a moving picture, one pixel per phone: a generated Aurora or F
 
 Preconditions: three phones scanned at the top, middle and bottom of the room.
 
-- **Run.** `drive.mjs live`. Reading `distinct colours per phone (top, middle, bottom) in 1.2 s` for each source; a phone with 1 colour is flagged. The video is a 3 s clip the browser records itself, uploaded through `#live-file`, then Go live. Screenshots per source.
+- **Run.** `drive.mjs live`. Reading `distinct colours per phone (top, middle, bottom) in 1.2 s` for each source; a phone with 1 colour is flagged. The video is a 3 s clip the browser records itself, picked as the source while the camera is live (reading `Video, no file yet` must still move), then uploaded through `#live-file` with no Go live press. Readings `picking the file goes live by itself` and `phones show the video (same colour everywhere)`. Screenshots per source and `host-live-video-no-file.png`.
 
 ## Gotchas
 
-- Switching to Video while live ends the broadcast with "Choose a video file first."; the host must pick a file and press Go live again.
+- "Choose a video file first." is only for pressing Go live on Video with no file; while live the panel keeps the old source instead.

@@ -11,6 +11,7 @@ import { every, type Broadcast } from './ticker';
 import type { HostSession } from './session';
 
 type SourceKind = 'aurora' | 'fire' | 'camera' | 'video';
+const NAMES: Record<SourceKind, string> = { aurora: 'Aurora', fire: 'Fire', camera: 'the camera', video: 'the video' };
 
 export const W = 96;
 export const H = 72;
@@ -104,10 +105,9 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   let kind: SourceKind = 'aurora';
   let fps = 10;
   let loop: Broadcast | null = null;
-  let video: HTMLVideoElement | null = null;
-  let stream: MediaStream | null = null;
-  let live = false;
-  // Bumped by every start and stop, so a start whose camera prompt or video load resolves
+  /** What the crowd is showing now. While live it changes only once the next source is ready to play. */
+  let shown: { kind: SourceKind; video: HTMLVideoElement | null; stream: MediaStream | null } = { kind, video: null, stream: null };
+  // Bumped by every start, switch and stop, so a camera prompt or video load that resolves
   // after it was superseded drops what it opened instead of leaving the camera on.
   let gen = 0;
 
@@ -115,20 +115,17 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     stopStream(s);
     if (v?.src) URL.revokeObjectURL(v.src);
   };
-  const release = () => {
-    drop(stream, video);
-    stream = null;
-    video = null;
-  };
 
-  const prepare = async (mine: number): Promise<boolean> => {
+  /** Opens the selected source; on failure says why and returns null. */
+  const prepare = async (mine: number): Promise<typeof shown | null> => {
+    const want = kind;
     const fail = (text: string) => {
       if (mine === gen) say(text);
-      return false;
+      return null;
     };
     let s: MediaStream | null = null;
     let v: HTMLVideoElement | null = null;
-    if (kind === 'camera') {
+    if (want === 'camera') {
       try {
         s = await openCamera({ width: { ideal: 640 } });
       } catch (e) {
@@ -136,9 +133,9 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
       }
       v = h('video', { muted: true, playsinline: true });
       v.srcObject = s;
-    } else if (kind === 'video') {
+    } else if (want === 'video') {
       const f = file.files?.[0];
-      if (!f) return fail('Choose a video file first.');
+      if (!f) return fail(loop ? `Choose a video file to switch to it. The crowd keeps showing ${NAMES[shown.kind]} until then.` : 'Choose a video file first.');
       v = h('video', { muted: true, playsinline: true, loop: true });
       v.src = URL.createObjectURL(f);
     }
@@ -151,50 +148,65 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
         return fail('That video could not be played in this browser.');
       }
     }
-    if (mine !== gen) return drop(s, v), false;
-    stream = s;
-    video = v;
-    return true;
+    if (mine !== gen) return drop(s, v), null;
+    return { kind: want, video: v, stream: s };
+  };
+
+  const show = (next: typeof shown) => {
+    drop(shown.stream, shown.video);
+    shown = next;
   };
 
   const draw = (c: CanvasRenderingContext2D, t: number) => {
-    if (kind === 'aurora') aurora(c, t);
-    else if (kind === 'fire') fire(c);
-    else if (video && video.readyState >= 2) c.drawImage(video, 0, 0, W, H);
+    if (shown.kind === 'aurora') aurora(c, t);
+    else if (shown.kind === 'fire') fire(c);
+    else if (shown.video && shown.video.readyState >= 2) c.drawImage(shown.video, 0, 0, W, H);
   };
 
   const goLive = h('button.btn.primary', { type: 'button' }, 'Go live');
+  const broadcasting = () => say(`Broadcasting to ${plural(session.playRoom().positions.size, 'phone')} at ${fps} frames a second.`);
 
   const stop = () => {
     gen++;
-    live = false;
     goLive.disabled = false;
     loop?.stop();
     loop = null;
-    release();
+    show({ kind, video: null, stream: null });
   };
 
   const start = async () => {
     if (!requirePlaced(session, say)) return;
     const hold = director.run({ stop });
     const mine = ++gen;
-    live = true;
     goLive.disabled = true;
-    const ok = await prepare(mine);
+    const next = await prepare(mine);
     if (mine !== gen) return;
     goLive.disabled = false;
-    if (!ok) return hold.end();
+    if (!next) return hold.end();
+    show(next);
     loop = broadcast(session, ctx, draw, fps);
-    say(`Broadcasting to ${plural(session.playRoom().positions.size, 'phone')} at ${fps} frames a second.`);
+    broadcasting();
   };
   goLive.addEventListener('click', start);
+
+  /** Live already: keep the current picture on the phones until the new source plays, then cut over. */
+  const switchSource = async () => {
+    const next = await prepare(++gen);
+    // null also when a stop or another switch superseded this one (prepare dropped what it opened).
+    if (!next) return;
+    show(next);
+    broadcasting();
+  };
+  file.addEventListener('change', () => loop && kind === 'video' && void switchSource());
 
   const { el, say } = panel(
     'Turn the crowd into a live screen. Point your camera at the stage, play a video, or let a generated animation run, and every phone becomes one pixel of the moving picture.',
     segmented<SourceKind>('Source', [['aurora', 'Aurora'], ['fire', 'Fire'], ['camera', 'Camera'], ['video', 'Video']], kind, (v) => {
       kind = v;
       fileLabel.hidden = file.hidden = v !== 'video';
-      if (live) void start();
+      if (loop) void switchSource();
+      // A start still waiting on its camera or video: start over with the new pick.
+      else if (goLive.disabled) void start();
     }),
     fileLabel,
     slider('Frame rate', 2, 20, 1, fps, (v) => `${v} fps`, (v) => {
