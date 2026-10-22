@@ -72,6 +72,10 @@ test('text cards: every phone shows the card, Next and the arrow keys step, a la
   const errors: string[] = [];
   const room = await openRoom(context, errors, 3);
   const { host, phones } = room;
+  // No cards yet: the host is told, and the room isn't taken (the phones stay in the lobby).
+  await host.getByRole('button', { name: 'Show on phones' }).click();
+  await expect(host.getByText('Type at least one line first.')).toBeVisible();
+  await expect(phones[0].locator('.follow')).toBeHidden();
   await host.getByLabel(/Cards, one per line/).fill('Happy birthday, Sam\nDinner at 7\n\nSpeeches at 8');
   await expect(host.locator('.follow-pos')).toHaveText('Card 1 of 3');
   await host.getByRole('button', { name: 'Show on phones' }).click();
