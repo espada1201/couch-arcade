@@ -82,6 +82,28 @@ export function wav(seconds: number, rate = 22050): Buffer {
   return b;
 }
 
+/**
+ * An init script that sets the page's wall clock (Date) to `h:m:s` local time today as it loads,
+ * running on from there. The shared host clock (performance.now) is untouched.
+ */
+export function wallClockAt(h: number, m: number, s: number): string {
+  const shift = (h: number, m: number, s: number) => {
+    const Real = Date;
+    const today = new Real();
+    const by = new Real(today.getFullYear(), today.getMonth(), today.getDate(), h, m, s).getTime() - Real.now();
+    class Shifted extends Real {
+      constructor(...a: []) {
+        super(...((a.length ? a : [Real.now() + by]) as []));
+      }
+      static now() {
+        return Real.now() + by;
+      }
+    }
+    window.Date = Shifted as DateConstructor;
+  };
+  return `(${shift})(${h}, ${m}, ${s})`;
+}
+
 export interface Room {
   host: Page;
   phones: Page[];

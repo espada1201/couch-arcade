@@ -7,7 +7,7 @@ One button runs a looping choreography; event moments run on their own: a New Ye
 - `show-loop` Start the show walks the cues: Title card, then Amber sweep after 6.5 s; Stop says "Stopped.".
 - `countdown` 10…1 on every phone in step, then the year in full light; works with phones not placed.
 - `countdown-record` the host camera films it and offers "Download the keepsake".
-- `countdown-midnight` timed to midnight, the host sees "Midnight in h:mm:ss".
+- `countdown-midnight` timed to midnight by the wall clock, the host sees "Midnight in h:mm:ss"; more than 12 hours away it is refused, and it follows the wall clock if the host clock drifts or sleeps.
 - `first-dance` a slow warm wash (red over blue) moving on the phones until Stop.
 
 ## How to get to it (user POV)
@@ -24,5 +24,5 @@ Preconditions: `show` and `first-dance` scan first; `countdown` deliberately doe
 
 ## Gotchas
 
-- The midnight step is skipped in the last 30 s before midnight.
+- The check sets the pages' wall clock (Date) to 22:00 at load (`wallClockAt` in `e2e/room.ts`), so the midnight step runs at any hour.
 - The countdown takes ~17 s and the keepsake ~6 s more.

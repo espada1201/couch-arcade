@@ -3,7 +3,7 @@ import type { Program } from '../src/core/effects';
 import { MOMENTS, comingYear, missingNames } from '../src/host/images';
 import { keepsakeName, pickMime, recorder } from '../src/host/record';
 import type { HostSession } from '../src/host/session';
-import { CUES, msToMidnight } from '../src/host/show';
+import { CUES, midnightProblem, midnightTimer, msToMidnight } from '../src/host/show';
 
 describe('moment kit', () => {
   it('the New Year stunt and countdown name the year about to start', () => {
@@ -41,6 +41,66 @@ describe('moment kit', () => {
     expect(msToMidnight(new Date(2026, 11, 31, 22, 0, 0))).toBe(2 * 3_600_000);
     // At midnight itself, the next one is a day away.
     expect(msToMidnight(new Date(2027, 0, 1, 0, 0, 0))).toBe(24 * 3_600_000);
+  });
+
+  describe('a countdown timed to midnight follows the wall clock', () => {
+    const HOUR = 3_600_000;
+    /** Wall clock and host clock (performance.now on the host) as functions of real time. */
+    function run(target: number, from: number, host: (t: number) => number) {
+      let t = from;
+      const sent: number[] = [];
+      const filmed: { at: number; ms: number }[] = [];
+      const done: number[] = [];
+      const timer = midnightTimer(target, { wall: () => t, host: () => host(t) }, { send: (z) => sent.push(z), film: (ms) => filmed.push({ at: t, ms }), done: () => done.push(t) });
+      const until = (end: number, step = 1000) => {
+        for (; t <= end; t += step) timer.tick();
+      };
+      return { sent, filmed, done, until };
+    }
+
+    it('re-sends the moment as the host clock drifts, so zero lands at midnight on the wall clock', () => {
+      const target = 10 * HOUR;
+      // The host clock loses a second an hour against the wall clock.
+      const host = (t: number) => 5000 + t * (1 - 1 / 3600);
+      const r = run(target, target - HOUR, host);
+      r.until(target - 10_000);
+      // A fixed zero, worked out an hour ahead, would land a second late.
+      expect(Math.abs(r.sent[0] - host(target))).toBeGreaterThan(900);
+      expect(Math.abs(r.sent.at(-1)! - host(target))).toBeLessThan(100);
+      // Only when it has moved: not once a second.
+      expect(r.sent.length).toBeLessThan(20);
+    });
+
+    it('a host clock that stood still while the computer slept is corrected on waking', () => {
+      const target = 10 * HOUR;
+      // Asleep for ten minutes, half an hour before midnight: the host clock missed them.
+      const host = (t: number) => (t < target - 30 * 60_000 ? t : t - Math.min(10 * 60_000, t - (target - 30 * 60_000)));
+      const r = run(target, target - HOUR, host);
+      r.until(target - 10_000);
+      expect(Math.abs(r.sent.at(-1)! - host(target))).toBeLessThan(100);
+    });
+
+    it('films from just before the numbers start and ends after the burst, by the wall clock', () => {
+      const target = 10 * HOUR;
+      const r = run(target, target - 60_000, (t) => t - 123_456);
+      r.until(target + 10_000);
+      expect(r.filmed).toEqual([{ at: target - 12_000, ms: 18_000 }]);
+      expect(r.done).toEqual([target + 6000]);
+    });
+
+    it('a countdown started in the last seconds films at once and still lands at midnight', () => {
+      const target = 10 * HOUR;
+      const r = run(target, target - 7000, (t) => t + 1);
+      r.until(target - 7000);
+      expect(r.sent).toEqual([target + 1]);
+      expect(r.filmed).toEqual([{ at: target - 7000, ms: 13_000 }]);
+    });
+
+    it('a midnight more than 12 hours away is refused, saying how far it is', () => {
+      expect(midnightProblem(12 * HOUR)).toBeNull();
+      expect(midnightProblem(5000)).toBeNull();
+      expect(midnightProblem(23 * HOUR + 59 * 60_000 + 30_000)).toMatch(/23:59:30/);
+    });
   });
 
   it('templates with names need the names, and say which are missing', () => {

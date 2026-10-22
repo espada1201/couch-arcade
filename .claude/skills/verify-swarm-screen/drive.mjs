@@ -10,7 +10,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 import WebSocket from 'ws';
-import { CHROME_PATH, QUADRANTS_PNG, QUADRANT_COLOURS_BY_SIM, SIMS, bg, pictureSpread, scan, wav } from '../../../e2e/room.ts';
+import { CHROME_PATH, QUADRANTS_PNG, QUADRANT_COLOURS_BY_SIM, SIMS, bg, pictureSpread, scan, wallClockAt, wav } from '../../../e2e/room.ts';
 import { DEFAULT_HALF_MS, HALVES_PER_CODE, encodeHalves } from '../../../src/core/blinkcode.ts';
 import { POLL_COLORS } from '../../../src/core/poll.ts';
 
@@ -681,8 +681,8 @@ const CHECKS = {
   },
 
   async countdown(run) {
-    // Unplaced phones: the countdown is meant to run without a scan.
-    const room = await openRoom(run, { sims: [[0.2, 0.4], [0.5, 0.6], [0.8, 0.4]] });
+    // Unplaced phones: the countdown is meant to run without a scan. The wall clock reads 22:00 at load.
+    const room = await openRoom(run, { sims: [[0.2, 0.4], [0.5, 0.6], [0.8, 0.4]], init: wallClockAt(22, 0, 0) });
     const { host, phones } = room;
     await tab(room, 'Show');
     await host.getByLabel('Record the moment with this computer’s camera').check();
@@ -707,15 +707,12 @@ const CHECKS = {
     const saved = resolve(run.dir, dl.suggestedFilename());
     await dl.saveAs(saved);
     run.note('keepsake', `${basename(saved)} ${statSync(saved).size} bytes`);
-    const now = new Date();
-    if (new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now > 30_000) {
-      await host.getByLabel(/end at midnight/).check();
-      await host.getByRole('button', { name: 'New Year countdown' }).click();
-      const s = host.getByRole('status').filter({ hasText: /^Midnight in \d/ });
-      await expect(s).toBeVisible();
-      run.note('timed to midnight', await s.textContent());
-      await host.getByRole('button', { name: 'Stop', exact: true }).click();
-    }
+    await host.getByLabel(/end at midnight/).check();
+    await host.getByRole('button', { name: 'New Year countdown' }).click();
+    const s = host.getByRole('status').filter({ hasText: /^Midnight in 1:5\d:\d\d\./ });
+    await expect(s).toBeVisible();
+    run.note('timed to midnight', await s.textContent());
+    await host.getByRole('button', { name: 'Stop', exact: true }).click();
     await run.shot(host, 'host-countdown');
   },
 

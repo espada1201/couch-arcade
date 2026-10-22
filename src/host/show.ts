@@ -75,6 +75,40 @@ export function warmWash(ctx: CanvasRenderingContext2D, t: number): void {
 const COUNT_FROM = 10;
 const COUNT_LEAD = 500;
 const COUNT_AFTER = 6000;
+/** A midnight countdown films from just before the numbers start, not the whole wait. */
+const FILM_BEFORE = COUNT_FROM * 1000 + 2000;
+/** Further than this, the host most likely meant a midnight that has just passed. */
+const MIDNIGHT_MAX_WAIT = 12 * 3_600_000;
+/** The phones are sent the moment again once the host clock and the wall clock disagree on it by more than this. */
+const MIDNIGHT_SLIP = 100;
+
+/** Why a countdown to a midnight `ms` away can't be timed, or null. */
+export function midnightProblem(ms: number): string | null {
+  if (ms <= MIDNIGHT_MAX_WAIT) return null;
+  return `Midnight is ${hms(ms)} away by this computer’s clock. Untick the midnight box to count down now.`;
+}
+
+/**
+ * Times the countdown to `target` on the wall clock (Date). The host clock that the phones share
+ * (performance.now) drifts from it and stands still while the computer sleeps, so every tick reads
+ * the wall clock again: the phones are re-sent the moment when it has moved, and filming and the
+ * end follow the wall clock too. Returns ms left to midnight.
+ */
+export function midnightTimer(target: number, clock: { wall: () => number; host: () => number }, on: { send(zeroAt: number): void; film(ms: number): void; done(): void }) {
+  let sent = NaN;
+  let filming = false;
+  let over = false;
+  return {
+    tick(): number {
+      const left = target - clock.wall();
+      const zeroAt = clock.host() + left;
+      if (!(Math.abs(zeroAt - sent) <= MIDNIGHT_SLIP)) on.send((sent = zeroAt));
+      if (!filming && left <= FILM_BEFORE) (filming = true), on.film(left + COUNT_AFTER);
+      if (!over && left <= -COUNT_AFTER) (over = true), on.done();
+      return left;
+    },
+  };
+}
 
 export const CUES: Cue[] = [
   { name: 'Title card', ms: 6500, run: (session, { title }) => flipCards(session, textStunt(title, session.layout.aspect).image, 3000) },
@@ -109,7 +143,8 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   const rec = recorder();
   let timer = 0;
   let ticker = 0;
-  let filming = 0;
+  /** Wake-ups for the midnight countdown's filming and end, which a hidden tab's interval can miss by a minute. */
+  let wakes: number[] = [];
   let stopCue: (() => void) | void;
   // The host walks away, and a sleeping display throttles the cue timers to a crawl.
   let release: (() => void) | undefined;
@@ -118,7 +153,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     release?.();
     release = undefined;
     clearTimeout(timer);
-    clearTimeout(filming);
+    wakes.forEach(clearTimeout);
     clearInterval(ticker);
     stopCue?.();
     stopCue = undefined;
@@ -128,23 +163,18 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     bar.value = 0;
   };
 
-  /**
-   * Run one cue with its progress bar and status line; `done` runs when its time is up.
-   * A timed cue runs `ms` and lands its big moment at `zeroAt`; `status` can change as it goes.
-   */
-  const runCue = (cue: Cue, status: string | (() => string), done: () => void, { ms = cue.ms, zeroAt }: { ms?: number; zeroAt?: number } = {}) => {
+  const cueOpts = () => ({ title: title.value.trim().toUpperCase() || 'HELLO', sound: sound.checked });
+
+  /** Run one cue with its progress bar and status line; `done` runs when its time is up. */
+  const runCue = (cue: Cue, status: string, done: () => void) => {
     stopCue?.();
-    stopCue = cue.run(session, { title: title.value.trim().toUpperCase() || 'HELLO', sound: sound.checked, zeroAt });
-    const say = () => setText(now, typeof status === 'string' ? status : status());
-    say();
+    stopCue = cue.run(session, cueOpts());
+    setText(now, status);
     const start = performance.now();
     clearInterval(ticker);
-    ticker = window.setInterval(() => {
-      bar.value = Math.min(1, (performance.now() - start) / ms);
-      say();
-    }, 100);
+    ticker = window.setInterval(() => (bar.value = Math.min(1, (performance.now() - start) / cue.ms)), 100);
     clearTimeout(timer);
-    timer = window.setTimeout(done, ms);
+    timer = window.setTimeout(done, cue.ms);
   };
 
   const play = (i: number) => {
@@ -169,6 +199,10 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
   };
 
   const moment = (cue: Cue) => {
+    const timed = cue.timed && midnight.checked;
+    const away = msToMidnight(new Date());
+    const problem = timed ? midnightProblem(away) : null;
+    if (problem) return say(problem);
     if (!takeOver(!cue.unplaced)) return;
     const done = () => {
       clearInterval(ticker);
@@ -176,23 +210,30 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
       rec?.end();
       setText(now, `${cue.name} done. The phones hold it until you press Stop.`);
     };
-    if (!(cue.timed && midnight.checked)) {
+    if (!timed) {
       rec?.begin(cue.ms);
       return runCue(cue, `Now: ${cue.name}`, done);
     }
-    const zeroAt = session.now() + msToMidnight(new Date());
-    // Film from just before the numbers start, not the whole wait.
-    const film = COUNT_FROM * 1000 + 2000;
-    filming = window.setTimeout(() => rec?.begin(zeroAt - session.now() + COUNT_AFTER), Math.max(0, zeroAt - film - session.now()));
-    runCue(
-      cue,
-      () => {
-        const left = zeroAt - session.now();
-        return left > COUNT_FROM * 1000 ? `Midnight in ${hms(left)}. The phones count down the last ${COUNT_FROM} seconds.` : `Now: ${cue.name}`;
-      },
-      done,
-      { ms: zeroAt - session.now() + COUNT_AFTER, zeroAt },
+    const target = Date.now() + away;
+    const opts = cueOpts();
+    const countdown = midnightTimer(
+      target,
+      { wall: Date.now, host: () => session.now() },
+      { send: (zeroAt) => (stopCue = cue.run(session, { ...opts, zeroAt })), film: (ms) => rec?.begin(ms), done },
     );
+    const step = () => {
+      const left = countdown.tick();
+      if (left <= -COUNT_AFTER) return;
+      bar.value = Math.min(1, 1 - (left + COUNT_AFTER) / (away + COUNT_AFTER));
+      setText(now, left > COUNT_FROM * 1000 ? `Midnight in ${hms(left)}. The phones count down the last ${COUNT_FROM} seconds.` : `Now: ${cue.name}`);
+    };
+    stopCue?.();
+    clearTimeout(timer);
+    clearInterval(ticker);
+    ticker = window.setInterval(step, 1000);
+    wakes = [away - FILM_BEFORE, away + COUNT_AFTER].map((ms) => window.setTimeout(step, Math.max(0, ms)));
+    step();
+    if (away <= COUNT_FROM * 1000) say(`Midnight is only ${Math.ceil(away / 1000)} s away: the phones count down what is left.`);
   };
 
   const { el, say } = panel(

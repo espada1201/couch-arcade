@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CHROME_PATH, FAKE_MEDIA, bg, openRoom, scan } from './room';
+import { CHROME_PATH, FAKE_MEDIA, bg, openRoom, scan, wallClockAt } from './room';
 
 // Chrome's built-in fake camera and microphone stand in for the host's, so the keepsake can be recorded.
 test.use({
@@ -13,6 +13,8 @@ test.use({
 test('a New Year countdown runs on every phone in step, and the host keeps a recording', async ({ context }) => {
   test.setTimeout(150_000);
   const errors: string[] = [];
+  // Two hours before midnight on the host's wall clock, whatever the time of the run.
+  await context.addInitScript(wallClockAt(22, 0, 0));
   const room = await openRoom(context, errors, [
     [0.2, 0.4],
     [0.5, 0.6],
@@ -50,14 +52,11 @@ test('a New Year countdown runs on every phone in step, and the host keeps a rec
   expect(download.suggestedFilename()).toMatch(/^swarm-moment-\d{4}-\d\d-\d\d-\d{4}\.webm$/);
   await host.screenshot({ path: 'test-results/host-moment.png' });
 
-  // Timed for midnight: the host sees how long is left (unless this runs in the last half minute of the day).
-  const now = new Date();
-  if (new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime() > 30_000) {
-    await host.getByLabel(/end at midnight/).check();
-    await host.getByRole('button', { name: 'New Year countdown' }).click();
-    await expect(host.getByRole('status').filter({ hasText: /^Midnight in \d/ })).toBeVisible();
-    await host.getByRole('button', { name: 'Stop', exact: true }).click();
-  }
+  // Timed for midnight: the host sees how long is left.
+  await host.getByLabel(/end at midnight/).check();
+  await host.getByRole('button', { name: 'New Year countdown' }).click();
+  await expect(host.getByRole('status').filter({ hasText: /^Midnight in 1:5\d:\d\d\./ })).toBeVisible();
+  await host.getByRole('button', { name: 'Stop', exact: true }).click();
 
   // A card-stunt template with the couple's names flips on the crowd like any other picture,
   // but only once the names are typed: the placeholder never goes on the crowd.
