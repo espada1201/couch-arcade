@@ -101,6 +101,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
       startBtn.textContent = 'Restart camera';
       void listCameras();
     } catch (e) {
+      source?.stop();
       source = null;
       const name = e instanceof Error ? e.name : '';
       camMsg.textContent =
@@ -113,7 +114,8 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
   });
 
   scanBtn.addEventListener('click', async () => {
-    if (!source || scanning) return;
+    const src = source;
+    if (!src || scanning) return;
     const online = session.online;
     if (online.length === 0) {
       result.textContent = 'No phones are connected yet.';
@@ -121,31 +123,49 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     }
     scanning = true;
     scanBtn.disabled = true;
-    takeOver();
+    let cancelled = false;
+    let tick = 0;
+    const finish = () => {
+      src.onFrame = null;
+      clearInterval(tick);
+      progress.hidden = true;
+      scanBtn.disabled = false;
+      scanning = false;
+    };
+    // Something else took the crowd mid-scan: drop the burst rather than decode it and blank the screens.
+    takeOver(() => {
+      if (!scanning || cancelled) return;
+      cancelled = true;
+      finish();
+      result.textContent = 'Scan stopped.';
+    });
     // Phones flash on the shared clock, so give late joiners a moment to lock on first.
     for (let i = 0; i < 30 && session.worstSync > 40; i++) {
       result.textContent = 'Waiting for every phone’s clock to lock on…';
       await sleep(100);
+      if (cancelled) return;
     }
     const shaky = session.online.filter((s) => s.sync > 40).map((s) => s.seat + 1);
     const schedule: BlinkSchedule = { t0: session.now() + 1200, halfMs: DEFAULT_HALF_MS, repeats: DEFAULT_REPEATS };
     const frames: GrayFrame[] = [];
-    source.onFrame = (f) => {
+    src.onFrame = (f) => {
       if (f.t >= schedule.t0 - 100) frames.push(f);
     };
     session.setProgram({ kind: 'blink', schedule });
     const total = schedule.t0 - session.now() + scheduleDuration(schedule) + 600;
     progress.hidden = false;
     const started = session.now();
-    const tick = setInterval(() => (progress.value = Math.min(1, (session.now() - started) / total)), 100);
+    tick = window.setInterval(() => (progress.value = Math.min(1, (session.now() - started) / total)), 100);
     result.textContent = `${online.length} phone${online.length === 1 ? ' is' : 's are'} flashing their codes. Keep the camera still…`;
     await sleep(total);
+    if (cancelled) return;
     clearInterval(tick);
-    source.onFrame = null;
+    src.onFrame = null;
     result.textContent = 'Decoding…';
     await sleep(30);
+    if (cancelled) return;
     lastScan = localize(frames, schedule);
-    session.sourceAspect = source.aspect;
+    session.sourceAspect = src.aspect;
     const updates = new Map<number, Point | null>();
     const found = new Set<number>();
     for (const d of lastScan.detections)
@@ -164,9 +184,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
         ? `Couldn’t see any codes (${frames.length} frames). Check every screen faces the camera at full brightness, then scan again.`
         : `Placed ${found.size} of ${online.length} phones.` + (missing.length ? ` Not seen: ${missing.join(', ')}. Scan again, or drag them onto the map.` : '');
     if (shaky.length && missing.length) result.textContent += ` Phones ${shaky.join(', ')} had a weak connection during the scan.`;
-    progress.hidden = true;
-    scanBtn.disabled = false;
-    scanning = false;
+    finish();
     drawOverlay();
   });
 
@@ -237,7 +255,10 @@ export function locatePanel(session: HostSession, params: URLSearchParams, takeO
     {
       type: 'button',
       onclick: () => {
-        takeOver();
+        takeOver(() => {
+          asking = false;
+          useBtn.disabled = true;
+        });
         session.gridEntries.clear();
         asking = true;
         session.setProgram({ kind: 'grid', rows: Number(rows.value) || 1, seats: Number(seats.value) || 1 });

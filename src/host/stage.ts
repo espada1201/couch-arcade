@@ -115,7 +115,7 @@ export class Stage {
     const p = this.toRoom(e);
     const seat = this.hit(p);
     if (seat !== null) {
-      this.selected = seat;
+      this.select(seat);
       this.drag = { seat, p, start: p };
       this.canvas.setPointerCapture(e.pointerId);
     }

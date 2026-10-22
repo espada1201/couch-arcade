@@ -51,9 +51,12 @@ export class LocalTransport implements Transport {
         ch.close();
       },
     );
-    addEventListener('pagehide', () => link.close());
+    const hide = () => link.close();
+    addEventListener('pagehide', hide);
+    link.onClose(() => removeEventListener('pagehide', hide));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
+        removeEventListener('pagehide', hide);
         ch.close();
         reject(new Error('No host answered in this room'));
       }, 4000);

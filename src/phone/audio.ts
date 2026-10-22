@@ -40,10 +40,6 @@ export class Speaker {
     if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   }
 
-  get ready(): boolean {
-    return this.ctx !== null;
-  }
-
   /** Call every ~200 ms with the current program; schedules notes inside the look-ahead window. */
   pump(prog: Program, pos: Point | null, aspect: number, hostNow: number): void {
     const ctx = this.ctx;
