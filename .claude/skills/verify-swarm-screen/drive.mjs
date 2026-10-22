@@ -7,6 +7,7 @@ import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { impairProxy } from './impair.mjs';
+import { WEBRTC_ARGS, peerBroker } from './broker.mjs';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
@@ -121,9 +122,11 @@ class Run {
     page.on('pageerror', (e) => this.errors.push(`${page.url()}: ${e.message}`));
   }
   async browser(args = [], init) {
-    const b = await chromium.launch({ headless: !opt.headed, executablePath: CHROME_PATH, args: [...BASE_ARGS, ...args] });
+    const internet = opt.transport === 'internet';
+    const b = await chromium.launch({ headless: !opt.headed, executablePath: CHROME_PATH, args: [...BASE_ARGS, ...(internet ? WEBRTC_ARGS : []), ...args] });
     this.browsers.push(b);
     const context = await b.newContext({ baseURL: base(), permissions: ['camera', 'microphone'], acceptDownloads: true });
+    if (internet) await (this.broker ??= peerBroker()).install(context);
     if (init) await context.addInitScript(init);
     return context;
   }
@@ -581,8 +584,10 @@ const CHECKS = {
     const { host, phones } = room;
     await tab(room, 'Music');
     await expect(host.getByRole('radio', { name: 'Party speaker' })).toBeChecked();
+    const t0 = Date.now();
     await host.locator('#speaker-file').setInputFiles(song);
     await expect(host.getByText('3 of 3 phones ready')).toBeVisible({ timeout: 60_000 });
+    run.note('3 phones ready after s', (Date.now() - t0) / 1000);
     const title = song.name.replace(/\.[^.]+$/, '');
     for (const p of phones) await expect(p.locator('.np-title')).toHaveText(title);
     await run.shot(host, 'host-ready');

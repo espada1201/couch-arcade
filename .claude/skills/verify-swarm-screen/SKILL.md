@@ -18,7 +18,8 @@ node .claude/skills/verify-swarm-screen/drive.mjs play-song ~/song.mp3
 node .claude/skills/verify-swarm-screen/drive.mjs help                # list checks
 ```
 
-Options: `--transport lan|local` (default `lan`, the relay), `--port N` (default: first free port in
+Options: `--transport lan|local|internet` (default `lan`, the relay; `internet` runs Internet mode over
+real WebRTC data channels between the tabs, with `broker.mjs` standing in for the public PeerJS broker), `--port N` (default: first free port in
 4550-4560), `--url http://localhost:N/` (drive a server you already started; no launch, no cleanup),
 `--out DIR` (evidence root, default `/tmp/verify-swarm-screen`; env `VERIFY_OUT` too), `--headed`.
 
