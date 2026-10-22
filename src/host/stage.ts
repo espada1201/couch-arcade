@@ -35,7 +35,7 @@ export class Stage {
     private readonly session: HostSession,
     director: Pick<Director, 'onHandover'>,
   ) {
-    this.el = h('section.stage', { 'aria-label': 'Room map' }, h('div.stage-frame', {}, this.canvas, this.empty), this.hint, this.said, this.tray, this.table);
+    this.el = h('section.stage', { 'aria-label': 'Room map' }, h('h2.sr-only', {}, 'Room map'), h('div.stage-frame', {}, this.canvas, this.empty), this.hint, this.said, this.tray, this.table);
     this.canvas.addEventListener('pointerdown', (e) => this.down(e));
     this.canvas.addEventListener('pointermove', (e) => this.move(e));
     this.canvas.addEventListener('pointerup', (e) => this.up(e));

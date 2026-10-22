@@ -59,7 +59,7 @@ describe('room poll on the host', () => {
     expect(poll.counts()).toEqual([0, 0]);
   });
 
-  it('Reveal counts every phone that voted, offline ones included; only Forget offline drops a vote', async () => {
+  it('Reveal counts every phone that voted, offline ones included; only Remove disconnected phones drops a vote', async () => {
     const r = await room([0, 0.5, 1]);
     const poll = runPoll(r.session, r.director, 'Q', ['A', 'B'], () => {});
     r.phones[0].say({ t: 'vote', choice: 0 });

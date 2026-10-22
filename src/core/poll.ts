@@ -30,7 +30,7 @@ export interface PollState {
 
 export type PollAction =
   | { type: 'vote'; seat: number; choice: number }
-  /** The phone was forgotten (Forget offline). */
+  /** The phone was forgotten (Remove disconnected phones). */
   | { type: 'leave'; seat: number }
   | { type: 'anon'; on: boolean }
   | { type: 'close' }

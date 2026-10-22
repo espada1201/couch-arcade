@@ -7,6 +7,7 @@ import { followPanel } from './follow';
 import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { Director } from './director';
+import { GOTO_TAB } from './panel';
 import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel } from './play';
 import { pollPanel, savedPoll } from './poll';
 import { HostSession } from './session';
@@ -140,8 +141,10 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       if (on) panelHost.setAttribute('aria-labelledby', b.id);
     }
     if (!panels.has(id)) panels.set(id, tabs.find((t) => t[0] === id)![2]());
-    panelHost.replaceChildren(panels.get(id)!);
+    panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), panels.get(id)!);
   };
+  // A panel can send the host to another tab ("Go to Locate"); the tab strip lives here.
+  panelHost.addEventListener(GOTO_TAB, (e) => select((e as CustomEvent<string>).detail, true));
   tabs.forEach(([id, label], i) =>
     tablist.append(
       h(
@@ -154,8 +157,10 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
           onclick: () => select(id),
           onkeydown: (e: Event) => {
             const k = (e as KeyboardEvent).key;
-            const d = k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0;
-            if (d) select(tabs[(i + d + tabs.length) % tabs.length][0], true);
+            const to = k === 'Home' ? 0 : k === 'End' ? tabs.length - 1 : k === 'ArrowRight' ? (i + 1) % tabs.length : k === 'ArrowLeft' ? (i + tabs.length - 1) % tabs.length : -1;
+            if (to < 0) return;
+            (e as KeyboardEvent).preventDefault();
+            select(tabs[to][0], true);
           },
         },
         h('span.tab-num', {}, String(i + 1).padStart(2, '0')),
@@ -168,6 +173,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     h(
       'div.console',
       {},
+      h('h1.sr-only', {}, 'Swarm Screen host console'),
       h(
         'header.topbar',
         {},
@@ -178,9 +184,9 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
         h(
           'div.top-actions',
           {},
-          h('button.btn.ghost.small', { type: 'button', onclick: () => director.idle() }, 'Lights off'),
+          h('button.btn.ghost.small', { type: 'button', title: 'Stop whatever is running. Every phone goes back to its dim waiting screen.', onclick: () => director.idle() }, 'Lights off'),
           // Whatever runs keeps running; a poll drops the forgotten phones' votes.
-          h('button.btn.ghost.small', { type: 'button', onclick: () => session.forgetOffline() }, 'Forget offline'),
+          h('button.btn.ghost.small', { type: 'button', title: 'Take phones that have lost their connection off the map and the count. Connected phones stay.', onclick: () => session.forgetOffline() }, 'Remove disconnected phones'),
           h(
             'button.btn.ghost.small',
             {
@@ -194,6 +200,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       h(
         'aside.join',
         { 'aria-label': 'Join this room' },
+        h('h2.sr-only', {}, 'Join this room'),
         h('div.qr', {}, qrSvg(joinUrl)),
         h('p.join-step', {}, 'Point a phone camera here, open the link and tap ', h('strong', {}, 'Join the swarm'), '.'),
         h('a.join-url', { href: joinUrl, target: '_blank', rel: 'noopener' }, joinUrl.replace(/^https?:\/\//, '')),
