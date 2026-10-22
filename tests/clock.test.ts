@@ -120,6 +120,30 @@ describe('clock across links', () => {
   });
 });
 
+describe('clock drift', () => {
+  it('expires bounds older than a minute: a fast trip from 90 s ago no longer vouches for an offset that has drifted since', () => {
+    let t = 0;
+    const est = new ClockEstimator(() => t);
+    for (let i = 0; i < 5; i++) est.add({ offset: 0, rtt: 2 });
+    // 100 ppm of drift over 90 s is 9 ms; the pings since are slower, so their bounds are wide.
+    t = 90_000;
+    est.add({ offset: 10, rtt: 30 });
+    est.add({ offset: 10, rtt: 30 });
+    expect(est.count).toBe(2);
+    expect(est.offset).toBe(10);
+  });
+
+  it('keeps bounds a minute old or less', () => {
+    let t = 0;
+    const est = new ClockEstimator(() => t);
+    est.add({ offset: 0, rtt: 2 });
+    t = 60_000;
+    est.add({ offset: 4, rtt: 30 });
+    expect(est.count).toBe(2);
+    expect(est.offset).toBe(0);
+  });
+});
+
 describe('clock reset', () => {
   it('keeps showing the last offset until new samples land, with unknown uncertainty', () => {
     const est = simulate(500, 3);

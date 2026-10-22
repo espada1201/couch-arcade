@@ -6,8 +6,10 @@
 // the middle of the tightest bounds; what remains is half the difference between the two
 // directions' fastest trips, which no clock sync can see.
 
-/** Pongs kept: about two minutes at the steady ping rate, short enough that clock drift stays small. */
+/** Most pongs kept. */
 const KEEP = 60;
+/** A pong's bound expires after this: two clocks 100 ppm apart drift 6 ms a minute, so a bound 90 s old is already 9 ms off. */
+const EXPIRE_MS = 60_000;
 
 export interface ClockSample {
   offset: number;
@@ -19,9 +21,14 @@ export function sampleFrom(t0: number, t1: number, t2: number, t3: number): Cloc
 }
 
 /** What one pong says: the offset lies in [lo, hi]. */
-interface Bound {
+interface Range {
   lo: number;
   hi: number;
+}
+
+interface Bound extends Range {
+  /** When it was learned, on this device's clock. */
+  at: number;
 }
 
 export class ClockEstimator {
@@ -31,9 +38,13 @@ export class ClockEstimator {
   /** The link was replaced: the next pong decides whether the host's clock is still the same one. */
   private relinked = false;
 
+  constructor(private readonly now: () => number = () => performance.now()) {}
+
   add(s: ClockSample): void {
     if (!Number.isFinite(s.offset) || !(s.rtt >= 0)) return;
-    const b = { lo: s.offset - s.rtt / 2, hi: s.offset + s.rtt / 2 };
+    const at = this.now();
+    this.bounds = this.bounds.filter((b) => at - b.at <= EXPIRE_MS);
+    const b = { lo: s.offset - s.rtt / 2, hi: s.offset + s.rtt / 2, at };
     // A new host page (or a clock that jumped) shows as a pong that rules out the current estimate.
     if (this.relinked && (b.lo > this.off || b.hi < this.off)) this.bounds = [];
     this.relinked = false;
@@ -50,7 +61,7 @@ export class ClockEstimator {
   }
 
   /** The tightest bounds, and the third-tightest of each kind (-Infinity/Infinity with fewer than three). */
-  private tightest(): Bound & { lo3: number; hi3: number } {
+  private tightest(): Range & { lo3: number; hi3: number } {
     const los = this.bounds.map((b) => b.lo).sort((a, b) => b - a);
     const his = this.bounds.map((b) => b.hi).sort((a, b) => a - b);
     return { lo: los[0], hi: his[0], lo3: los[2] ?? -Infinity, hi3: his[2] ?? Infinity };
