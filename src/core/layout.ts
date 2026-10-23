@@ -1,7 +1,7 @@
 // Turns raw positions (camera coordinates or seat-grid entries) into "room space":
 // the crowd's bounding box stretched to 0..1 on both axes, plus the box's true aspect
 // ratio so effects that care about real distances (ripples, image framing) stay round.
-import { clamp } from './math';
+import { clamp, median } from './math';
 
 export interface Point {
   x: number;
@@ -54,6 +54,36 @@ export function nearest(seat: number, room: Room, k: number, exclude: Set<number
     .sort((a, b) => a[1] - b[1])
     .slice(0, k)
     .map(([s]) => s);
+}
+
+/** Each point's distance, in room heights, to the point nearest it. Empty when there is only one point. */
+export function nearestGaps(points: Point[], aspect: number): number[] {
+  if (points.length < 2) return [];
+  return points.map((p, i) => Math.min(...points.flatMap((q, j) => (j === i ? [] : [distance(p, q, aspect)]))));
+}
+
+/** The shape of a room nobody has placed a phone in yet. */
+export const DEFAULT_ROOM_ASPECT = 16 / 9;
+/** Room heights between phones in a row that has no placed phones to copy the spacing from: about a phone lying down, with a little air. */
+const LONE_STEP = 0.35;
+/** The least a row's step may be, so phones placed a hair apart do not get a row too tight to tell apart. */
+const MIN_STEP = 0.05;
+
+/**
+ * Where `n` new phones go in one left-to-right row past the right-most `placed` phone, at the usual gap between
+ * placed phones. The room grows to hold the row, so `placed` come back rescaled to stay on the same spot on the
+ * floor; with none placed the row fills a default room. `aspect` is the room the `placed` points are in.
+ */
+export function rowAfter(placed: Point[], aspect: number, n: number): { placed: Point[]; row: Point[]; aspect: number } {
+  if (placed.length === 0) return { placed, row: Array.from({ length: n }, (_, i) => ({ x: (i + 0.5) / n, y: 0.5 })), aspect: DEFAULT_ROOM_ASPECT };
+  const step = Math.max(MIN_STEP, median(nearestGaps(placed, aspect)) || LONE_STEP);
+  const last = placed.reduce((a, b) => (b.x > a.x ? b : a));
+  const width = Math.max(aspect, last.x * aspect + step * n);
+  return {
+    placed: placed.map((p) => ({ x: (p.x * aspect) / width, y: p.y })),
+    row: Array.from({ length: n }, (_, i) => ({ x: (last.x * aspect + step * (i + 1)) / width, y: last.y })),
+    aspect: width,
+  };
 }
 
 export type RGB = [number, number, number];
