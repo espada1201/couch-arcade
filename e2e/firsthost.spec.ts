@@ -228,6 +228,32 @@ test('keyboard: Enter in a Name field or in "Or your words" moves focus to Flip,
   expect(errors).toEqual([]);
 });
 
+test('typing "Or your words" updates the preview by itself, like the Name field, and "Use words" still works', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  const chosen = host.locator('.thumbs button[aria-pressed=true], .moments button[aria-pressed=true]');
+  await expect(chosen).toHaveCount(1);
+  const picture = () => host.locator('.stunt-preview canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  const before = await picture();
+  await host.locator('#stunt-words').pressSequentially('HAPPY BIRTHDAY MAYA');
+  // No press of Use words: the picture is the words once typing pauses.
+  await expect(chosen).toHaveCount(0);
+  expect(await picture()).not.toBe(before);
+  // Keeps up with more typing, and an emptied box leaves the last words showing.
+  const typed = await picture();
+  await host.locator('#stunt-words').pressSequentially('!');
+  await expect.poll(picture).not.toBe(typed);
+  const latest = await picture();
+  await host.locator('#stunt-words').fill('');
+  await host.waitForTimeout(600);
+  expect(await picture()).toBe(latest);
+  await host.locator('#stunt-words').fill('GO');
+  await host.getByRole('button', { name: 'Use words' }).click();
+  await expect.poll(picture).not.toBe(typed);
+  expect(errors).toEqual([]);
+});
+
 test('Card stunt says what to expect from few phones', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);

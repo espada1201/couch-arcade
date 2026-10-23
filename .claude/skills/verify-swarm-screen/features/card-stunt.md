@@ -7,7 +7,7 @@ Any picture, the host's words or an event template is spread across the crowd an
 - `photo-wall` Photo wall style: three phones in a row show a red, green, blue picture across all three, each with its own picture filling its screen; four phones in a square show their quadrants.
 - `line-up` "Line them up for me" in the note at the top (shown only while some connected phone is not on the map, next to "Go to Locate") puts every such phone into one left-to-right row in seat order, after any phones already on the map, which do not move. The panel says `Done. Phones 1 to 3 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.` and focus goes to Flip if a picture is already chosen, else to the upload.
 - `stunt-picture` Stadium cards style, an uploaded picture: each phone shows its quadrant's colour.
-- `stunt-words` "Use words" flips a word image.
+- `stunt-words` "Use words" flips a word image. The preview also follows the words as they are typed (about 0.3 s after the last key, like the Name field), so Use words is only a confirm; an emptied box leaves the last words showing.
 - `templates` Names with a heart needs both names (message, focus on the empty field); Happy birthday needs a name; Just married needs none.
 - `record` "Record the moment" films the flip and offers a `.webm` keepsake.
 - `slow-flip` with a 5 MB song downloading in the background, a phone on 1 Mbps Wi-Fi still flips with the rest.

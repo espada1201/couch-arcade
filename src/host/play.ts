@@ -17,6 +17,9 @@ import { speakerPanel } from './speaker';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
 
+/** How long the host's words rest before the preview shows them. */
+const WORDS_PAUSE_MS = 300;
+
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
   const all = presets();
   let chosen: Stunt = all[0];
@@ -28,7 +31,10 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const show = () => previews[style](chosen);
   /** Whether the host has chosen a picture, words or template, as opposed to the one that is showing at the start. */
   let picked = false;
+  /** The timer that shows the words once typing pauses. */
+  let typing = 0;
   const pick = (s: Stunt, m: Moment | null = null) => {
+    clearTimeout(typing);
     picked = true;
     flips.cancel();
     if (s !== chosen) chosen.close?.();
@@ -76,6 +82,11 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const text = words.value.trim().toUpperCase();
     if (text) pick(textStunt(text, session.layout.aspect));
   };
+  // The preview follows what is typed, as the names do, once the typing pauses.
+  words.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = window.setTimeout(useWords, WORDS_PAUSE_MS);
+  });
   enterToFlip(words, useWords);
   const file = h('input', { type: 'file', accept: 'image/*', id: 'stunt-file' });
   file.addEventListener('change', async () => {
