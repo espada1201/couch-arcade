@@ -84,6 +84,11 @@ export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice
     show(target) {
       measureBar();
       target.scrollIntoView({ block: 'nearest' });
+      // "nearest" leaves a target that only the bar's margin overlaps where it is, so its foot would sit under the bar.
+      const r = target.getBoundingClientRect();
+      const barTop = bar.getBoundingClientRect().top;
+      const roof = Math.max(0, el.parentElement?.getBoundingClientRect().top ?? 0);
+      if (r.bottom > barTop + 0.5 && r.height <= barTop - roof) target.scrollIntoView({ block: 'end' });
     },
   };
 }

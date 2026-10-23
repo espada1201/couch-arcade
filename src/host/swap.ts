@@ -5,7 +5,7 @@ import type { HostSession } from './session';
 
 /** What the host reads once phones `a` and `b` (0-based) traded places; `order`: the seats left to right now. */
 export function swapSaid(a: number, b: number, order: number[]): string {
-  return `Swapped phones ${a + 1} and ${b + 1}. Left to right: ${order.map((s) => s + 1).join(', ')}.`;
+  return `Swapped phones ${a + 1} and ${b + 1}. Left to right: ${order.map((s) => s + 1).join(', ')}. Phone ${order[0] + 1} is on the left now and shows the left of the picture.`;
 }
 
 /** What the buttons look like: the seats left to right, and which of them are away. The row is rebuilt only when this changes. */

@@ -3,8 +3,12 @@ import { swapLine, swapSaid, swapShape } from '../src/host/swap';
 
 describe('what the host reads after swapping two phones', () => {
   it('names both phones and the new order from the left', () => {
-    expect(swapSaid(0, 2, [2, 1, 0])).toBe('Swapped phones 1 and 3. Left to right: 3, 2, 1.');
-    expect(swapSaid(3, 1, [0, 3, 2, 1])).toBe('Swapped phones 4 and 2. Left to right: 1, 4, 3, 2.');
+    expect(swapSaid(0, 2, [2, 1, 0])).toMatch(/^Swapped phones 1 and 3\. Left to right: 3, 2, 1\./);
+    expect(swapSaid(3, 1, [0, 3, 2, 1])).toMatch(/^Swapped phones 4 and 2\. Left to right: 1, 4, 3, 2\./);
+  });
+  it('says what the phone on the left now shows, in plain words', () => {
+    expect(swapSaid(0, 2, [2, 1, 0])).toBe('Swapped phones 1 and 3. Left to right: 3, 2, 1. Phone 3 is on the left now and shows the left of the picture.');
+    expect(swapSaid(3, 1, [0, 3, 2, 1])).toBe('Swapped phones 4 and 2. Left to right: 1, 4, 3, 2. Phone 1 is on the left now and shows the left of the picture.');
   });
 });
 
@@ -27,7 +31,7 @@ describe('the line under the swap buttons', () => {
     expect(swapLine(2, { text: 'Swapped phones 1 and 2. Left to right: 2, 1, 3.', order: [1, 0, 2] }, [0, 1, 2])).toBe('Phone 3 picked. Now pick the phone to swap it with.');
   });
   it('keeps what a swap said only while the phones are still in the order it described', () => {
-    const note = { text: 'Swapped phones 1 and 3. Left to right: 3, 2, 1.', order: [2, 1, 0] };
+    const note = { text: swapSaid(0, 2, [2, 1, 0]), order: [2, 1, 0] };
     expect(swapLine(null, note, [2, 1, 0])).toBe(note.text);
     expect(swapLine(null, note, [0, 1, 2])).toBe('');
     expect(swapLine(null, note, [2, 1, 0, 3])).toBe('');

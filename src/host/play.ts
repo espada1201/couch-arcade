@@ -103,9 +103,9 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
       pick(await fileStunt(f));
       say('Your picture is ready. Press Flip the cards.');
       // Straight to Flip, for the mouse and the keyboard alike: no hunt past every design.
-      flip.focus();
-      // The preview sits below the designs and the name fields; show it above the footer, so what will go on the crowd is checked at a glance.
-      msg.show(preview);
+      flip.focus({ preventScroll: true });
+      // The swap row and the preview are one block: show it above the footer, so what will go on the crowd is checked at a glance.
+      msg.show(check);
     } catch {
       fail('That file could not be read as a picture.');
     }
@@ -122,6 +122,17 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const { style: s, picture } = showing;
     if (await flips.refresh((ctl) => STYLES[s].flip(session, picture, ctl))) say('The picture is cut again for the new places.');
   };
+  /** The swap row with the picture it re-cuts, side by side: a swap is checked on the preview right under it. */
+  const check = h(
+    'div.wall-check',
+    {},
+    swapPicker(session, () => {
+      // What the swap said makes the block taller: keep the result and the Flip bar on screen together.
+      msg.show(check);
+      void swapped();
+    }),
+    preview,
+  );
   flip.addEventListener('click', async () => {
     if (flips.inFlight) return;
     flushWords();
@@ -161,23 +172,25 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     if (seats.length === 0) return;
     sayLined(lineUpSaid(seats, after));
     linedFor = layoutNow();
-    (picked ? flip : file).focus();
+    // The swap row is what the host may need next: bring it into view with the Flip bar, whichever control takes the keyboard.
+    (picked ? flip : file).focus({ preventScroll: true });
+    msg.show(check);
   };
   const msg = footedPanel(
     'Turn your photo or your words into a picture across the crowd. Every phone flips together on a 3, 2, 1 countdown.',
     [
       placementNote(session, 'Photo wall and Stadium cards need phones on the map.', lineUp),
       lined,
-      swapPicker(session, swapped),
       styles,
       ...notes,
       h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
+      // The swap and what it did sit together, so one scroll shows both (and the Flip bar under them).
+      check,
       h('p.note', {}, 'Or pick one of these ready-made designs:'),
       thumbs,
       moments,
       h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
       h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: useWords }, 'Use words')),
-      preview,
       rec?.el,
     ],
     [flip],
