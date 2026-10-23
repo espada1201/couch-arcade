@@ -113,7 +113,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     flushWords();
     const missing = moment && missingNames(moment, typed());
     if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
-    if (!requirePlaced(session, { fail, retract })) return;
+    if (!requirePlaced(session, msg)) return;
+    sayLined('');
     const [s, picture] = [style, chosen];
     if (!(await flips.press((ctl) => STYLES[s].flip(session, picture, ctl)))) return;
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
@@ -131,17 +132,27 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   });
   session.subscribe(show);
   show();
+  const lined = h('p.note', { role: 'status', hidden: true });
+  const layoutNow = () => JSON.stringify([session.layout.aspect, [...session.layout.positions]]);
+  let linedFor = '';
+  const sayLined = (text: string) => {
+    setText(lined, text);
+    lined.hidden = !text;
+  };
+  session.subscribe(() => lined.textContent && layoutNow() !== linedFor && sayLined(''));
   const lineUp = () => {
     const after = session.layout.positions.size > 0;
     const seats = session.lineUp();
     if (seats.length === 0) return;
-    say(lineUpSaid(seats, after));
+    sayLined(lineUpSaid(seats, after));
+    linedFor = layoutNow();
     (picked ? flip : file).focus();
   };
-  const { el, say, fail, retract } = footedPanel(
+  const msg = footedPanel(
     'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
     [
       placementNote(session, 'Card stunt needs phones on the map.', lineUp),
+      lined,
       styles,
       ...notes,
       h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
@@ -155,6 +166,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     ],
     [flip],
   );
+  const { el, say, fail } = msg;
   // Busy but not disabled, so Flip keeps the keyboard focus the upload gave it.
   const flips = flipper(director, { say, fail, busy: (on) => (on ? flip.setAttribute('aria-disabled', 'true') : flip.removeAttribute('aria-disabled')) }, rec?.end);
   return el;
@@ -256,18 +268,19 @@ export function liveWave(session: HostSession) {
 export function wavePanel(session: HostSession, stage: Stage, director: Director): HTMLElement {
   const wave = liveWave(session);
   const go = (w: WaveParams) => {
-    if (!requirePlaced(session, { fail, retract })) return;
+    if (!requirePlaced(session, msg)) return;
     director.run(wave.start(w, 250));
     controls.arm();
     say('Rolling. Change anything and it updates live.');
   };
   const controls = waveControls(stage, {}, wave.retune, true);
-  const { el, say, fail, retract } = panel(
+  const msg = panel(
     'A band of light rolls through the room in real space: a sweep from wall to wall, a ping-pong, or a ripple spreading out from any spot you tap on the map.',
     placementNote(session, 'The wave needs phones on the map.'),
     controls.el,
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: () => go(controls.get()) }, 'Start the wave'), stopButton(director, () => say(''))),
   );
+  const { el, say } = msg;
   return el;
 }
 
@@ -284,11 +297,11 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
   const wave = liveWave(session);
   const params = (): WaveParams => ({ ...WAVE_DEFAULTS, ...current.w, period: current.w.period / tempo });
   const play = () => {
-    if (!requirePlaced(session, { fail, retract })) return;
+    if (!requirePlaced(session, msg)) return;
     director.run(wave.start(params(), 400));
     say(`Playing ${current.name}. Phones that tapped “Join” and are off silent will sing.`);
   };
-  const { el, say, fail, retract } = panel(
+  const msg = panel(
     'Every phone is one speaker on the shared clock, so sound moves through the crowd. The header shows how closely the phones’ clocks agree, and a Bluetooth speaker on a phone adds its own delay. Each phone sings its own note, set by where it sits.',
     placementNote(session, 'Spatial tones need phones on the map.'),
     h(
@@ -310,6 +323,7 @@ export function soundPanel(session: HostSession, director: Director): HTMLElemen
     }),
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: play }, 'Play'), stopButton(director, () => say(''))),
   );
+  const { el, say } = msg;
   const party = speakerPanel(session, director);
   el.hidden = true;
   const mode = segmented<'party' | 'tones'>('Music mode', [['party', 'Party speaker'], ['tones', 'Spatial tones']], 'party', (v) => {

@@ -84,6 +84,10 @@ function fakeElement() {
     setAttribute: (k: string, v: string) => ((el.attrs[k] = v), k === 'hidden' && (el.hidden = true)),
     addEventListener: (type: string, cb: () => unknown) => listeners.set(type, [...(listeners.get(type) ?? []), cb]),
     append: (...kids: unknown[]) => el.kids.push(...kids),
+    replaceChildren: (...kids: unknown[]) => (el.kids = kids),
+    get firstChild() {
+      return el.kids[0] ?? null;
+    },
     fire: async (type: string) => {
       for (const cb of listeners.get(type) ?? []) await cb();
     },

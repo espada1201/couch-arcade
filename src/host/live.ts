@@ -175,7 +175,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   };
 
   const start = async () => {
-    if (!requirePlaced(session, { fail, retract })) return;
+    if (!requirePlaced(session, msg)) return;
     const hold = director.run({ stop });
     const mine = ++gen;
     goLive.disabled = true;
@@ -199,7 +199,7 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
   };
   file.addEventListener('change', () => loop && kind === 'video' && void switchSource());
 
-  const { el, say, fail, retract } = panel(
+  const msg = panel(
     'Turn the crowd into a live screen. Point your camera at the stage, play a video, or let a generated animation run, and every phone becomes one pixel of the moving picture.',
     placementNote(session, 'Live screen needs phones on the map.'),
     cardStuntPointer('This is for moving pictures, not a still photo.'),
@@ -218,5 +218,6 @@ export function livePanel(session: HostSession, director: Director): HTMLElement
     canvas,
     h('div.row', {}, goLive, stopButton(director, () => say(''))),
   );
+  const { el, say, fail } = msg;
   return el;
 }

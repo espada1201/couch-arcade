@@ -8,8 +8,12 @@ export interface Notice {
   say(text: string): void;
   /** Something the host has to fix. Shown in the `.result` look, in red, brought into view, with an optional button. */
   fail(text: string, action?: { label: string; run: (button: HTMLElement) => void }): void;
-  /** Takes the error away if it still reads `text`, once what caused it is fixed. A status or another error stays. */
-  retract(text: string): void;
+  /**
+   * `fail` for an error that stays true only until `until` calls `done`: the error then goes by itself.
+   * A status or another error that took its place stays. `until` returns how to stop listening.
+   * Only one such error is waited on at a time.
+   */
+  failUntil(key: string, text: string, until: (done: () => void) => () => void, action?: { label: string; run: (button: HTMLElement) => void }): void;
 }
 
 /** Brings a message the host just caused into view if it sits below the fold or under the edge of the panel. */
@@ -22,22 +26,39 @@ export function notice(): Notice {
   const status = h('p.note', { role: 'status' });
   const alert = h('div.alert', { role: 'alert' });
   const el = h('div.notice', {}, status, alert);
+  /** The `failUntil` key of the error the alert shows, or '' when it shows something else or nothing. */
+  let shown = '';
+  let stopWaiting: (() => void) | null = null;
+  const write: Notice['fail'] = (text, action) => {
+    status.textContent = '';
+    alert.replaceChildren(text, ...(action ? [' ', h('button.btn.small', { type: 'button', onclick: (e: Event) => action.run(e.currentTarget as HTMLElement) }, action.label)] : []));
+    reveal(alert);
+  };
   return {
     el,
     say(text) {
       const first = !status.textContent;
       if (alert.firstChild) alert.replaceChildren();
+      shown = '';
       if (status.textContent !== text) status.textContent = text;
       // Only the first line of a run is brought into view: a status that updates every frame must not keep scrolling the page.
       if (text && first) reveal(status);
     },
     fail(text, action) {
-      status.textContent = '';
-      alert.replaceChildren(text, ...(action ? [' ', h('button.btn.small', { type: 'button', onclick: (e: Event) => action.run(e.currentTarget as HTMLElement) }, action.label)] : []));
-      reveal(alert);
+      shown = '';
+      write(text, action);
     },
-    retract(text) {
-      if (alert.textContent?.startsWith(text)) alert.replaceChildren();
+    failUntil(key, text, until, action) {
+      stopWaiting?.();
+      write(text, action);
+      shown = key;
+      stopWaiting = until(() => {
+        stopWaiting?.();
+        stopWaiting = null;
+        if (shown !== key) return;
+        shown = '';
+        alert.replaceChildren();
+      });
     },
   };
 }
@@ -63,20 +84,14 @@ export const gotoTab = (from: Element, id: string): boolean => from.dispatchEven
 /** Sent up from Locate when a scan left every phone on the map, so the host page can offer the way back. */
 export const ALL_PLACED = 'swarm:all-placed';
 
-const NEED_PLACED = 'Place some phones on the map first.';
-
 /**
- * True when there are phones on the map; otherwise says so, offers the way to Locate, and returns false.
+ * True when there are phones on the map; otherwise says so on `notice`, offers the way to Locate, and returns false.
  * The message goes again as soon as a phone is on the map.
  */
-export function requirePlaced(session: HostSession, { fail, retract }: Pick<Notice, 'fail' | 'retract'>): boolean {
+export function requirePlaced(session: HostSession, notice: Notice): boolean {
   if (session.layout.positions.size > 0) return true;
-  fail(NEED_PLACED, { label: 'Go to Locate', run: (button) => gotoTab(button, 'locate') });
-  const off = session.subscribe(() => {
-    if (session.layout.positions.size === 0) return;
-    off();
-    retract(NEED_PLACED);
-  });
+  const action = { label: 'Go to Locate', run: (button: HTMLElement) => gotoTab(button, 'locate') };
+  notice.failUntil('needs-placement', 'Place some phones on the map first.', (done) => session.subscribe(() => session.layout.positions.size > 0 && done()), action);
   return false;
 }
 

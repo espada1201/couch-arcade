@@ -185,7 +185,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
 
   /** Take over the crowd for the show; false (and a hint) if it needs placed phones and none are. */
   const takeOver = (placed = true): boolean => {
-    if (placed && !requirePlaced(session, { fail, retract })) return false;
+    if (placed && !requirePlaced(session, msg)) return false;
     say('');
     director.run({ stop: halt });
     release = keepScreenOn();
@@ -236,7 +236,7 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     if (away <= COUNT_FROM * 1000) say(`Midnight is only ${Math.ceil(away / 1000)} s away: the phones count down what is left.`);
   };
 
-  const { el, say, fail, retract } = panel(
+  const msg = panel(
     'Press one button and walk away. The show loops through your title, waves of light and sound, live animation, a bullseye and a heart, until you press Stop. It cannot show your own photo. Or play one event moment on its own.',
     placementNote(session, 'The show needs phones on the map (the New Year countdown does not).'),
     cardStuntPointer(''),
@@ -250,5 +250,6 @@ export function showPanel(session: HostSession, director: Director): HTMLElement
     now,
     h('div.row', {}, h('button.btn.primary', { type: 'button', onclick: start }, 'Start the show'), stopButton(director)),
   );
+  const { el, say, fail } = msg;
   return el;
 }

@@ -290,6 +290,42 @@ test('typing "Or your words" updates the preview by itself, like the Name field,
   expect(errors).toEqual([]);
 });
 
+const DONE = 'Done. Phones 1 and 2 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.';
+
+test('the line-up instruction stays when a picture is chosen, and goes when the host flips', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  for (let i = 0; i < 2; i++) await joinPhone(context, code, i, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+  await expect(host.getByText(DONE)).toBeVisible();
+  await host.locator('.thumbs button').nth(1).click();
+  await host.locator('#stunt-words').fill('GO');
+  await host.getByRole('radio', { name: 'Stadium cards' }).check();
+  await expect(host.getByText(DONE)).toBeVisible();
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  await expect(host.getByText(DONE)).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('the line-up instruction goes when the layout changes', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  for (let i = 0; i < 2; i++) await joinPhone(context, code, i, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+  await expect(host.getByText(DONE)).toBeVisible();
+  await joinPhone(context, code, 2, errors);
+  await expect(host.locator('.needs')).toContainText('2 of 3 phones are on the map');
+  await expect(host.getByText(DONE)).toBeVisible();
+  await host.locator('.tray .chip').first().click();
+  const box = (await host.locator('.stage-canvas').boundingBox())!;
+  await host.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.2);
+  await expect(host.locator('.needs')).toContainText('All 3 phones are on the map');
+  await expect(host.getByText(DONE)).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('Card stunt says what to expect from few phones', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
