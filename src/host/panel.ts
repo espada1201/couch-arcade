@@ -71,13 +71,22 @@ export function panel(intro: string, ...body: Child[]): Notice {
   return { ...msg, el };
 }
 
-export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice {
+export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice & { show(el: HTMLElement): void } {
   const msg = notice();
   const bar = h('div.panel-foot', {}, ...foot, msg.el);
   const el = h('div.panel-body', {}, h('p.panel-intro', {}, intro), ...body, bar);
   // A message that wraps makes the bar taller; scrolling to a field must stop above the bar, whatever its height.
-  new ResizeObserver(() => el.style.setProperty('--foot-h', `${bar.offsetHeight}px`)).observe(bar);
-  return { ...msg, el };
+  const clearBar = () => el.style.setProperty('--foot-h', `${bar.offsetHeight}px`);
+  new ResizeObserver(clearBar).observe(bar);
+  return {
+    ...msg,
+    el,
+    // The observer runs after the frame, so a message just written has not made the bar taller yet: measure it now.
+    show(target) {
+      clearBar();
+      target.scrollIntoView({ block: 'nearest' });
+    },
+  };
 }
 
 /** Asks the host page to show another tab. The tab strip lives in the host view; panels only send the request. */

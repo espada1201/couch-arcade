@@ -674,3 +674,21 @@ test('a scan that places everyone leaves keyboard focus on Scan when the host di
   await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
   expect(errors).toEqual([]);
 });
+
+test('1280x800: after an upload the preview and Flip are both in view, without scrolling', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
+  await host.locator('#stunt-file').setInputFiles({ name: 'beach.png', mimeType: 'image/png', buffer: png(60, 40, (x) => (x < 30 ? [80, 160, 240] : [230, 210, 150])) });
+  await expect(host.getByText('Your picture is ready. Press Flip the cards.')).toBeVisible();
+  const seen = () =>
+    host.evaluate(() => {
+      const [pre, foot] = ['.stunt-preview', '.panel-foot'].map((s) => document.querySelector(s)!.getBoundingClientRect());
+      const flip = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Flip the cards')!.getBoundingClientRect();
+      const panel = document.querySelector('.panel')!.getBoundingClientRect();
+      return { previewShown: pre.top >= panel.top && pre.bottom <= foot.top + 1, flipShown: flip.top >= foot.top && flip.bottom <= innerHeight };
+    });
+  await expect.poll(seen).toEqual({ previewShown: true, flipShown: true });
+  expect(errors).toEqual([]);
+});

@@ -103,6 +103,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
       say('Your picture is ready. Press Flip the cards.');
       // Straight to Flip, for the mouse and the keyboard alike: no hunt past every design.
       flip.focus();
+      // The preview sits below the designs and the name fields; show it above the footer, so what will go on the crowd is checked at a glance.
+      msg.show(preview);
     } catch {
       fail('That file could not be read as a picture.');
     }
