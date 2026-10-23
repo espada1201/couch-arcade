@@ -193,16 +193,18 @@ export const MOMENTS: Moment[] = [
 ];
 
 export async function fileStunt(file: File): Promise<Stunt> {
-  let bmp = await createImageBitmap(file);
-  const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
-  const [c, ctx] = canvas2d(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k)));
-  ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  // Kept for the Photo wall, which crops pieces out of it at full resolution.
-  const keep = Math.min(1, UPLOAD_LONG_SIDE / Math.max(bmp.width, bmp.height));
-  if (keep < 1) {
-    const small = await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * keep), resizeHeight: Math.round(bmp.height * keep), resizeQuality: 'high' });
+  const bmp = await createImageBitmap(file);
+  try {
+    const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
+    const [c, ctx] = canvas2d(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k)));
+    ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    // Kept for the Photo wall, which crops pieces out of it at full resolution.
+    const keep = Math.min(1, UPLOAD_LONG_SIDE / Math.max(bmp.width, bmp.height));
+    const kept = keep < 1 ? await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * keep), resizeHeight: Math.round(bmp.height * keep), resizeQuality: 'high' }) : bmp;
+    if (kept !== bmp) bmp.close();
+    return { name: file.name, canvas: c, image: toImage(c), render: (w, h) => cover(kept, w, h), close: () => kept.close() };
+  } catch (e) {
     bmp.close();
-    bmp = small;
+    throw e;
   }
-  return { name: file.name, canvas: c, image: toImage(c), render: (w, h) => cover(bmp, w, h), close: () => bmp.close() };
 }
