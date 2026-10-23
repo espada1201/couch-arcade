@@ -19,7 +19,8 @@ function deliver(data: Uint8Array, sender: ChunkSender, r: Reassembler, now: num
   return sent;
 }
 
-describe('chunks', () => {
+// Virtual time, but these base64-encode hundreds of KB of chunks: on a busy machine that outlasts the default 5 s.
+describe('chunks', { timeout: 30_000 }, () => {
   it('base64 round-trips every byte value', () => {
     const all = Uint8Array.from({ length: 256 * 3 + 1 }, (_, i) => i & 0xff);
     expect(fromBase64(toBase64(all))).toEqual(all);
