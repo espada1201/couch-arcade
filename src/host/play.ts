@@ -37,6 +37,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     clearTimeout(typing);
     picked = true;
     flips.cancel();
+    // The line under Flip is about the last flip, not about this choice.
+    say('');
     if (s !== chosen) chosen.close?.();
     chosen = s;
     moment = m;
@@ -111,12 +113,13 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     if (!(await flips.press((ctl) => STYLES[s].flip(session, picture, ctl)))) return;
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
     rec?.begin(FLIP_LEAD_MS + 8000);
-    say(STYLES[s].status(session.playRoom().positions.size));
+    say(STYLES[s].status(session.playRoom().positions.size, picture.greeting ? 'greeting' : 'picture'));
   });
   // Every style's note stays in the page; only the chosen style's is shown.
   const notes = STYLE_KEYS.map((k) => h('p.note', { hidden: k !== style }, STYLES[k].note));
   const styles = segmented<CardStyle>('Style', STYLE_KEYS.map((k) => [k, STYLES[k].label]), style, (v) => {
     flips.cancel();
+    say('');
     style = v;
     notes.forEach((n, i) => (n.hidden = STYLE_KEYS[i] !== v));
     show();

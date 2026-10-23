@@ -128,3 +128,34 @@ test('Photo wall: "Line them up for me" with a picture already chosen moves focu
   for (const [i, want] of [RED, GREEN, BLUE].entries()) near(await screenCentre(phones[i]), want);
   expect(errors).toEqual([]);
 });
+
+test('the line under Flip is cleared when the picture, words, template or style change, and a greeting is called a greeting', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await scan(room);
+  const { host } = room;
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  const said = host.locator('.panel-body .notice > .note');
+  const flip = host.getByRole('button', { name: 'Flip the cards' });
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  await flip.click();
+  await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the picture.');
+  // Words: the old line goes, and the new flip is a greeting.
+  await host.locator('#stunt-words').fill('GO TEAM');
+  await host.keyboard.press('Enter');
+  await expect(said).toHaveText('');
+  await flip.click();
+  await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the greeting.');
+  await host.getByRole('button', { name: 'Just married' }).click();
+  await expect(said).toHaveText('');
+  await flip.click();
+  await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the greeting.');
+  await host.getByRole('button', { name: 'Stripes' }).click();
+  await expect(said).toHaveText('');
+  await flip.click();
+  await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the picture.');
+  await host.getByRole('radio', { name: 'Stadium cards' }).check();
+  await expect(said).toHaveText('');
+  expect(errors).toEqual([]);
+});

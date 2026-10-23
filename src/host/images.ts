@@ -20,6 +20,8 @@ export interface Stunt {
   image: Image;
   /** The picture drawn at exactly w x h pixels (Photo wall), whatever the shape. A property, so it can be passed on without its stunt. */
   render: (w: number, h: number) => HTMLCanvasElement;
+  /** Made of words, the host's own or an event template: a flip of it is a greeting, not a picture. */
+  greeting?: true;
   /** Lets go of what the stunt holds once another picture replaces it; only an upload holds anything. */
   close?: () => void;
 }
@@ -111,7 +113,7 @@ type Piece = string | typeof HEART;
 function wordsStunt(name: string, linesFor: (aspect: number) => Piece[][], aspect: number, color = GOLD): Stunt {
   const c = drawWords(linesFor(aspect), color, Math.round(STUNT_SIZE * Math.max(1, aspect)), Math.round(STUNT_SIZE * Math.max(1, 1 / aspect)));
   // The Photo wall lays the words out again for the wall's own shape.
-  return { name, canvas: c, image: toImage(c), render: (w, h) => drawWords(linesFor(w / h), color, w, h) };
+  return { name, canvas: c, image: toImage(c), greeting: true, render: (w, h) => drawWords(linesFor(w / h), color, w, h) };
 }
 
 function drawWords(lines: Piece[][], color: string, w: number, hgt: number): HTMLCanvasElement {

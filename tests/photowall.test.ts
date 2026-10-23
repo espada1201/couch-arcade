@@ -3,6 +3,7 @@ import type { Program } from '../src/core/effects';
 import type { Wall } from '../src/core/wall';
 import type { Flip, FlipControl } from '../src/host/cardstyles';
 import type { Director } from '../src/host/director';
+import { STYLES } from '../src/host/cardstyles';
 import { flipper } from '../src/host/flipper';
 import type { Stunt } from '../src/host/images';
 import { wallFlip, type WallPiece } from '../src/host/photowall';
@@ -174,5 +175,14 @@ describe('a Flip press', () => {
     const { flips, view, session } = await setup();
     await flips.press((c) => wallFlip(session, stunt, c, cutInto()));
     expect(view.say).not.toHaveBeenCalledWith('');
+  });
+});
+
+describe('what the host reads once a flip is on', () => {
+  it('keeps the picture line as it was, and calls words and templates a greeting', () => {
+    expect(STYLES.wall.status(3, 'picture')).toBe('3, 2, 1… 3 phones show their piece of the picture.');
+    expect(STYLES.wall.status(3, 'greeting')).toBe('3, 2, 1… 3 phones show their piece of the greeting.');
+    expect(STYLES.wall.status(1, 'greeting')).toBe('3, 2, 1… 1 phone shows its piece of the greeting.');
+    expect(STYLES.cards.status(3)).toBe('3, 2, 1… 3 phones flip together.');
   });
 });

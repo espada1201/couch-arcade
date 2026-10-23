@@ -38,8 +38,8 @@ export type FlipOutcome = { go: Flip } | { refuse: string } | { cancelled: true 
 interface CardStyleDef {
   label: string;
   note: string;
-  /** What the host reads once the flip is on, for `n` connected phones. */
-  status(n: number): string;
+  /** What the host reads once the flip is on, for `n` connected phones showing a `what`. */
+  status(n: number, what: 'picture' | 'greeting'): string;
   flip(session: HostSession, stunt: Stunt, ctl: FlipControl): Promise<FlipOutcome>;
   /** Keeps `into` showing the picture the way this style will use it. */
   preview(session: HostSession, into: HTMLElement): (stunt: Stunt) => void;
@@ -50,7 +50,7 @@ export const STYLES = {
   wall: {
     label: 'Photo wall',
     note: 'Lay the phones side by side, screens up, and each one shows its own piece of the picture.',
-    status: (n) => `3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'shows its' : 'show their'} piece of the picture.`,
+    status: (n, what) => `3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'shows its' : 'show their'} piece of the ${what}.`,
     flip: wallFlip,
     preview: wallPreviewer,
   },
