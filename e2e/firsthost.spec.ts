@@ -693,6 +693,30 @@ test('1280x800: after an upload the preview and Flip are both in view, without s
   expect(errors).toEqual([]);
 });
 
+test('1280x800: a tall portrait picture shows the top of its preview and Flip together, and a wide one does too', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
+  const seen = () =>
+    host.evaluate(() => {
+      const pre = document.querySelector('.stunt-preview canvas')!.getBoundingClientRect();
+      const foot = document.querySelector('.panel-foot')!.getBoundingClientRect();
+      const flip = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Flip the cards')!.getBoundingClientRect();
+      const panel = document.querySelector('.panel')!.getBoundingClientRect();
+      return { previewTopShown: pre.top >= panel.top, previewAboveFoot: pre.bottom <= foot.top + 1, previewHeight: Math.round(pre.height), flipShown: flip.top >= foot.top && flip.bottom <= innerHeight };
+    });
+  for (const [name, w, h] of [['tall.png', 30, 240], ['wide.png', 240, 30]] as const) {
+    await host.locator('#stunt-file').setInputFiles({ name, mimeType: 'image/png', buffer: png(w, h, (x, y) => ((x + y) % 2 ? [80, 160, 240] : [230, 210, 150])) });
+    await expect(host.getByText('Your picture is ready. Press Flip the cards.')).toBeVisible();
+    await expect.poll(seen).toMatchObject({ previewTopShown: true, previewAboveFoot: true, flipShown: true });
+    // Tall or wide, the preview is a sensible size: all of it is in view, so it must also be small enough to fit above the footer.
+    expect((await seen()).previewHeight).toBeGreaterThan(40);
+    await host.getByRole('button', { name: 'Flip the cards' }).focus();
+  }
+  expect(errors).toEqual([]);
+});
+
 test('1280x800: the top bar is one row, so the console keeps its height for the panels', async ({ context }) => {
   const errors: string[] = [];
   const { host, code } = await openHost(context, errors);
