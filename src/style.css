@@ -189,9 +189,13 @@ body.host { overflow-x: hidden; }
 .swap { display: grid; gap: 8px; }
 .swap p { margin: 0; }
 .swap-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Big enough to hit with any pointer, not only a finger. */
+.swap .chip { min-width: 44px; min-height: 44px; }
+/* The swap row and the picture it re-cuts: one block, so a swap is checked without scrolling. */
+.wall-check { display: grid; gap: 10px; }
 
 .controls { grid-area: controls; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--ink-2); }
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.tabs { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
 .tab {
   appearance: none; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted);
   padding: 12px 8px 10px; text-align: left; font: 600 15px var(--display); font-stretch: 112%; cursor: pointer;
@@ -398,6 +402,16 @@ label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
   .tab-num { display: none; }
   .stage-frame { min-height: 220px; }
   .panel-body { --px: 16px; --pb: 20px; padding-top: 12px; gap: 10px; }
+}
+/*
+ * A short window (a laptop at 150% zoom is 533 px tall): the ten tabs are one row that scrolls sideways, not three rows
+ * of 220 px, so the panel keeps more than half the height. The preview gives up some height too, and stays recognisable.
+ */
+@media (max-height: 640px) {
+  .tabs { display: flex; overflow-x: auto; scrollbar-width: thin; }
+  .tab { flex: none; flex-direction: row; align-items: center; white-space: nowrap; min-height: 44px; padding: 0 14px; }
+  .tab-num { display: none; }
+  .stunt-preview canvas { max-height: 130px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

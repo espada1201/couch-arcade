@@ -147,6 +147,12 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     else panelHost.tabIndex = 0;
   };
   new MutationObserver(syncPanelStop).observe(panelHost, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'tabindex'] });
+  /** In a short window the tabs scroll sideways: keep the chosen one in sight. */
+  const showTab = (b: HTMLElement) => {
+    const edge = b.offsetLeft + b.offsetWidth - tablist.clientWidth;
+    if (b.offsetLeft < tablist.scrollLeft) tablist.scrollLeft = b.offsetLeft;
+    else if (edge > tablist.scrollLeft) tablist.scrollLeft = edge;
+  };
   let current = '';
   let back: HTMLButtonElement | null = null;
   /** `from`: the tab that sent the host here with "Go to …", so the way back is one press. */
@@ -158,6 +164,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       b.tabIndex = on ? 0 : -1;
       if (on && focus) b.focus();
       if (on) panelHost.setAttribute('aria-labelledby', b.id);
+      if (on) showTab(b);
     }
     if (!panels.has(id)) panels.set(id, tabs.find((t) => t[0] === id)![2]());
     back = from ? h('button.btn.small', { type: 'button', onclick: () => select(from, true) }, `Back to ${tabs.find((t) => t[0] === from)![1]}`) : null;
@@ -169,7 +176,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   // A panel can send the host to another tab ("Go to Locate"); the tab strip lives here.
   panelHost.addEventListener(GOTO_TAB, (e) => select((e as CustomEvent<string>).detail, true, current));
   // A scan that placed everyone ends at the way back to the task that sent the host here, if there is one.
-  panelHost.addEventListener(ALL_PLACED, () => back?.focus());
+  panelHost.addEventListener(ALL_PLACED, (e) => back && (back.focus(), e.preventDefault()));
   tabs.forEach(([id, label], i) =>
     tablist.append(
       h(
