@@ -81,9 +81,11 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const optics = sim ? new BroadcastChannel(OPTICS_CHANNEL) : null;
 
   /** This phone's piece of the Photo wall, up from the flip instant; decoded beforehand so it appears with the rest. */
+  let tileSrc = '';
   const showTile = (p: Program, t: number) => {
     const src = p.kind === 'tile' && isJpegDataUrl(p.src) ? p.src : null;
-    if (src && tile.getAttribute('src') !== src) {
+    if (src && src !== tileSrc) {
+      tileSrc = src;
       tile.src = src;
       void tile.decode().catch(() => {});
     }

@@ -35,6 +35,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   };
   const pick = (s: Stunt, m: Moment | null = null) => {
     cancelFlip();
+    if (s !== chosen) chosen.close?.();
     chosen = s;
     moment = m;
     show();

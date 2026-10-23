@@ -18,8 +18,10 @@ export interface Stunt {
   name: string;
   canvas: HTMLCanvasElement;
   image: Image;
-  /** The picture drawn at exactly w x h pixels (Photo wall), whatever the shape. */
-  render(w: number, h: number): HTMLCanvasElement;
+  /** The picture drawn at exactly w x h pixels (Photo wall), whatever the shape. A property, so it can be passed on without its stunt. */
+  render: (w: number, h: number) => HTMLCanvasElement;
+  /** Lets go of what the stunt holds once another picture replaces it; only an upload holds anything. */
+  close?: () => void;
 }
 
 const UPLOAD_LONG_SIDE = 2048;
@@ -202,5 +204,5 @@ export async function fileStunt(file: File): Promise<Stunt> {
     bmp.close();
     bmp = small;
   }
-  return { name: file.name, canvas: c, image: toImage(c), render: (w, h) => cover(bmp, w, h) };
+  return { name: file.name, canvas: c, image: toImage(c), render: (w, h) => cover(bmp, w, h), close: () => bmp.close() };
 }
