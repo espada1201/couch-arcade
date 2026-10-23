@@ -19,6 +19,8 @@ export interface Hold {
   readonly active: boolean;
   /** Stop this run, if it still holds the room, and send the phones back to the lobby. */
   end(): void;
+  /** Send the phones something new for as long as this run still holds the room, without ending it. Whether it did. */
+  update(program: Program | ((seat: number) => Program), options?: { frame?: boolean }): boolean;
 }
 
 /** Owns what the phones run: starting something stops whatever was running (games, taps, stage picking). */
@@ -48,6 +50,11 @@ export class Director {
         return self.current === mine;
       },
       end: () => self.current === mine && self.idle(),
+      update(next, options) {
+        if (self.current !== mine) return false;
+        self.session.setProgram(next, options);
+        return true;
+      },
     };
   }
 

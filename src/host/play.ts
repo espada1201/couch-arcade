@@ -111,6 +111,17 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     }
   });
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
+  /** What the phones were last flipped with: a swap re-cuts this, not whatever the host has picked since. */
+  let showing: { style: CardStyle; picture: Stunt } | null = null;
+  /** Two phones traded places: what is on the phones was made for the old places. */
+  const swapped = async () => {
+    if (!flips.lit) return;
+    const again = () => say('Press Flip again to cut the picture for the new places.');
+    if (flips.inFlight) return flips.cancel(), again();
+    if (!showing || showing.picture !== chosen) return again();
+    const { style: s, picture } = showing;
+    if (await flips.refresh((ctl) => STYLES[s].flip(session, picture, ctl))) say('The picture is cut again for the new places.');
+  };
   flip.addEventListener('click', async () => {
     if (flips.inFlight) return;
     flushWords();
@@ -120,6 +131,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     sayLined('');
     const [s, picture] = [style, chosen];
     if (!(await flips.press((ctl) => STYLES[s].flip(session, picture, ctl)))) return;
+    showing = { style: s, picture };
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
     rec?.begin(FLIP_LEAD_MS + 8000);
     say(STYLES[s].status(session.playRoom().positions.size, picture.greeting ? 'greeting' : 'picture'));
@@ -156,7 +168,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     [
       placementNote(session, 'Photo wall and Stadium cards need phones on the map.', lineUp),
       lined,
-      swapPicker(session),
+      swapPicker(session, swapped),
       styles,
       ...notes,
       h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),

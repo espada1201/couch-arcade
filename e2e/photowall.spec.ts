@@ -302,3 +302,54 @@ test('Photo wall: a phone that is away shows dashed in the swap row and is named
   await expect(swap.getByRole('button', { name: 'Phone 1', exact: true })).not.toHaveAttribute('data-offline', /.*/);
   expect(errors).toEqual([]);
 });
+
+test('Photo wall: swapping two phones while the wall is showing re-cuts it, so each phone shows the piece for its new place without pressing Flip again', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await linedUpRoom(context, errors);
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  for (const [i, want] of [RED, GREEN, BLUE].entries()) near(await screenCentre(phones[i]), want);
+  const swap = host.locator('.swap');
+  await swap.getByRole('button', { name: 'Phone 1' }).click();
+  await swap.getByRole('button', { name: 'Phone 3' }).click();
+  await expect(host.getByText('The picture is cut again for the new places.')).toBeVisible();
+  for (const [i, want] of [BLUE, GREEN, RED].entries()) {
+    await expect.poll(async () => (await screenCentre(phones[i])).map((c, k) => Math.abs(c - want[k])).every((d) => d <= 45), { timeout: 10_000, message: `phone ${i + 1} shows ${want}` }).toBe(true);
+    await expect(phones[i].locator('img.tile-picture')).toBeVisible();
+  }
+  // No countdown came back: the phones never showed their seat number again.
+  await expect(host.getByText('Press Flip again')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('Photo wall: a swap after the host picked another picture says to press Flip again, rather than cutting a picture nobody asked for', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await linedUpRoom(context, errors);
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  await host.locator('.thumbs button').first().click();
+  const swap = host.locator('.swap');
+  await swap.getByRole('button', { name: 'Phone 1' }).click();
+  await swap.getByRole('button', { name: 'Phone 3' }).click();
+  await expect(host.locator('.panel-foot')).toContainText('Press Flip again to cut the picture for the new places.');
+  // The phones keep what they show until Flip is pressed.
+  near(await screenCentre(phones[0]), RED);
+  expect(errors).toEqual([]);
+});
+
+test('Photo wall: a swap with nothing flipped says nothing about the picture', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host } = await linedUpRoom(context, errors);
+  const swap = host.locator('.swap');
+  await swap.getByRole('button', { name: 'Phone 1' }).click();
+  await swap.getByRole('button', { name: 'Phone 3' }).click();
+  await expect(swap).toContainText('Swapped phones 1 and 3.');
+  await expect(host.locator('.panel-foot')).not.toContainText('Press Flip again');
+  await expect(host.locator('.panel-foot')).not.toContainText('cut again');
+  expect(errors).toEqual([]);
+});

@@ -178,6 +178,79 @@ describe('a Flip press', () => {
   });
 });
 
+describe('a swap while the wall is showing', () => {
+  /** A cut whose piece says where in the picture it came from, so a piece that is for another place is told apart. */
+  const byPlace = async (_: HTMLCanvasElement, wall: Wall) => new Map([...wall.tiles].map(([seat, r]) => [seat, piece(Math.round(r.x * 100))]));
+  const setup = async () => {
+    const r = await room([0.2, 0.5, 0.8]);
+    const view = { say: vi.fn(), fail: vi.fn(), busy: vi.fn() };
+    return { ...r, view, flips: flipper(r.director, view) };
+  };
+  const left = (p: { inbox: Parameters<typeof lastProgram>[0] }) => Number((lastProgram(p.inbox, 'tile')!.src.split(',')[1]));
+
+  it('cuts again for the new places and sends the new pieces at once, with no countdown and the room still held', async () => {
+    const { phones, session, director, flips } = await setup();
+    await flips.press((c) => wallFlip(session, stunt, c, byPlace));
+    expect(flips.lit).toBe(true);
+    expect([phones[0], phones[2]].map(left)).toEqual([0, 67]);
+    // Phones take the next frame once they have confirmed this one.
+    for (const p of phones) p.say({ t: 'ack', n: 1 });
+    expect(session.swapPlaces(0, 2)).toBe(true);
+    const before = session.now();
+    expect(await flips.refresh((c) => wallFlip(session, stunt, c, byPlace))).toBe(true);
+    expect([phones[0], phones[2]].map(left)).toEqual([67, 0]);
+    expect(lastProgram(phones[0].inbox, 'tile')!.at).toBeLessThanOrEqual(before + 50);
+    expect(director.run).toHaveBeenCalledTimes(1);
+    expect(flips.lit).toBe(true);
+    expect(flips.inFlight).toBe(false);
+  });
+
+  it('does nothing when no flip is on: nothing to fix, and no show is started by a swap', async () => {
+    const { phones, flips } = await setup();
+    const prepare = vi.fn();
+    expect(flips.lit).toBe(false);
+    expect(await flips.refresh(prepare)).toBe(false);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(lastProgram(phones[0].inbox, 'tile')).toBeNull();
+  });
+
+  it('is no longer on once Stop, or something else, took the room', async () => {
+    const { session, director, flips } = await setup();
+    await flips.press((c) => wallFlip(session, stunt, c, byPlace));
+    director.idle();
+    expect(flips.lit).toBe(false);
+    const prepare = vi.fn();
+    expect(await flips.refresh(prepare)).toBe(false);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('is dropped, sending nothing, when the room changes hands while it cuts', async () => {
+    const { phones, session, director, flips } = await setup();
+    await flips.press((c) => wallFlip(session, stunt, c, byPlace));
+    let finish = () => {};
+    const gate = new Promise<void>((done) => (finish = done));
+    const slow = async (c: HTMLCanvasElement, w: Wall) => (await gate, byPlace(c, w));
+    const done = flips.refresh((c) => wallFlip(session, stunt, c, slow));
+    await vi.waitFor(() => expect(flips.inFlight).toBe(true));
+    director.idle();
+    finish();
+    expect(await done).toBe(false);
+    // The last thing a phone was told is the lobby from Stop, not a late piece.
+    expect(phones[0].inbox.filter((m) => m.t === 'program').at(-1)).toMatchObject({ program: { kind: 'lobby' } });
+  });
+
+  it('tells the host when the new cut could not be made, and leaves the show as it was', async () => {
+    const { view, session, flips } = await setup();
+    await flips.press((c) => wallFlip(session, stunt, c, byPlace));
+    const boom = async () => {
+      throw new Error('toDataURL');
+    };
+    expect(await flips.refresh((c) => wallFlip(session, stunt, c, boom))).toBe(false);
+    expect(view.fail).toHaveBeenCalledWith('Could not cut the picture.');
+    expect(flips.lit).toBe(true);
+  });
+});
+
 describe('what the host reads once a flip is on', () => {
   it('keeps the picture line as it was, and calls words and templates a greeting', () => {
     expect(STYLES.wall.status(3, 'picture')).toBe('3, 2, 1… 3 phones show their piece of the picture.');
