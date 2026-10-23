@@ -10,6 +10,8 @@ export interface Run {
   program?: Program | ((seat: number) => Program);
   /** Phone input this run hears for as long as it holds the room. */
   onInput?: InputHandlers;
+  /** The program is a picture frame: each phone gets the next only once it confirms this one (see HostSession.setProgram). */
+  frame?: boolean;
 }
 
 export interface Hold {
@@ -31,7 +33,7 @@ export class Director {
     this.handovers.push(clear);
   }
 
-  run({ stop, program, onInput }: Run = {}): Hold {
+  run({ stop, program, onInput, frame }: Run = {}): Hold {
     this.release();
     const unhear = onInput ? this.session.input(onInput) : () => {};
     const mine = () => {
@@ -39,7 +41,7 @@ export class Director {
       stop?.();
     };
     this.current = mine;
-    this.session.setProgram(program ?? LOBBY);
+    this.session.setProgram(program ?? LOBBY, { frame });
     const self = this;
     return {
       get active() {

@@ -27,8 +27,11 @@ const GIVE_UP_MS = 10 * 60_000;
 /** Budget a message that can wait (a file or frame ack) leaves for taps and pings. */
 const RESERVE = 5;
 
-/** Acks: each sums up all before it, so only the newest of each kind waits for the budget. */
-type Ack = Extract<PhoneMsg, { t: 'have' | 'ack' }>;
+/** Acks and the screen's shape: each sums up all before it, so only the newest of each kind waits for the budget. */
+type Ack = Extract<PhoneMsg, { t: 'have' | 'ack' | 'screen' }>;
+
+/** A screen that changed shape by less than this, as a fraction, is not worth telling the host. */
+const SCREEN_SLACK = 0.02;
 
 export class PhoneClient {
   seat = -1;
@@ -65,11 +68,15 @@ export class PhoneClient {
   private readonly waiting = new Map<Ack['t'], Ack>();
   private flushTimer = 0;
   private lastTap = -Infinity;
+  /** The screen shape the host last heard, or null before the first welcome. */
+  private told: number | null = null;
 
+  /** `shape`: width / height of what the screen shows right now. */
   constructor(
     private readonly transport: Transport,
     readonly room: string,
     sim?: Point,
+    private readonly shape: () => number = () => window.innerWidth / window.innerHeight,
   ) {
     // Simulated phones are tabs of one browser, so each needs its own identity.
     // Kept in localStorage so closing the tab and rescanning the QR code lands in the same seat.
@@ -116,6 +123,14 @@ export class PhoneClient {
 
   vote(choice: number): void {
     this.send({ t: 'vote', choice });
+  }
+
+  /** Tell the host the screen's shape if it differs from what the host knows by more than SCREEN_SLACK. */
+  reportScreen(): void {
+    const aspect = this.shape();
+    if (!(aspect > 0) || !Number.isFinite(aspect) || (this.told !== null && Math.abs(aspect / this.told - 1) <= SCREEN_SLACK)) return;
+    this.told = aspect;
+    this.later({ t: 'screen', aspect });
   }
 
   enterSeat(row: number, seat: number): void {
@@ -192,6 +207,9 @@ export class PhoneClient {
         this.retries = 0;
         this.lostAt = null;
         this.error = '';
+        // A new host page, or a new link, knows nothing of this screen yet.
+        this.told = null;
+        this.reportScreen();
         break;
       case 'full':
         this.status = 'full';

@@ -6,6 +6,9 @@ import { fitText, type Measure } from '../core/textfit';
 import { h } from './dom';
 
 const JPEG = 'data:image/jpeg;base64,';
+
+/** Only a JPEG data URL is ever shown: a message never points the phone at an outside address. */
+export const isJpegDataUrl = (src: string): boolean => src.startsWith(JPEG);
 const LINE_HEIGHT = 1.15;
 /** Measured widths are trusted to within this, so real glyph metrics never spill over the edge. */
 const WIDTH_SLACK = 0.94;
@@ -48,7 +51,7 @@ export class FollowScreen {
     this.text.hidden = picture;
     if (picture) {
       // Only ever a JPEG data URL: never let a message point the phone at an outside address.
-      if (view.src.startsWith(JPEG) && this.img.getAttribute('src') !== view.src) this.img.src = view.src;
+      if (isJpegDataUrl(view.src) && this.img.getAttribute('src') !== view.src) this.img.src = view.src;
     }
     this.count.textContent = view.show === 'card' && view.of > 1 ? `${view.n} / ${view.of}` : '';
     this.fit();

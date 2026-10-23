@@ -10,6 +10,8 @@ export type PhoneMsg =
   | { t: 'tap' }
   | { t: 'seat'; row: number; seat: number }
   | { t: 'vote'; choice: number }
+  /** Width / height of what the phone's screen shows, so a Photo wall tile can be cut to its shape. */
+  | { t: 'screen'; aspect: number }
   /** The phone has the program that carried this `ack`. */
   | { t: 'ack'; n: number }
   /** File transfer ack: every chunk below `next` is here, `got` in all; then whether it decoded. */
@@ -28,6 +30,10 @@ export type HostMsg =
   /** A song to fetch and get ready in the background, whatever the room is doing (null: none). */
   | { t: 'offer'; track: Track | null }
   | ChunkMsg;
+
+/** Screen shapes a phone may report: from a very tall phone to a very wide one. */
+const MIN_SCREEN_ASPECT = 0.2;
+const MAX_SCREEN_ASPECT = 5;
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
@@ -52,6 +58,8 @@ export function parsePhoneMsg(v: unknown): PhoneMsg | null {
       return count(v.n) ? { t: 'ack', n: v.n } : null;
     case 'vote':
       return count(v.choice) && v.choice < MAX_OPTIONS ? { t: 'vote', choice: v.choice } : null;
+    case 'screen':
+      return num(v.aspect) && v.aspect >= MIN_SCREEN_ASPECT && v.aspect <= MAX_SCREEN_ASPECT ? { t: 'screen', aspect: v.aspect } : null;
     case 'have': {
       if (typeof v.id !== 'string' || v.id.length > 32 || !count(v.next) || !count(v.got)) return null;
       const state = v.state === 'ready' || v.state === 'error' ? v.state : undefined;

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Program } from '../src/core/effects';
 import { lastProgram, room } from './harness';
 
 describe('the director owns what the phones run', () => {
@@ -91,5 +92,29 @@ describe('the director owns what the phones run', () => {
     r.director.idle();
     r.phones[0].say({ t: 'have', id: 'song', next: 3, got: 3 });
     expect(have).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a run that sends picture frames', () => {
+  it('holds the next frame for a phone until it has the one before', async () => {
+    const r = await room([0.2, 0.8]);
+    const piece = (seat: number): Program => ({ kind: 'tile', src: 'data:image/jpeg;base64,AAAA', rgb: [seat, 0, 0], at: 0 });
+    r.director.run({ program: piece, frame: true });
+    const first = r.phones[0].inbox.flatMap((m) => (m.t === 'program' && m.program.kind === 'tile' ? [m] : []));
+    expect(first).toHaveLength(1);
+    expect(first[0].ack).toBeGreaterThan(0);
+    expect(first[0].program).toMatchObject({ rgb: [0, 0, 0] });
+    expect(r.phones[1].inbox.flatMap((m) => (m.t === 'program' && m.program.kind === 'tile' ? [m.program] : []))[0]).toMatchObject({ rgb: [1, 0, 0] });
+    // Another frame waits for the ack of this one.
+    r.session.setProgram(piece, { frame: true });
+    expect(r.phones[0].inbox.filter((m) => m.t === 'program' && m.program.kind === 'tile')).toHaveLength(1);
+    r.phones[0].say({ t: 'ack', n: first[0].ack! });
+    expect(r.phones[0].inbox.filter((m) => m.t === 'program' && m.program.kind === 'tile')).toHaveLength(2);
+  });
+
+  it('sends plain programs without frame numbers, as before', async () => {
+    const r = await room([0.5]);
+    r.director.run({ program: { kind: 'identify' } });
+    expect(r.phones[0].inbox.at(-1)).toEqual({ t: 'program', program: { kind: 'identify' } });
   });
 });

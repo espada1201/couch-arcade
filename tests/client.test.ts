@@ -79,6 +79,45 @@ describe('phone client', () => {
     expect(client.status).toBe('live');
   });
 
+  it('tells the host its screen’s shape after every welcome, and again only when it changes by more than 2%', async () => {
+    const sent: { t: string; aspect?: number }[] = [];
+    const link: BasicLink = new BasicLink((m) => {
+      sent.push(m as { t: string });
+      if ((m as { t: string }).t === 'hello') queueMicrotask(() => link.deliver({ t: 'welcome', seat: 1, room: 'ABCD' }));
+    });
+    const transport: Transport = { name: 'test', host: async () => { throw new Error('unused'); }, join: async () => link };
+    let shape = 390 / 844;
+    const client = new PhoneClient(transport, 'ABCD', undefined, () => shape);
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(100);
+    const screens = () => sent.filter((m) => m.t === 'screen').map((m) => m.aspect);
+    expect(screens()).toEqual([390 / 844]);
+    shape *= 1.01;
+    client.reportScreen();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(screens()).toHaveLength(1);
+    shape = 844 / 390;
+    client.reportScreen();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(screens()).toEqual([390 / 844, 844 / 390]);
+    link.deliver({ t: 'welcome', seat: 1, room: 'ABCD' });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(screens()).toEqual([390 / 844, 844 / 390, 844 / 390]);
+  });
+
+  it('says nothing about its screen when the browser cannot tell the shape', async () => {
+    const sent: { t: string }[] = [];
+    const link: BasicLink = new BasicLink((m) => {
+      sent.push(m as { t: string });
+      if ((m as { t: string }).t === 'hello') queueMicrotask(() => link.deliver({ t: 'welcome', seat: 1, room: 'ABCD' }));
+    });
+    const transport: Transport = { name: 'test', host: async () => { throw new Error('unused'); }, join: async () => link };
+    const client = new PhoneClient(transport, 'ABCD', undefined, () => NaN);
+    await client.connect();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sent.some((m) => m.t === 'screen')).toBe(false);
+  });
+
   it('sends a quick run of file acks as the newest, at most one per 40 ms', async () => {
     const sent: { t: string; next?: number }[] = [];
     const transport: Transport = {

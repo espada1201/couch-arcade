@@ -1,8 +1,8 @@
-import { DIM, luma, render, type Frame } from '../core/effects';
+import { DIM, luma, render, type Frame, type Program } from '../core/effects';
 import { pickTransport } from '../net/pick';
 import { OPTICS_CHANNEL, type Optics } from '../core/protocol';
 import { css, h, setText } from '../ui/dom';
-import { FollowScreen } from '../ui/follow';
+import { FollowScreen, isJpegDataUrl } from '../ui/follow';
 import { keepScreenOn } from '../ui/wakelock';
 import { Speaker } from './audio';
 import { PhoneClient } from './client';
@@ -65,9 +65,10 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const layers = overlays(client, (choice) => (navigator.vibrate?.(12), client.vote(choice)));
   const mine = youVoted();
   const follow = new FollowScreen();
+  const tile = h('img.tile-picture', { alt: '', hidden: true });
   const party = new PartySpeaker(client, speaker);
   client.onChunk = (m) => party.chunk(m);
-  const screen = h('div.screen', {}, label, follow.el, party.el, status, awakeHint, mapHint, mine.el, ...layers.map((l) => l.el));
+  const screen = h('div.screen', {}, tile, label, follow.el, party.el, status, awakeHint, mapHint, mine.el, ...layers.map((l) => l.el));
   app.replaceChildren(screen);
 
   let frame: Frame = { rgb: DIM };
@@ -79,6 +80,16 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   const themeColor = document.querySelector('meta[name="theme-color"]');
   const optics = sim ? new BroadcastChannel(OPTICS_CHANNEL) : null;
 
+  /** This phone's piece of the Photo wall, up from the flip instant; decoded beforehand so it appears with the rest. */
+  const showTile = (p: Program, t: number) => {
+    const src = p.kind === 'tile' && isJpegDataUrl(p.src) ? p.src : null;
+    if (src && tile.getAttribute('src') !== src) {
+      tile.src = src;
+      void tile.decode().catch(() => {});
+    }
+    tile.hidden = !(src && p.kind === 'tile' && t >= p.at);
+  };
+
   const paint = () => {
     lastPaint = performance.now();
     frame = render(client.program, { seat: client.seat, pos: client.pos, aspect: client.aspect }, client.hostNow());
@@ -88,6 +99,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
       // The browser's bars take the frame's colour too, so the whole phone is one pixel of the picture.
       themeColor?.setAttribute('content', bg);
     }
+    showTile(client.program, client.hostNow());
     const text = frame.label ?? '';
     setText(label, text);
     const win = text === 'WIN';
@@ -156,6 +168,12 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
     showFirst(layers, p, client);
     mine.update(p, client);
   };
+  // Rotating the phone, or leaving full screen, changes the shape of its piece of a Photo wall.
+  let resized = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(resized);
+    resized = window.setTimeout(() => client.reportScreen(), 300);
+  });
   client.onChange = showStatus;
   showStatus();
   await client.connect();

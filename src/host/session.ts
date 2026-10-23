@@ -38,13 +38,15 @@ export interface Seat {
   late: { n: number; at: number } | null;
   /** When the phone's link last closed (0 if never, or before a reload). */
   left: number;
+  /** Width / height of the phone's screen as it last said; not saved with the room. */
+  screen: number | null;
 }
 
 type ProgramMsg = Extract<HostMsg, { t: 'program' }>;
 
 /** A seat as it starts out, or comes back from a saved room: no link, nothing in flight. */
 function blankSeat(x: Pick<Seat, 'seat' | 'token' | 'raw' | 'source'>, link: Link | null = null): Seat {
-  return { ...x, link, sync: Infinity, lastTap: 0, awaiting: 0, held: null, sentAt: 0, ackRtt: 0, late: null, left: 0 };
+  return { ...x, link, sync: Infinity, lastTap: 0, awaiting: 0, held: null, sentAt: 0, ackRtt: 0, late: null, left: 0, screen: null };
 }
 
 interface Conn {
@@ -190,6 +192,11 @@ export class HostSession {
       if (p) positions.set(s.seat, p);
     }
     return { positions, aspect: this.layout.aspect };
+  }
+
+  /** Screen shape (width / height) of every phone that has said, for laying a picture over them. */
+  screens(): Map<number, number> {
+    return new Map([...this.seats.values()].flatMap((s) => (s.screen === null ? [] : [[s.seat, s.screen] as const])));
   }
 
   /** Worst clock error among connected phones (ms). */
@@ -434,6 +441,7 @@ export class HostSession {
         me.lastTap = now;
         this.heard(me.seat, m);
       } else if (m.t === 'ack') this.acked(me, m.n);
+      else if (m.t === 'screen') this.setScreen(me, m.aspect);
       else if (m.t === 'vote' || m.t === 'have') this.heard(me.seat, m);
       else this.enterSeat(me, m.row, m.seat);
     });
@@ -445,6 +453,12 @@ export class HostSession {
         this.changed();
       }
     });
+  }
+
+  private setScreen(s: Seat, aspect: number): void {
+    if (s.screen === aspect) return;
+    s.screen = aspect;
+    this.changed();
   }
 
   /** A phone typed its row and seat: kept only while the seat grid is asking, and only inside its size. */

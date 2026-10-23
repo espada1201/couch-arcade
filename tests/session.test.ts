@@ -342,6 +342,64 @@ describe('untrusted phones', () => {
   });
 });
 
+describe('phone screen shapes', () => {
+  it('keeps the shape each seated phone reports, and nothing for one that has not', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    const b = phone();
+    a.say({ t: 'hello', token: 'aaa' });
+    b.say({ t: 'hello', token: 'bbb' });
+    expect(session.screens().size).toBe(0);
+    a.say({ t: 'screen', aspect: 0.46 });
+    expect(session.screens()).toEqual(new Map([[0, 0.46]]));
+    a.say({ t: 'screen', aspect: 2.1 });
+    b.say({ t: 'screen', aspect: 0.5 });
+    expect(session.screens()).toEqual(new Map([[0, 2.1], [1, 0.5]]));
+  });
+
+  it('ignores a shape from a link with no seat, or one that is not a believable screen', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    phone().say({ t: 'screen', aspect: 0.46 });
+    const a = phone();
+    a.say({ t: 'hello', token: 'aaa' });
+    for (const aspect of [0, 99, NaN, '0.5']) a.say({ t: 'screen', aspect });
+    expect(session.screens().size).toBe(0);
+  });
+
+  it('tells the host page only when a shape changed, and does not save it with the room', async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    try {
+      const { session, phone } = harness();
+      await session.open();
+      const a = phone();
+      a.say({ t: 'hello', token: 'aaa' });
+      let changes = 0;
+      session.subscribe(() => changes++);
+      a.say({ t: 'screen', aspect: 0.46 });
+      a.say({ t: 'screen', aspect: 0.46 });
+      expect(changes).toBe(1);
+      expect(storage.getItem('swarm-host')).toContain('"token":"aaa"');
+      expect(storage.getItem('swarm-host')).not.toContain('0.46');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a phone that comes back keeps its shape', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const a = phone();
+    a.say({ t: 'hello', token: 'aaa' });
+    a.say({ t: 'screen', aspect: 0.46 });
+    a.drop();
+    phone().say({ t: 'hello', token: 'aaa' });
+    expect(session.screens().get(0)).toBe(0.46);
+  });
+});
+
 describe('the same limits on every transport', () => {
   const watched = (p: { onClose: (cb: () => void) => void }) => {
     let closed = false;

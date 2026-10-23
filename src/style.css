@@ -280,6 +280,9 @@ body.phone { overscroll-behavior: none; }
   color: rgba(242, 234, 216, 0.9); pointer-events: none; font-variant-numeric: tabular-nums;
 }
 .screen.light .label { color: rgba(14, 13, 11, 0.85); }
+/* The phone's piece of a Photo wall fills the screen edge to edge, behind the labels. */
+.tile-picture { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.tile-picture[hidden] { display: none; }
 .status {
   position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
   font: 500 12px var(--mono); padding: 5px 10px; border-radius: 999px;
