@@ -567,7 +567,8 @@ test('on a touch screen the small buttons and chips are at least 44 px tall', as
   await page.goto('./?host=1&transport=local&fresh=1');
   await expect(page.getByRole('tab', { name: /Locate/ })).toBeVisible();
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
-  const heights = await page.locator('.btn.small').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+  // A button that is not shown has no size to judge.
+  const heights = await page.locator('.btn.small').evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect().height));
   expect(heights.length).toBeGreaterThan(2);
   for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
   const chip = await page.evaluate(() => {
@@ -663,7 +664,7 @@ test('Go to Locate from Photo & cards offers the way back, and a started camera 
   expect(errors).toEqual([]);
 });
 
-test('a scan that places everyone leaves keyboard focus on Scan when the host did not come from another tab', async ({ context }) => {
+test('a scan that places everyone moves keyboard focus to the next step (Open Photo & cards) when the host did not come from another tab', async ({ context }) => {
   const errors: string[] = [];
   const { host, code } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');
   await joinPhone(context, code, 0, errors);
@@ -671,7 +672,7 @@ test('a scan that places everyone leaves keyboard focus on Scan when the host di
   await host.getByRole('button', { name: 'Scan the room' }).press('Enter');
   await expect(host.getByText(/Placed 1 of 1 phone/)).toBeVisible({ timeout: 20000 });
   await expect(host.getByRole('button', { name: /^Back to/ })).toHaveCount(0);
-  await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
+  await expect(host.getByRole('button', { name: 'Open Photo & cards' })).toBeFocused();
   expect(errors).toEqual([]);
 });
 
