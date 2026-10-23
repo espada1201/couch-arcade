@@ -104,6 +104,10 @@ describe('wallPixelSize', () => {
     expect(wallPixelSize(1)).toEqual([1600, 1600]);
   });
 
+  it('takes the long side as asked', () => {
+    expect(wallPixelSize(2, 480)).toEqual([480, 240]);
+  });
+
   it('never gives a side of no pixels', () => {
     const [w, h] = wallPixelSize(1e-6);
     expect(w).toBeGreaterThanOrEqual(1);

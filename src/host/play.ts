@@ -4,11 +4,13 @@ import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type Program
 import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
 import type { PotatoState } from '../core/potato';
 import { teamSizes, type TerritoryState } from '../core/territory';
+import { wallPixelSize, wallTiles } from '../core/wall';
 import { css, h, plural, segmented, setText, slider } from '../ui/dom';
 import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
 import { panel, placementNote, requirePlaced, stopButton } from './panel';
+import { encodeTiles, tileProgram, wallPreview } from './photowall';
 import { recorder } from './record';
 import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
@@ -29,16 +31,39 @@ export function flipCards(session: HostSession, image: Image, leadMs = FLIP_LEAD
   session.setProgram(cardProgram(session, image, leadMs));
 }
 
+/** Photo wall: each phone shows its own piece of the picture. Stadium cards: each phone shows one colour of it. */
+type CardStyle = 'wall' | 'cards';
+
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
   const all = presets();
   let chosen: Stunt = all[0];
+  let style: CardStyle = 'wall';
   /** The event template behind the current picture, rebuilt when the names change. */
   let moment: Moment | null = null;
   const preview = h('div.stunt-preview');
-  const show = () => preview.replaceChildren(chosen.canvas);
+  /** What the preview was last drawn from, so it is redrawn only when the picture, style or layout changed. */
+  let drawn = '';
+  let pictures = 0;
+  const show = () => {
+    const room = session.playRoom();
+    if (style === 'cards' || room.positions.size === 0) {
+      if (drawn !== `plain${pictures}`) preview.replaceChildren(chosen.canvas);
+      drawn = `plain${pictures}`;
+      return;
+    }
+    const wall = wallTiles(room, session.screens());
+    const key = `${pictures}|${wall.aspect}|${[...wall.tiles].map(([s, r]) => `${s}:${r.x},${r.y},${r.w},${r.h}`)}`;
+    if (key === drawn) return;
+    drawn = key;
+    const canvas = wallPreview(chosen.render, wall);
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', `Photo wall preview: ${plural(wall.tiles.size, 'phone')}, each outlined with its number`);
+    preview.replaceChildren(canvas);
+  };
   const pick = (s: Stunt, m: Moment | null = null) => {
     chosen = s;
     moment = m;
+    pictures++;
     show();
     thumbs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(!m && b.dataset.name === s.name)));
     moments.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.name === m?.name)));
@@ -86,16 +111,38 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const missing = moment && missingNames(moment, typed());
     if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
     if (!requirePlaced(session, fail)) return;
-    director.run({ stop: rec?.end, program: cardProgram(session, chosen.image) });
+    const n = session.playRoom().positions.size;
+    if (style === 'wall') {
+      if (n === 0) return fail('None of the phones on the map are connected right now.');
+      const wall = wallTiles(session.playRoom(), session.screens());
+      const pieces = encodeTiles(chosen.render(...wallPixelSize(wall.aspect)), wall);
+      // Counted after the pieces are cut, which takes a moment, so the countdown is the full lead.
+      director.run({ stop: rec?.end, program: tileProgram(pieces, session.now() + FLIP_LEAD_MS), frame: true });
+    } else director.run({ stop: rec?.end, program: cardProgram(session, chosen.image) });
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
     rec?.begin(FLIP_LEAD_MS + 8000);
-    const n = session.playRoom().positions.size;
-    say(`3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'flips' : 'flip'} together.`);
+    say(
+      style === 'wall'
+        ? `3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'shows its' : 'show their'} piece of the picture.`
+        : `3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'flips' : 'flip'} together.`,
+    );
   });
+  const wallNote = h('p.note', {}, 'Lay the phones side by side, screens up, and each one shows its own piece of the picture.');
+  const cardsNote = h('p.note', { hidden: true }, 'Each phone shows one colour of the picture, so the more phones, the sharper it gets. Best for a big crowd far away.');
+  const styles = segmented<CardStyle>('Style', [['wall', 'Photo wall'], ['cards', 'Stadium cards']], style, (v) => {
+    style = v;
+    wallNote.hidden = v !== 'wall';
+    cardsNote.hidden = v !== 'cards';
+    show();
+  });
+  session.subscribe(show);
   show();
   const { el, say, fail } = panel(
-    'Turn your photo, or your words, into a stadium card stunt: each phone becomes one card of the picture, and every phone flips together on a 3, 2, 1 countdown.',
+    'Turn your photo, or your words, into a crowd stunt: every phone flips together on a 3, 2, 1 countdown.',
     placementNote(session, 'Card stunt needs phones on the map.'),
+    styles,
+    wallNote,
+    cardsNote,
     h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
     h('p.note', {}, 'Or pick one of these ready-made designs:'),
     thumbs,
@@ -103,7 +150,6 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
     h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: () => words.value.trim() && pick(textStunt(words.value.trim().toUpperCase(), session.layout.aspect)) }, 'Use words')),
     preview,
-    h('p.note', {}, 'Each phone shows one colour of the picture, so the more phones, the sharper it gets.'),
     rec?.el,
     flip,
   );

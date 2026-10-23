@@ -18,12 +18,37 @@ export interface Stunt {
   name: string;
   canvas: HTMLCanvasElement;
   image: Image;
+  /** The picture drawn at exactly w x h pixels (Photo wall), whatever the shape. */
+  render(w: number, h: number): HTMLCanvasElement;
+}
+
+/** The longest side an uploaded picture keeps for the Photo wall. */
+const UPLOAD_LONG_SIDE = 2048;
+
+/** `src` scaled to cover a w x h canvas, the overflow cropped evenly from both sides. */
+function cover(src: HTMLCanvasElement | ImageBitmap, w: number, h: number): HTMLCanvasElement {
+  const [c, ctx] = canvas2d(w, h);
+  const k = Math.max(w / src.width, h / src.height);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, (w - src.width * k) / 2, (h - src.height * k) / 2, src.width * k, src.height * k);
+  return c;
 }
 
 function make(name: string, draw: (ctx: CanvasRenderingContext2D, s: number) => void): Stunt {
   const [c, ctx] = canvas2d(STUNT_SIZE, STUNT_SIZE);
   draw(ctx, STUNT_SIZE);
-  return { name, canvas: c, image: toImage(c) };
+  return {
+    name,
+    canvas: c,
+    image: toImage(c),
+    render(w, h) {
+      // The design is drawn square at the long side, then the middle w x h of it is kept.
+      const side = Math.max(w, h);
+      const [big, bigCtx] = canvas2d(side, side);
+      draw(bigCtx, side);
+      return cover(big, w, h);
+    },
+  };
 }
 
 let built: Stunt[] | null = null;
@@ -83,10 +108,14 @@ type Piece = string | typeof HEART;
  * Lines of big words (and hearts) shaped to the crowd: the canvas takes the room's
  * aspect so nothing is cropped, each line gets an equal band, and each is shrunk to fit.
  */
-function wordsStunt(name: string, lines: Piece[][], aspect: number, color = GOLD): Stunt {
-  const w = STUNT_SIZE * Math.max(1, aspect);
-  const hgt = STUNT_SIZE * Math.max(1, 1 / aspect);
-  const [c, ctx] = canvas2d(Math.round(w), Math.round(hgt));
+function wordsStunt(name: string, linesFor: (aspect: number) => Piece[][], aspect: number, color = GOLD): Stunt {
+  const c = drawWords(linesFor(aspect), color, Math.round(STUNT_SIZE * Math.max(1, aspect)), Math.round(STUNT_SIZE * Math.max(1, 1 / aspect)));
+  // The Photo wall lays the words out again for the wall's own shape.
+  return { name, canvas: c, image: toImage(c), render: (w, h) => drawWords(linesFor(w / h), color, w, h) };
+}
+
+function drawWords(lines: Piece[][], color: string, w: number, hgt: number): HTMLCanvasElement {
+  const [c, ctx] = canvas2d(w, hgt);
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.textAlign = 'center';
@@ -111,11 +140,11 @@ function wordsStunt(name: string, lines: Piece[][], aspect: number, color = GOLD
       x += ws[i] + gap(size);
     });
   });
-  return { name, canvas: c, image: toImage(c) };
+  return c;
 }
 
 export function textStunt(text: string, aspect: number): Stunt {
-  return wordsStunt(text, [[text]], aspect);
+  return wordsStunt(text, () => [[text]], aspect);
 }
 
 /** The year a New Year party is counting down to (or, just after midnight, has just begun). */
@@ -144,29 +173,36 @@ export const MOMENTS: Moment[] = [
   {
     name: 'Names with a heart',
     names: 2,
-    make: ([a, b], aspect) => wordsStunt('Names with a heart', wide(aspect) ? [[a, HEART, b]] : [[a], [HEART], [b]], aspect),
+    make: ([a, b], aspect) => wordsStunt('Names with a heart', (r) => (wide(r) ? [[a, HEART, b]] : [[a], [HEART], [b]]), aspect),
   },
   {
     name: 'Just married',
     names: 0,
-    make: (_, aspect) => wordsStunt('Just married', wide(aspect) ? [['JUST MARRIED']] : [['JUST'], ['MARRIED']], aspect, '#f2ead8'),
+    make: (_, aspect) => wordsStunt('Just married', (r) => (wide(r) ? [['JUST MARRIED']] : [['JUST'], ['MARRIED']]), aspect, '#f2ead8'),
   },
   {
     name: 'Happy birthday',
     names: 1,
-    make: ([a], aspect) => wordsStunt('Happy birthday', [...(wide(aspect) ? [['HAPPY BIRTHDAY']] : [['HAPPY'], ['BIRTHDAY']]), ...(a ? [[a]] : [])], aspect),
+    make: ([a], aspect) => wordsStunt('Happy birthday', (r) => [...(wide(r) ? [['HAPPY BIRTHDAY']] : [['HAPPY'], ['BIRTHDAY']]), ...(a ? [[a]] : [])], aspect),
   },
   {
     name: String(comingYear()),
     names: 0,
-    make: (_, aspect) => wordsStunt(String(comingYear()), [[String(comingYear())]], aspect),
+    make: (_, aspect) => wordsStunt(String(comingYear()), () => [[String(comingYear())]], aspect),
   },
 ];
 
 export async function fileStunt(file: File): Promise<Stunt> {
-  const bmp = await createImageBitmap(file);
+  let bmp = await createImageBitmap(file);
   const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
   const [c, ctx] = canvas2d(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k)));
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  return { name: file.name, canvas: c, image: toImage(c) };
+  // Kept for the Photo wall, which crops pieces out of it at full resolution.
+  const keep = Math.min(1, UPLOAD_LONG_SIDE / Math.max(bmp.width, bmp.height));
+  if (keep < 1) {
+    const small = await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * keep), resizeHeight: Math.round(bmp.height * keep), resizeQuality: 'high' });
+    bmp.close();
+    bmp = small;
+  }
+  return { name: file.name, canvas: c, image: toImage(c), render: (w, h) => cover(bmp, w, h) };
 }

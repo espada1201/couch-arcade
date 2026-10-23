@@ -26,8 +26,9 @@ test('the camera finds every phone, then the crowd shows a card stunt', async ({
   await expect.poll(async () => Number(await firstRow.getAttribute('data-x'))).toBeGreaterThan(before + 0.05);
   await room.host.keyboard.press('Shift+ArrowLeft');
 
-  // Card stunt: a four-colour picture; every phone must show its quadrant's colour.
+  // Card stunt in Stadium cards style: a four-colour picture; every phone must show its quadrant's colour.
   await room.host.getByRole('tab', { name: /Card stunt/ }).click();
+  await room.host.getByRole('radio', { name: 'Stadium cards' }).check();
   await room.host.locator('#stunt-file').setInputFiles({
     name: 'quadrants.png',
     mimeType: 'image/png',

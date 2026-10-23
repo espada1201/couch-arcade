@@ -21,12 +21,9 @@ export interface Wall {
 /** Width / height of a phone screen held upright, used until the phone says otherwise. */
 export const PHONE_ASPECT = 9 / 19.5;
 
-/** Long side of the wall picture, in pixels. */
-const WALL_LONG_SIDE = 1600;
-
-/** Pixel size of a picture drawn in the wall's shape. */
-export function wallPixelSize(aspect: number): [number, number] {
-  return aspect >= 1 ? [WALL_LONG_SIDE, Math.max(1, Math.round(WALL_LONG_SIDE / aspect))] : [Math.max(1, Math.round(WALL_LONG_SIDE * aspect)), WALL_LONG_SIDE];
+/** Pixel size of a picture drawn in the wall's shape, `long` pixels on its longer side. */
+export function wallPixelSize(aspect: number, long = 1600): [number, number] {
+  return aspect >= 1 ? [long, Math.max(1, Math.round(long / aspect))] : [Math.max(1, Math.round(long * aspect)), long];
 }
 
 /** Each value replaced by the mean of its cluster, where a cluster is a run of values no further than `gap` apart. */

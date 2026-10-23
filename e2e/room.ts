@@ -1,7 +1,7 @@
 // Shared end-to-end set-up: a host page and phone tabs on the in-browser transport,
 // placed by the simulated camera, plus helpers to read what each phone shows.
 import { existsSync } from 'node:fs';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -61,6 +61,54 @@ export const YELLOW = [255, 255, 0];
 /** A 64x64 picture in four colour quadrants, and the colour each of the SIMS phones lands on. */
 export const QUADRANTS_PNG = png(64, 64, (x, y) => (y < 32 ? (x < 32 ? [255, 0, 0] : [0, 255, 0]) : x < 32 ? [0, 0, 255] : [255, 255, 0]));
 export const QUADRANT_COLOURS_BY_SIM = [RED, RED, GREEN, BLUE, YELLOW, YELLOW];
+
+/** A square picture of vertical strips, left to right: one for each colour. */
+export const stripsPng = (colours: number[][], size = 96): Buffer => png(size, size, (x) => colours[Math.min(colours.length - 1, Math.floor((x * colours.length) / size))] as [number, number, number]);
+
+/** The RGB of the pixel at the middle of a PNG screenshot (8-bit RGB or RGBA, as Chromium writes them). */
+export function centreOfPng(file: Buffer): number[] {
+  let w = 0;
+  let h = 0;
+  let channels = 0;
+  const data: Buffer[] = [];
+  for (let at = 8; at < file.length; ) {
+    const len = file.readUInt32BE(at);
+    const type = file.toString('latin1', at + 4, at + 8);
+    const body = file.subarray(at + 8, at + 8 + len);
+    if (type === 'IHDR') [w, h, channels] = [body.readUInt32BE(0), body.readUInt32BE(4), body[9] === 6 ? 4 : 3];
+    if (type === 'IDAT') data.push(body);
+    at += len + 12;
+  }
+  const raw = inflateSync(Buffer.concat(data));
+  const stride = w * channels;
+  const rows: Buffer[] = [];
+  for (let y = 0; y < h; y++) {
+    const row = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    const filter = raw[y * (stride + 1)];
+    const up = rows[y - 1] ?? Buffer.alloc(stride);
+    for (let i = 0; i < stride; i++) {
+      const left = i >= channels ? row[i - channels] : 0;
+      const upLeft = i >= channels ? up[i - channels] : 0;
+      const guess = [0, left, up[i], (left + up[i]) >> 1, paeth(left, up[i], upLeft)][filter];
+      row[i] = (row[i] + guess) & 255;
+    }
+    rows.push(row);
+  }
+  const at = Math.floor(w / 2) * channels;
+  return [...rows[Math.floor(h / 2)].subarray(at, at + 3)];
+}
+
+function paeth(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const [pa, pb, pc] = [Math.abs(p - a), Math.abs(p - b), Math.abs(p - c)];
+  return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+}
+
+/** The colour at the middle of what the phone's screen shows right now, read from a real screenshot. */
+export async function screenCentre(p: Page): Promise<number[]> {
+  await p.bringToFront();
+  return centreOfPng(await p.screenshot());
+}
 
 /** A mono 16-bit WAV of a soft tone, big enough to travel in several chunks. */
 export function wav(seconds: number, rate = 22050): Buffer {
