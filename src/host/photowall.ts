@@ -2,17 +2,23 @@
 import { BLACK, type Program } from '../core/effects';
 import { FRAME_BUDGET, encodeWithin } from '../core/frames';
 import type { RGB } from '../core/layout';
-import { wallPixelSize, type Wall } from '../core/wall';
+import { wallPixelSize, wallTiles, type Wall } from '../core/wall';
 import { canvas2d } from '../ui/canvas';
+import { plural } from '../ui/dom';
+import type { Run } from './director';
+import type { Stunt } from './images';
+import type { HostSession } from './session';
 
 /** Longest side of one phone's piece: more than its screen can use, and encodeWithin shrinks it to the message anyway. */
 const TILE_LONG_SIDE = 1000;
 const TILE_QUALITY = 0.8;
 const AVERAGE_SIDE = 16;
 const PREVIEW_LONG_SIDE = 480;
+/** Cutting a tile takes ~20 ms, so the page gets a turn this often: a big wall must not freeze it. */
+const TILES_PER_TURN = 4;
 
 /** One phone's piece: a JPEG data URL, or none when it could not be made small enough for a message. */
-export interface Piece {
+export interface WallPiece {
   src: string | null;
   rgb: RGB;
 }
@@ -28,10 +34,10 @@ function averageColour(c: HTMLCanvasElement): RGB {
   return [Math.round(sum[0] / n), Math.round(sum[1] / n), Math.round(sum[2] / n)];
 }
 
-/** Every placed phone's piece of `picture`, which is drawn in the wall's shape. */
-export function encodeTiles(picture: HTMLCanvasElement, wall: Wall): Map<number, Piece> {
+/** Every placed phone's piece of `picture`, which is drawn in the wall's shape. Stops early once `alive` says no one wants them. */
+export async function encodeTiles(picture: HTMLCanvasElement, wall: Wall, alive = () => true): Promise<Map<number, WallPiece>> {
   const [out, outCtx] = canvas2d(2, 2);
-  const pieces = new Map<number, Piece>();
+  const pieces = new Map<number, WallPiece>();
   for (const [seat, r] of wall.tiles) {
     const sw = Math.max(1, Math.round(r.w * picture.width));
     const sh = Math.max(1, Math.round(r.h * picture.height));
@@ -50,16 +56,65 @@ export function encodeTiles(picture: HTMLCanvasElement, wall: Wall): Map<number,
       TILE_QUALITY,
     );
     pieces.set(seat, { src: encoded?.data ?? null, rgb: averageColour(crop) });
+    if (pieces.size % TILES_PER_TURN === 0) {
+      await new Promise((r) => setTimeout(r));
+      if (!alive()) break;
+    }
   }
   return pieces;
 }
 
 /** What each phone runs: its piece from `at`, or just its colour when the piece would not fit a message (never a blank phone). */
-export function tileProgram(pieces: ReadonlyMap<number, Piece>, at: number): (seat: number) => Program {
+export function tileProgram(pieces: ReadonlyMap<number, WallPiece>, at: number): (seat: number) => Program {
   return (seat) => {
     const piece = pieces.get(seat);
     if (!piece) return { kind: 'card', rgb: BLACK, at };
     return piece.src ? { kind: 'tile', src: piece.src, rgb: piece.rgb, at } : { kind: 'card', rgb: piece.rgb, at };
+  };
+}
+
+/** What the director needs to flip the room: the program, and that it is a stream of pictures. */
+export type Flip = Pick<Run, 'program' | 'frame'>;
+
+/** What a style does with a Flip press: `lead` is the countdown; `say` the status line; `alive` turns false once the press is out of date. */
+export interface FlipControl {
+  lead: number;
+  say(text: string): void;
+  alive(): boolean;
+}
+
+/**
+ * The Photo wall flip over every placed phone, away ones too, so a neighbour is cut around it and it
+ * shows its piece when it returns. A message to show instead, or null when `alive` ran out while cutting.
+ */
+export async function wallFlip(session: HostSession, stunt: Stunt, { lead, say, alive }: FlipControl, cut = encodeTiles): Promise<Flip | string | null> {
+  if (session.playRoom().positions.size === 0) return 'None of the phones on the map are connected right now.';
+  const wall = wallTiles(session.layout, session.screens());
+  say(`Cutting the picture into ${plural(wall.tiles.size, 'piece')}…`);
+  const pieces = await cut(stunt.render(...wallPixelSize(wall.aspect)), wall, alive);
+  // Counted only now, so the countdown is the full lead however long the cutting took.
+  return alive() ? { program: tileProgram(pieces, session.now() + lead), frame: true } : null;
+}
+
+/**
+ * Keeps `into` showing the picture in the wall's shape, each phone's piece outlined, or the plain picture while
+ * no phone is placed. Call it with the current picture whenever anything may have changed: it redraws only when needed.
+ */
+export function wallPreviewer(session: HostSession, into: HTMLElement): (stunt: Stunt) => void {
+  let drawn: { canvas: HTMLCanvasElement; of: Stunt; key: string } | null = null;
+  return (stunt) => {
+    if (session.layout.positions.size === 0) {
+      if (into.firstChild !== stunt.canvas) into.replaceChildren(stunt.canvas);
+      return;
+    }
+    const wall = wallTiles(session.layout, session.screens());
+    const key = JSON.stringify([wall.aspect, [...wall.tiles]]);
+    if (drawn && drawn.of === stunt && drawn.key === key && into.firstChild === drawn.canvas) return;
+    const canvas = wallPreview(stunt.render, wall);
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', `Photo wall preview: ${plural(wall.tiles.size, 'phone')}, each outlined with its number`);
+    into.replaceChildren(canvas);
+    drawn = { canvas, of: stunt, key };
   };
 }
 

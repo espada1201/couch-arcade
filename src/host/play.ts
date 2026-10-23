@@ -1,38 +1,20 @@
 // Step two: the experiences. Each panel turns the located crowd into something:
 // a picture, a wave of light, sound moving through the room, or a game.
-import { AMBER, BLACK, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type Program, type WaveParams, type WaveProgram, type WaveShape } from '../core/effects';
-import { sampleCrowd, type Image, type Point, type RGB } from '../core/layout';
+import { AMBER, EMBER, TEAL, WAVE_DEFAULTS, WHITE, makeWave, type WaveParams, type WaveProgram, type WaveShape } from '../core/effects';
+import type { Point, RGB } from '../core/layout';
 import type { PotatoState } from '../core/potato';
 import { teamSizes, type TerritoryState } from '../core/territory';
-import { wallPixelSize, wallTiles } from '../core/wall';
 import { css, h, plural, segmented, setText, slider } from '../ui/dom';
+import { FLIP_LEAD_MS, STYLES, STYLE_KEYS, type CardStyle } from './cardstyles';
 import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
 import { panel, placementNote, requirePlaced, stopButton } from './panel';
-import { encodeTiles, tileProgram, wallPreview } from './photowall';
 import { recorder } from './record';
 import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
-
-/** How long the crowd counts down before a card stunt flips. */
-const FLIP_LEAD_MS = 3200;
-
-/** `image` across the crowd: each phone takes its patch, and all flip together after a countdown. */
-export function cardProgram(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): (seat: number) => Program {
-  const colors = sampleCrowd(image, session.layout, Math.min(0.25, 0.6 / Math.sqrt(Math.max(1, session.layout.positions.size))));
-  const at = session.now() + leadMs;
-  return (seat) => ({ kind: 'card', rgb: colors.get(seat) ?? BLACK, at });
-}
-
-export function flipCards(session: HostSession, image: Image, leadMs = FLIP_LEAD_MS): void {
-  session.setProgram(cardProgram(session, image, leadMs));
-}
-
-/** Photo wall: each phone shows its own piece of the picture. Stadium cards: each phone shows one colour of it. */
-type CardStyle = 'wall' | 'cards';
 
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
   const all = presets();
@@ -41,24 +23,20 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   /** The event template behind the current picture, rebuilt when the names change. */
   let moment: Moment | null = null;
   const preview = h('div.stunt-preview');
-  /** What the preview was last drawn from, so it is redrawn only when the picture, style or layout changed. */
-  let drawn = '';
-  let pictures = 0;
-  const show = () => {
-    const wall = style === 'wall' && session.layout.positions.size > 0 ? wallTiles(session.layout, session.screens()) : null;
-    const key = wall ? `${pictures}|${wall.aspect}|${[...wall.tiles].map(([s, r]) => `${s}:${r.x},${r.y},${r.w},${r.h}`)}` : `plain${pictures}`;
-    if (key === drawn) return;
-    drawn = key;
-    if (!wall) return preview.replaceChildren(chosen.canvas);
-    const canvas = wallPreview(chosen.render, wall);
-    canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', `Photo wall preview: ${plural(wall.tiles.size, 'phone')}, each outlined with its number`);
-    preview.replaceChildren(canvas);
+  const previews = { wall: STYLES.wall.preview(session, preview), cards: STYLES.cards.preview(session, preview) };
+  const show = () => previews[style](chosen);
+  /** Counts what a Flip press was made for, so one whose picture or style changed while it was being cut is dropped. */
+  let gen = 0;
+  const cancelFlip = () => {
+    gen++;
+    if (!flip.disabled) return;
+    flip.disabled = false;
+    say('');
   };
   const pick = (s: Stunt, m: Moment | null = null) => {
+    cancelFlip();
     chosen = s;
     moment = m;
-    pictures++;
     show();
     thumbs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(!m && b.dataset.name === s.name)));
     moments.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.name === m?.name)));
@@ -102,33 +80,28 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     }
   });
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
-  flip.addEventListener('click', () => {
+  flip.addEventListener('click', async () => {
     const missing = moment && missingNames(moment, typed());
     if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
     if (!requirePlaced(session, fail)) return;
-    const room = session.playRoom();
-    const n = room.positions.size;
-    if (style === 'wall') {
-      if (n === 0) return fail('None of the phones on the map are connected right now.');
-      const wall = wallTiles(session.layout, session.screens());
-      const pieces = encodeTiles(chosen.render(...wallPixelSize(wall.aspect)), wall);
-      // Counted after the pieces are cut, which takes a moment, so the countdown is the full lead.
-      director.run({ stop: rec?.end, program: tileProgram(pieces, session.now() + FLIP_LEAD_MS), frame: true });
-    } else director.run({ stop: rec?.end, program: cardProgram(session, chosen.image) });
+    const mine = ++gen;
+    flip.disabled = true;
+    const alive = () => mine === gen;
+    const lead = FLIP_LEAD_MS;
+    const run = await STYLES[style].flip(session, chosen, { lead, say, alive }).finally(() => alive() && (flip.disabled = false));
+    if (!alive()) return;
+    if (typeof run === 'string') return fail(run);
+    director.run({ ...run, stop: rec?.end });
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
-    rec?.begin(FLIP_LEAD_MS + 8000);
-    say(
-      style === 'wall'
-        ? `3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'shows its' : 'show their'} piece of the picture.`
-        : `3, 2, 1… ${plural(n, 'phone')} ${n === 1 ? 'flips' : 'flip'} together.`,
-    );
+    rec?.begin(lead + 8000);
+    say(STYLES[style].status(session.playRoom().positions.size));
   });
-  const wallNote = h('p.note', {}, 'Lay the phones side by side, screens up, and each one shows its own piece of the picture.');
-  const cardsNote = h('p.note', { hidden: true }, 'Each phone shows one colour of the picture, so the more phones, the sharper it gets. Best for a big crowd far away.');
-  const styles = segmented<CardStyle>('Style', [['wall', 'Photo wall'], ['cards', 'Stadium cards']], style, (v) => {
+  // Every style's note stays in the page; only the chosen style's is shown.
+  const notes = STYLE_KEYS.map((k) => h('p.note', { hidden: k !== style }, STYLES[k].note));
+  const styles = segmented<CardStyle>('Style', STYLE_KEYS.map((k) => [k, STYLES[k].label]), style, (v) => {
+    cancelFlip();
     style = v;
-    wallNote.hidden = v !== 'wall';
-    cardsNote.hidden = v !== 'cards';
+    notes.forEach((n, i) => (n.hidden = STYLE_KEYS[i] !== v));
     show();
   });
   session.subscribe(show);
@@ -137,8 +110,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
     placementNote(session, 'Card stunt needs phones on the map.'),
     styles,
-    wallNote,
-    cardsNote,
+    ...notes,
     h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
     h('p.note', {}, 'Or pick one of these ready-made designs:'),
     thumbs,

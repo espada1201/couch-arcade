@@ -6,11 +6,11 @@ import { clockTime } from '../core/speaker';
 import { canvas2d } from '../ui/canvas';
 import { h, setText } from '../ui/dom';
 import { keepScreenOn } from '../ui/wakelock';
+import { flipCards } from './cardstyles';
 import type { Director } from './director';
 import { comingYear, presets, textStunt } from './images';
 import { H, W, aurora, broadcast, fire } from './live';
 import { cardStuntPointer, panel, placementNote, requirePlaced, stopButton } from './panel';
-import { flipCards } from './play';
 import { recorder } from './record';
 import type { HostSession } from './session';
 

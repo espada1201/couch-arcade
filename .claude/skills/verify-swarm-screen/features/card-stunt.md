@@ -28,5 +28,5 @@ Preconditions: phones scanned (each check does it).
 ## Gotchas
 
 - Words need enough phones in the right rows: three or six scattered phones can all land between letters and show one flat colour. That is sparse sampling, not a bug.
-- Photo wall cuts the picture to fit the phones where they sit. Phones far apart show far-apart pieces, and the wall's shape follows the room (two columns with a gap show the picture's two outer strips). A phone that never reported its screen shape counts as an upright 9:19.5 phone.
+- Photo wall cuts the picture to fit the phones where they sit. Phones far apart show far-apart pieces, and the wall's shape follows the room (two columns with a gap show the picture's two outer strips). A phone that never reported its screen shape counts as an upright 9:19.5 phone. Every placed phone is cut for, so one that is away at the flip shows its piece when it returns. Cutting takes about 20 ms a phone: the status reads `Cutting the picture into N pieces…` and Flip stays disabled until the countdown starts.
 - After a scan each phone shows its seat number, so a `.label` of `1` is not proof of a countdown; the flip lever only counts a `3 … 1 → blank` run.
