@@ -177,6 +177,10 @@ body.host { overflow-x: hidden; }
 .chip[aria-pressed='true'] { border-color: var(--amber); color: var(--amber); }
 .chip[data-offline] { border-style: dashed; color: var(--muted); }
 
+.swap { display: grid; gap: 8px; }
+.swap p { margin: 0; }
+.swap-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
 .controls { grid-area: controls; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--ink-2); }
 .tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
 .tab {

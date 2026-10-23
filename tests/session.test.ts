@@ -115,6 +115,57 @@ describe('host session', () => {
     });
   });
 
+  describe('swapping two phones', () => {
+    const lined = async () => {
+      const { session, phone } = harness();
+      await session.open();
+      for (const t of ['a', 'b', 'c']) phone().say({ t: 'hello', token: t });
+      session.lineUp();
+      return session;
+    };
+
+    it('trades the two places and leaves the third phone and the room where they were', async () => {
+      const session = await lined();
+      const [a, b, c] = [0, 1, 2].map((s) => session.layout.positions.get(s)!);
+      const aspect = session.layout.aspect;
+      expect(session.swapPlaces(0, 2)).toBe(true);
+      expect(session.layout.positions.get(0)).toEqual(c);
+      expect(session.layout.positions.get(2)).toEqual(a);
+      expect(session.layout.positions.get(1)).toEqual(b);
+      expect(session.layout.aspect).toBe(aspect);
+      // The Photo wall follows: phone 3 now cuts the left third.
+      const tiles = wallTiles(session.layout, new Map()).tiles;
+      expect(tiles.get(2)!.x).toBe(0);
+      expect(tiles.get(0)!.x).toBeGreaterThan(0.6);
+    });
+
+    it('does nothing for a phone that is not on the map, or for the same phone twice', async () => {
+      const session = await lined();
+      const before = JSON.stringify([...session.layout.positions]);
+      expect(session.swapPlaces(0, 7)).toBe(false);
+      expect(session.swapPlaces(1, 1)).toBe(false);
+      expect(JSON.stringify([...session.layout.positions])).toBe(before);
+    });
+
+    it('keeps the swap after a camera scan placed the phones, and tells the phones their new spots', async () => {
+      const { session, phone } = harness();
+      await session.open();
+      const ps = ['a', 'b'].map((t) => {
+        const p = phone();
+        p.say({ t: 'hello', token: t });
+        return p;
+      });
+      session.setRaw(new Map([[0, { x: 0.1, y: 0.2 }], [1, { x: 0.9, y: 0.7 }]]), 'camera');
+      const [a, b] = [0, 1].map((s) => session.layout.positions.get(s)!);
+      session.swapPlaces(0, 1);
+      expect(session.layout.positions.get(0)).toEqual(b);
+      expect(session.layout.positions.get(1)).toEqual(a);
+      const lastPos = (p: (typeof ps)[number]) => p.inbox.filter((m) => m.t === 'pos').at(-1);
+      expect(lastPos(ps[0])).toMatchObject({ pos: b });
+      expect(lastPos(ps[1])).toMatchObject({ pos: a });
+    });
+  });
+
   it('games only see phones that are connected and placed', async () => {
     const { session, phone } = harness();
     await session.open();

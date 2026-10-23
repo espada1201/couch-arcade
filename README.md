@@ -8,7 +8,7 @@ physically sits. Then the crowd is a giant display and speaker array.
 - **Big screen**: every phone shows the whole picture: shared slides, lyrics or an agenda as text cards, live captions, the camera.
 - **Poll**: a ballot on every phone, and on Reveal the room itself becomes the chart.
 - **Show**: one button loops a title card, waves with sound, live aurora and fire, and pictures. Event moments run on their own: a New Year countdown (optionally to midnight) and a first-dance wash.
-- **Photo & cards**: any picture, your own words or an event template, flipping on a 3-2-1. Photo wall: phones laid side by side each show their own piece of the photo. Stadium cards: one colour per phone.
+- **Photo & cards**: any picture, your own words or an event template, flipping on a 3-2-1. Photo wall: phones laid side by side each show their own piece of the photo. Stadium cards: one colour per phone. A wrong line-up is fixed by picking two phones to swap.
 - **Live screen**: the host camera, a video, or a generated animation, one pixel per phone.
 - **Wave**: light sweeping, ping-ponging or rippling through real space.
 - **Territory**: two halves of the room tap to push a front line; phones it passes defect.

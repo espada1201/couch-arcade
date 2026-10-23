@@ -179,3 +179,54 @@ for (const [how, press] of [
     expect(errors).toEqual([]);
   });
 }
+
+test('Photo wall: after "Line them up for me" the host swaps phones 1 and 3 by picking one and then the other, and the pieces follow', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
+  const swap = host.locator('.swap');
+  await expect(swap).toBeHidden();
+  await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+  await expect(swap).toBeVisible();
+  await expect(swap.getByRole('button')).toHaveText(['1', '2', '3']);
+  await swap.getByRole('button', { name: 'Phone 1' }).click();
+  await expect(swap.getByRole('button', { name: 'Phone 1' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(swap).toContainText('Phone 1 picked. Now pick the phone to swap it with.');
+  await swap.getByRole('button', { name: 'Phone 3' }).click();
+  await expect(swap).toContainText('Swapped phones 1 and 3. Left to right: 3, 2, 1.');
+  await expect(swap.getByRole('button')).toHaveText(['3', '2', '1']);
+  await expect(swap.locator('[aria-pressed=true]')).toHaveCount(0);
+  // The line-up instruction said phone 1 is on the left, which is no longer true.
+  await expect(host.getByText(/phone 1 on the left/)).toHaveCount(0);
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  for (const [i, want] of [BLUE, GREEN, RED].entries()) near(await screenCentre(phones[i]), want);
+  expect(errors).toEqual([]);
+});
+
+test('Photo wall: the swap works from the keyboard, keeps focus in the row, and picking the same phone again lets go of it', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host } = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
+  await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+  const swap = host.locator('.swap');
+  await swap.getByRole('button', { name: 'Phone 2' }).focus();
+  await host.keyboard.press('Enter');
+  await expect(swap.getByRole('button', { name: 'Phone 2' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(swap.getByRole('button', { name: 'Phone 2' })).toBeFocused();
+  await host.keyboard.press('Space');
+  await expect(swap.locator('[aria-pressed=true]')).toHaveCount(0);
+  await host.keyboard.press('Enter');
+  await host.keyboard.press('Tab');
+  await host.keyboard.press('Enter');
+  await expect(swap).toContainText('Swapped phones 2 and 3. Left to right: 1, 3, 2.');
+  await expect(swap.getByRole('button')).toHaveText(['1', '3', '2']);
+  await expect(swap.getByRole('button', { name: 'Phone 3' })).toBeFocused();
+  // The room map moved the two phones: its table is what a screen reader hears.
+  const across = (n: number) => host.locator(`tr[data-seat="${n}"]`).getAttribute('data-x').then(Number);
+  expect(await across(2)).toBeLessThan(await across(1));
+  expect(errors).toEqual([]);
+});

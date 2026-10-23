@@ -10,7 +10,7 @@ import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { flipper } from './flipper';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
-import { footedPanel, lineUpSaid, panel, placementNote, requirePlaced, stopButton } from './panel';
+import { footedPanel, lineUpSaid, panel, placementNote, requirePlaced, stopButton, swapPicker } from './panel';
 import { recorder } from './record';
 import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
@@ -153,6 +153,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     [
       placementNote(session, 'Photo wall and Stadium cards need phones on the map.', lineUp),
       lined,
+      swapPicker(session),
       styles,
       ...notes,
       h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),

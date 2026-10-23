@@ -1168,6 +1168,18 @@ const CHECKS = {
     run.note('lined up, no scan: screenshot centre per phone (left, middle, right)', strip.map((c) => c.join(',')));
     [RED, GREEN, BLUE].forEach((want, i) => near(strip[i], want) || run.issue(`lined-up phone ${i + 1} shows ${strip[i]}, not its ${['left', 'middle', 'right'][i]} third`));
     await run.shot(lined.host, 'host-lined-up-wall');
+    // A wrong order is fixed by picking two phones: swap 1 and 3, flip again, and the thirds follow.
+    const swap = lined.host.locator('.swap');
+    await swap.getByRole('button', { name: 'Phone 1' }).click();
+    await swap.getByRole('button', { name: 'Phone 3' }).click();
+    await expect(swap).toContainText('Swapped phones 1 and 3. Left to right: 3, 2, 1.');
+    await lined.host.getByRole('button', { name: 'Flip the cards' }).click();
+    await sleep(6000);
+    const swapped = [];
+    for (const p of lined.phones) swapped.push(await screenCentre(p));
+    run.note('swapped 1 and 3: screenshot centre per phone (phone 1, 2, 3)', swapped.map((c) => c.join(',')));
+    [BLUE, GREEN, RED].forEach((want, i) => near(swapped[i], want) || run.issue(`after the swap phone ${i + 1} shows ${swapped[i]}, not its new third`));
+    await run.shot(lined.host, 'host-swapped-wall');
   },
 
   async templates(run) {

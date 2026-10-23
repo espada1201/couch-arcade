@@ -286,6 +286,15 @@ export class HostSession {
     this.applyRaw(new Map([[seat, { x: clamp01(p.x), y: clamp01(p.y) }]]), 'manual');
   }
 
+  /** Trades the places of two phones that are on the map, so a wrong order is fixed without moving anyone else. False when either is not on the map. */
+  swapPlaces(a: number, b: number): boolean {
+    const [pa, pb] = [this.layout.positions.get(a), this.layout.positions.get(b)];
+    if (a === b || !pa || !pb) return false;
+    this.toRoomFrame();
+    this.applyRaw(new Map([[a, pb], [b, pa]]), 'manual');
+    return true;
+  }
+
   /**
    * Puts every connected phone that is not on the map into one left-to-right row, lowest seat first,
    * after the phones already placed, which stay where they are on the floor. Returns the seats it placed.

@@ -62,6 +62,11 @@ export function nearestGaps(points: Point[], aspect: number): number[] {
   return points.map((p, i) => Math.min(...points.flatMap((q, j) => (j === i ? [] : [distance(p, q, aspect)]))));
 }
 
+/** Seats in the order they sit from the left of the room: by across, then by depth, then by seat number. */
+export function seatsLeftToRight(positions: Map<number, Point>): number[] {
+  return [...positions].sort(([sa, a], [sb, b]) => a.x - b.x || a.y - b.y || sa - sb).map(([seat]) => seat);
+}
+
 /** The shape of a room nobody has placed a phone in yet. */
 export const DEFAULT_ROOM_ASPECT = 16 / 9;
 /** Room heights between phones in a row that has no placed phones to copy the spacing from: about a phone lying down, with a little air. */

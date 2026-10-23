@@ -1,4 +1,5 @@
-import { h, plural, type Child } from '../ui/dom';
+import { seatsLeftToRight } from '../core/layout';
+import { h, plural, setText, type Child } from '../ui/dom';
 import type { Director } from './director';
 import type { HostSession } from './session';
 
@@ -140,6 +141,50 @@ export function lineUpSaid(seats: number[], after: boolean): string {
   const run = n.length > 2 && n.every((v, i) => v === n[0] + i);
   const list = run ? `${n[0]} to ${n[n.length - 1]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
   return `Done. Phones ${list} are in a row${after ? ' after the ones already on the map' : ''}, phone ${n[0]} on the left. Ask your friends to hold or lay their phones in that order.`;
+}
+
+/** What the host reads once phones `a` and `b` (0-based) traded places; `order`: the seats left to right now. */
+export function swapSaid(a: number, b: number, order: number[]): string {
+  return `Swapped phones ${a + 1} and ${b + 1}. Left to right: ${order.map((s) => s + 1).join(', ')}.`;
+}
+
+/**
+ * The phones on the map in the order they sit, as buttons: pick one, then another, and they trade places.
+ * For a host whose line-up came out in the wrong order. Hidden until two phones are on the map.
+ */
+export function swapPicker(session: HostSession): HTMLElement {
+  const row = h('div.swap-row', { role: 'group', 'aria-label': 'Phones on the map, left to right' });
+  const said = h('p.note', { role: 'status' });
+  const el = h('div.swap', { hidden: true }, h('p', {}, 'Wrong order? Pick two phones to swap their places.'), row, said);
+  let picked: number | null = null;
+  let focus: number | null = null;
+  const choose = (seat: number) => {
+    if (picked === null || picked === seat) {
+      picked = picked === seat ? null : seat;
+      setText(said, picked === null ? '' : `Phone ${seat + 1} picked. Now pick the phone to swap it with.`);
+      focus = seat;
+      return update();
+    }
+    const first = picked;
+    picked = null;
+    focus = seat;
+    if (session.swapPlaces(first, seat)) setText(said, swapSaid(first, seat, seatsLeftToRight(session.layout.positions)));
+    else update();
+  };
+  function update() {
+    const order = seatsLeftToRight(session.layout.positions);
+    el.hidden = order.length < 2;
+    if (picked !== null && !order.includes(picked)) picked = null;
+    row.replaceChildren(
+      ...order.map((seat) => h('button.chip', { type: 'button', 'aria-pressed': String(seat === picked), 'aria-label': `Phone ${seat + 1}`, onclick: () => choose(seat) }, String(seat + 1))),
+    );
+    // The buttons are rebuilt in their new order; the host's place in the row stays.
+    if (focus !== null) row.querySelectorAll<HTMLElement>('button')[order.indexOf(focus)]?.focus();
+    focus = null;
+  }
+  session.subscribe(update);
+  update();
+  return el;
 }
 
 export function stopButton(director: Director, after?: () => void): HTMLButtonElement {

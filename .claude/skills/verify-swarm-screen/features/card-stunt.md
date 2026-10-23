@@ -6,6 +6,7 @@ Any picture, the host's words or an event template is spread across the crowd an
 
 - `photo-wall` Photo wall style: three phones in a row show a red, green, blue picture across all three, each with its own picture filling its screen; four phones in a square show their quadrants.
 - `line-up` "Line them up for me" in the note at the top (shown only while some connected phone is not on the map, next to "Go to Locate") puts every such phone into one left-to-right row in seat order, after any phones already on the map, which do not move. The panel says `Done. Phones 1 to 3 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.` and focus goes to Flip if a picture is already chosen, else to the upload.
+- `swap` once two phones are on the map, "Wrong order? Pick two phones to swap their places." shows the phones as numbered buttons in left-to-right order: pick one (`aria-pressed`), then another, and they trade places (`Swapped phones 1 and 3. Left to right: 3, 2, 1.`); picking the same phone again lets go. It works from the keyboard and keeps focus in the row. The line-up note ("phone 1 on the left") goes, since it is no longer true. The Photo wall cuts follow the new places.
 - `place-first` Flip with no phone on the map shows the red "Place some phones on the map first." (with Go to Locate) in the footer; it goes away by itself as soon as a phone is on the map (Wave, Music, Show and Live screen do the same), while a different message stays.
 - `flip-status` the line under Flip is cleared when the picture, words, template or style change; after a Photo wall flip it reads `3, 2, 1… 3 phones show their piece of the picture.`, or `… of the greeting.` when the stunt is words or an event template.
 - `stunt-picture` Stadium cards style, an uploaded picture: each phone shows its quadrant's colour.
@@ -28,6 +29,7 @@ Preconditions: phones on the map (each check scans them, except the line-up part
 - **Picture and words.** `drive.mjs stunt` (picks Stadium cards first). Reading `flip moment per phone` (all within 150 ms); `phone colours` must equal red, red, green, blue, yellow, yellow; `distinct colours for "GO"` > 1.
 - **Templates.** `drive.mjs templates` (12 phones in a 4x3 block, Stadium cards). Readings `flip moment per phone`, `Names with a heart: distinct colours`, `Just married: distinct colours` (> 1 each); `host-names.png`.
 - **Slow Wi-Fi.** `drive.mjs slow-flip`. Two phones plus one loaded through `impair.mjs` at 1 Mbps (40 ms latency, 30 ms jitter); a 5 MB WAV is fetched in the background while the host flips. Reading `flip moment per phone` (last is the slow phone; all within 150 ms; null means the flip arrived after the countdown should have started), `slow phone sockets` (1).
+- **Swap.** The end of `drive.mjs photo-wall`: after the line-up flip, pick Phone 1 then Phone 3, flip again. Reading `swapped 1 and 3: screenshot centre per phone` must be near blue, green, red; `host-swapped-wall.png`.
 - **Record.** `drive.mjs record`. Reading `keepsake` (`swarm-moment-YYYY-MM-DD-HHMM.webm`, > 10 KB), saved in the check folder.
 
 ## Gotchas

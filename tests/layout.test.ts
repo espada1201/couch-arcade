@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distance, nearest, nearestGaps, normalize, rowAfter, sampleCover, sampleCrowd, seatGridPoint, type Image } from '../src/core/layout';
+import { distance, nearest, nearestGaps, normalize, rowAfter, seatsLeftToRight, sampleCover, sampleCrowd, seatGridPoint, type Image } from '../src/core/layout';
 
 function quadrants(w: number, h: number): Image {
   const data = new Uint8ClampedArray(w * h * 4);
@@ -123,5 +123,13 @@ describe('a row of new phones after the placed ones', () => {
     expect(same.row.map((p) => p.x * same.aspect)).toEqual([expect.closeTo(0.85), expect.closeTo(1.2)]);
     const close = rowAfter([{ x: 0.5, y: 0.5 }, { x: 0.5001, y: 0.5 }], 1, 2);
     expect(close.row[1].x - close.row[0].x).toBeCloseTo(0.05 / close.aspect);
+  });
+});
+
+describe('the order phones sit in', () => {
+  it('lists seats left to right, top to bottom for the same x, then by seat', () => {
+    const at = new Map([[0, { x: 0.8, y: 0.5 }], [1, { x: 0.2, y: 0.5 }], [2, { x: 0.5, y: 0.7 }], [3, { x: 0.5, y: 0.2 }], [4, { x: 0.5, y: 0.2 }]]);
+    expect(seatsLeftToRight(at)).toEqual([1, 3, 4, 2, 0]);
+    expect(seatsLeftToRight(new Map())).toEqual([]);
   });
 });
