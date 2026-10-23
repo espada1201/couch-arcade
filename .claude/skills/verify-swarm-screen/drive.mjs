@@ -13,7 +13,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 import WebSocket from 'ws';
-import { CHROME_PATH, QUADRANTS_PNG, QUADRANT_COLOURS_BY_SIM, SIMS, bg, pictureSpread, scan, wallClockAt, wav } from '../../../e2e/room.ts';
+import { BLUE, CHROME_PATH, GREEN, QUADRANTS_PNG, QUADRANT_COLOURS_BY_SIM, RED, SIMS, YELLOW, bg, pictureSpread, scan, screenCentre, stripsPng, wallClockAt, wav } from '../../../e2e/room.ts';
 import { DEFAULT_HALF_MS, HALVES_PER_CODE, encodeHalves } from '../../../src/core/blinkcode.ts';
 import { POLL_COLORS } from '../../../src/core/poll.ts';
 
@@ -1077,6 +1077,8 @@ const CHECKS = {
     await scan(room);
     const { host, phones } = room;
     await tab(room, 'Card stunt');
+    // One colour per phone is the Stadium cards style; Photo wall is the default.
+    await host.getByRole('radio', { name: 'Stadium cards' }).check();
     await host.locator('#stunt-file').setInputFiles({
       name: 'quadrants.png',
       mimeType: 'image/png',
@@ -1102,6 +1104,62 @@ const CHECKS = {
     await run.shot(host, 'host-words');
   },
 
+  async 'photo-wall'(run) {
+    // Three phones side by side in one row: a left-to-right red, green, blue picture runs across all three.
+    const row = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });
+    await scan(row);
+    const { host, phones } = row;
+    await tab(row, 'Card stunt');
+    await expect(host.getByRole('radio', { name: 'Photo wall' })).toBeChecked();
+    await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+    const preview = host.locator('.stunt-preview canvas');
+    await expect(preview).toHaveAttribute('aria-label', 'Photo wall preview: 3 phones, each outlined with its number');
+    await run.shot(host, 'host-wall-preview');
+    await watchScreens(phones);
+    await host.getByRole('button', { name: 'Flip the cards' }).click();
+    await expect(host.getByText('3, 2, 1… 3 phones show their piece of the picture.')).toBeVisible();
+    await sleep(5500);
+    const flips = await flipMoments(phones);
+    run.note('flip moment per phone, ms after the first', flips);
+    if (flips.includes(null) || Math.max(...flips) > 150) run.issue(`phones did not flip together: ${flips.join(', ')}`);
+    const pictures = phones.map((p) => p.locator('img.tile-picture'));
+    for (const img of pictures) await expect(img).toBeVisible();
+    const boxes = await Promise.all(pictures.map((img) => img.boundingBox()));
+    run.note('picture box per phone (px)', boxes.map((b) => `${Math.round(b.width)}x${Math.round(b.height)}`));
+    if (boxes.some((b) => Math.round(b.width) !== 390 || Math.round(b.height) !== 844)) run.issue('a phone’s picture does not fill its screen');
+    const own = await Promise.all(pictures.map((img) => img.evaluate((i) => ({ w: i.naturalWidth, h: i.naturalHeight, kb: Math.round(((i.src.length - i.src.indexOf(',') - 1) * 3) / 4 / 1024) }))));
+    run.note('own picture per phone (px, KB)', own.map((o) => `${o.w}x${o.h} ${o.kb} KB`));
+    if (own.some((o) => o.w < 300 || o.h < 600)) run.issue('a phone got a piece smaller than a phone screen needs');
+    const near = (got, want) => got.every((c, i) => Math.abs(c - want[i]) <= 45);
+    const centres = [];
+    for (const p of phones) centres.push(await screenCentre(p));
+    run.note('screenshot centre per phone (left, middle, right)', centres.map((c) => c.join(',')));
+    [RED, GREEN, BLUE].forEach((want, i) => near(centres[i], want) || run.issue(`phone ${i + 1} shows ${centres[i]}, not its ${['left', 'middle', 'right'][i]} third`));
+    await run.shot(host, 'host-wall-flipped');
+    for (const [i, p] of phones.entries()) await run.shot(p, `phone-${i + 1}-wall`);
+    // Stadium cards is still the other style: one flat colour per phone, no picture.
+    await host.getByRole('radio', { name: 'Stadium cards' }).check();
+    await host.getByRole('button', { name: 'Flip the cards' }).click();
+    await sleep(4500);
+    const flat = await Promise.all(phones.map((p) => bg(p)));
+    run.note('Stadium cards: phone colours', flat.map((c) => c.join(',')));
+    expect(flat).toEqual([RED, GREEN, BLUE]);
+    for (const img of pictures) await expect(img).toBeHidden();
+    await run.shot(phones[1], 'phone-2-stadium');
+    // Four phones in a square: each shows its quadrant of the picture.
+    const square = await openRoom(run, { sims: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]] });
+    await scan(square);
+    await tab(square, 'Card stunt');
+    await square.host.locator('#stunt-file').setInputFiles({ name: 'quadrants.png', mimeType: 'image/png', buffer: QUADRANTS_PNG });
+    await square.host.getByRole('button', { name: 'Flip the cards' }).click();
+    for (const p of square.phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 10_000 });
+    const quad = [];
+    for (const p of square.phones) quad.push(await screenCentre(p));
+    run.note('square: screenshot centre per phone (top-left, top-right, bottom-left, bottom-right)', quad.map((c) => c.join(',')));
+    [RED, GREEN, BLUE, YELLOW].forEach((want, i) => near(quad[i], want) || run.issue(`square phone ${i + 1} shows ${quad[i]}, not its quadrant`));
+    await run.shot(square.host, 'host-square-wall');
+  },
+
   async templates(run) {
     // A 4 x 3 block of seats: words need a crowd dense enough to draw letters.
     const GRID = Array.from({ length: 12 }, (_, i) => [0.1 + (i % 4) * 0.27, 0.2 + Math.floor(i / 4) * 0.3]);
@@ -1109,6 +1167,7 @@ const CHECKS = {
     await scan(room);
     const { host, phones } = room;
     await tab(room, 'Card stunt');
+    await host.getByRole('radio', { name: 'Stadium cards' }).check();
     await host.getByRole('button', { name: 'Names with a heart' }).click();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
     await expect(host.getByText('Type both names for “Names with a heart”.')).toBeVisible();
