@@ -26,7 +26,8 @@ export type HostMsg =
   | { t: 'pong'; c0: number; h1: number; h2: number }
   /** `ack`: the phone answers with it, and the host sends the next such program only then (picture frames). */
   | { t: 'program'; program: Program; ack?: number }
-  | { t: 'pos'; pos: Point | null; aspect: number }
+  /** `rank` (0 is the left-most) of the `of` phones on the map, so a phone can say where it stands; absent while it is not on the map. */
+  | { t: 'pos'; pos: Point | null; aspect: number; rank?: number; of?: number }
   /** A song to fetch and get ready in the background, whatever the room is doing (null: none). */
   | { t: 'offer'; track: Track | null }
   | ChunkMsg;

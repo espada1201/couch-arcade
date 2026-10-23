@@ -652,3 +652,35 @@ describe('closing the room', () => {
     }
   });
 });
+
+describe('where a phone stands, said to the phone', () => {
+  it('tells each phone its place from the left and how many phones are on the map, and tells it again after a swap', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const ps = ['a', 'b', 'c'].map((t) => {
+      const p = phone();
+      p.say({ t: 'hello', token: t });
+      return p;
+    });
+    const last = (p: (typeof ps)[number]) => p.inbox.filter((m) => m.t === 'pos').at(-1);
+    session.setRaw(new Map([[0, { x: 0.1, y: 0.5 }], [1, { x: 0.5, y: 0.5 }], [2, { x: 0.9, y: 0.5 }]]), 'camera');
+    expect(ps.map((p) => last(p))).toMatchObject([{ rank: 0, of: 3 }, { rank: 1, of: 3 }, { rank: 2, of: 3 }]);
+    session.swapPlaces(0, 2);
+    expect(ps.map((p) => last(p))).toMatchObject([{ rank: 2, of: 3 }, { rank: 1, of: 3 }, { rank: 0, of: 3 }]);
+  });
+
+  it('says nothing about a place to a phone that is not on the map', async () => {
+    const { session, phone } = harness();
+    await session.open();
+    const [a, b] = ['a', 'b'].map((t) => {
+      const p = phone();
+      p.say({ t: 'hello', token: t });
+      return p;
+    });
+    session.setRaw(new Map([[0, { x: 0.1, y: 0.5 }]]), 'camera');
+    const idle = b.inbox.filter((m) => m.t === 'pos').at(-1)!;
+    expect(idle).toMatchObject({ pos: null });
+    expect(idle).not.toHaveProperty('rank');
+    expect(a.inbox.filter((m) => m.t === 'pos').at(-1)).toMatchObject({ rank: 0, of: 1 });
+  });
+});

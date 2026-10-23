@@ -1710,7 +1710,7 @@ const CHECKS = {
       try {
         await expect(host.locator('.count')).toHaveText(/^3 phones /, { timeout: 30_000 });
         for (const [i, p] of [...phones, p3].entries())
-          await expect(p.locator('.status')).toContainText(new RegExp(`Seat ${seatsBefore[i] + 1} · (on the map|not on the map yet)$`), { timeout: 30_000 });
+          await expect(p.locator('.status')).toContainText(new RegExp(`Seat ${seatsBefore[i] + 1} · (.* · )?(on the map|not on the map yet)$`), { timeout: 30_000 });
         back = true;
       } catch {}
       run.note('room recovers after relay restart, same seats (30 s)', back);

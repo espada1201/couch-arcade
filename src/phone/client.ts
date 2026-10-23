@@ -36,6 +36,8 @@ const SCREEN_SLACK = 0.02;
 export class PhoneClient {
   seat = -1;
   pos: Point | null = null;
+  /** Where the phone stands among the phones on the map: its place from the left (0 first) and how many there are; null while it is not on the map. */
+  place: { rank: number; of: number } | null = null;
   aspect = 1;
   program: Program = { kind: 'lobby' };
   /** Counts programs as they arrive, so a player can tell a new one from a resend of the same. */
@@ -218,6 +220,7 @@ export class PhoneClient {
         break;
       case 'pos':
         this.pos = m.pos;
+        this.place = m.pos && Number.isInteger(m.rank) && Number.isInteger(m.of) ? { rank: m.rank!, of: m.of! } : null;
         this.aspect = m.aspect;
         break;
       case 'program':

@@ -4,7 +4,7 @@ import { MAX_IDS } from '../core/blinkcode';
 import type { Program } from '../core/effects';
 import type { Track } from '../core/speaker';
 import { applyHomography, floorPlan } from '../core/homography';
-import { DEFAULT_ROOM_ASPECT, normalize, rowAfter, type Point, type Room } from '../core/layout';
+import { DEFAULT_ROOM_ASPECT, normalize, rowAfter, seatsLeftToRight, type Point, type Room } from '../core/layout';
 import { clamp01 } from '../core/math';
 import { TAP_MS, fits, messageBytes, parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
 import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../net/limits.js';
@@ -354,7 +354,9 @@ export class HostSession {
   }
 
   private sendPos(s: Seat): void {
-    this.sendTo(s, { t: 'pos', pos: this.layout.positions.get(s.seat) ?? null, aspect: this.layout.aspect });
+    const order = seatsLeftToRight(this.layout.positions);
+    const rank = order.indexOf(s.seat);
+    this.sendTo(s, { t: 'pos', pos: this.layout.positions.get(s.seat) ?? null, aspect: this.layout.aspect, ...(rank >= 0 ? { rank, of: order.length } : {}) });
   }
 
   private sendTo(s: Seat, m: HostMsg): void {

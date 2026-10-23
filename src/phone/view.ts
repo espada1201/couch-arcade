@@ -9,6 +9,7 @@ import { PhoneClient } from './client';
 import { showFirst } from './layers';
 import { overlays, youVoted } from './overlays';
 import { PartySpeaker } from './music';
+import { phoneTag } from './tag';
 
 function parseSim(v: string | null): { x: number; y: number } | undefined {
   const m = v?.match(/^([\d.]+),([\d.]+)$/);
@@ -143,10 +144,7 @@ export async function phoneView(app: HTMLElement, room: string, params: URLSearc
   let wasOut = false;
   const showStatus = () => {
     party.sync();
-    const seat = client.seat >= 0 ? `Seat ${client.seat + 1}` : 'Joining';
-    const place = client.pos ? 'on the map' : 'not on the map yet';
-    const state = { connecting: 'connecting…', live: place, reconnecting: 'reconnecting…', full: 'room full', replaced: 'open in another tab', failed: 'disconnected' }[client.status];
-    setText(status, `${room} · ${seat} · ${state}`);
+    setText(status, phoneTag({ room, seat: client.seat, status: client.status, onMap: !!client.pos, ...client.place }));
     status.dataset.state = client.status;
     mapHint.hidden = !(client.status === 'live' && !client.pos && client.program.kind === 'lobby');
 
