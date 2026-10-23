@@ -1137,7 +1137,6 @@ const CHECKS = {
     [RED, GREEN, BLUE].forEach((want, i) => near(centres[i], want) || run.issue(`phone ${i + 1} shows ${centres[i]}, not its ${['left', 'middle', 'right'][i]} third`));
     await run.shot(host, 'host-wall-flipped');
     for (const [i, p] of phones.entries()) await run.shot(p, `phone-${i + 1}-wall`);
-    // Stadium cards is still the other style: one flat colour per phone, no picture.
     await host.getByRole('radio', { name: 'Stadium cards' }).check();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
     await sleep(4500);
@@ -1146,7 +1145,6 @@ const CHECKS = {
     expect(flat).toEqual([RED, GREEN, BLUE]);
     for (const img of pictures) await expect(img).toBeHidden();
     await run.shot(phones[1], 'phone-2-stadium');
-    // Four phones in a square: each shows its quadrant of the picture.
     const square = await openRoom(run, { sims: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]] });
     await scan(square);
     await tab(square, 'Card stunt');

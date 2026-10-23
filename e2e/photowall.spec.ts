@@ -25,7 +25,6 @@ test('Photo wall: three phones in a row show one picture across all three, and S
   await host.getByRole('button', { name: 'Flip the cards' }).click();
   await expect(host.getByText('3, 2, 1… 3 phones show their piece of the picture.')).toBeVisible();
 
-  // The countdown first: no picture yet. Then each phone fills its screen with its own piece.
   await expect(phones[0].locator('.label')).toHaveText(/^[123]$/, { timeout: 3000 });
   await expect(phones[0].locator('img.tile-picture')).toBeHidden();
   for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
@@ -38,7 +37,6 @@ test('Photo wall: three phones in a row show one picture across all three, and S
   }
   await phones[1].screenshot({ path: 'test-results/phone-wall.png' });
 
-  // Stadium cards is still there: back to one flat colour per phone, no picture.
   await host.getByRole('radio', { name: 'Stadium cards' }).check();
   await expect(host.getByText('Best for a big crowd far away.')).toBeVisible();
   await host.getByRole('button', { name: 'Flip the cards' }).click();

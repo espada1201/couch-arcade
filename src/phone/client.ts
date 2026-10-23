@@ -125,7 +125,6 @@ export class PhoneClient {
     this.send({ t: 'vote', choice });
   }
 
-  /** Tell the host the screen's shape if it differs from what the host knows by more than SCREEN_SLACK. */
   reportScreen(): void {
     const aspect = this.shape();
     if (!(aspect > 0) || !Number.isFinite(aspect) || (this.told !== null && Math.abs(aspect / this.told - 1) <= SCREEN_SLACK)) return;

@@ -8,14 +8,12 @@ import { canvas2d } from '../ui/canvas';
 /** Longest side of one phone's piece: more than its screen can use, and encodeWithin shrinks it to the message anyway. */
 const TILE_LONG_SIDE = 1000;
 const TILE_QUALITY = 0.8;
-/** A piece's average colour is taken from a copy this many pixels square. */
 const AVERAGE_SIDE = 16;
 const PREVIEW_LONG_SIDE = 480;
 
 /** One phone's piece: a JPEG data URL, or none when it could not be made small enough for a message. */
 export interface Piece {
   src: string | null;
-  /** Average colour of the piece. */
   rgb: RGB;
 }
 

@@ -52,7 +52,7 @@ export function wallTiles(room: Room, screens: ReadonlyMap<number, number>): Wal
   const shapes = seats.map((s) => screens.get(s) ?? PHONE_ASPECT);
   const a = median(shapes);
   // Physical points: one unit is the crowd's height.
-  const pts = seats.map((s) => ({ x: room.positions.get(s)!.x * room.aspect, y: room.positions.get(s)!.y }));
+  const pts = [...room.positions.values()].map((p) => ({ x: p.x * room.aspect, y: p.y }));
   // The width at which two screens would just touch; a phone's own is to its nearest neighbour.
   const nearest = pts.flatMap((p, i) => {
     const reach = pts.flatMap((q, j) => (j === i ? [] : [Math.max(Math.abs(q.x - p.x), Math.abs(q.y - p.y) * a)])).filter((d) => d > 1e-9);

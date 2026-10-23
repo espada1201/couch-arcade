@@ -22,7 +22,6 @@ export interface Stunt {
   render(w: number, h: number): HTMLCanvasElement;
 }
 
-/** The longest side an uploaded picture keeps for the Photo wall. */
 const UPLOAD_LONG_SIDE = 2048;
 
 /** `src` scaled to cover a w x h canvas, the overflow cropped evenly from both sides. */
@@ -42,7 +41,6 @@ function make(name: string, draw: (ctx: CanvasRenderingContext2D, s: number) => 
     canvas: c,
     image: toImage(c),
     render(w, h) {
-      // The design is drawn square at the long side, then the middle w x h of it is kept.
       const side = Math.max(w, h);
       const [big, bigCtx] = canvas2d(side, side);
       draw(bigCtx, side);

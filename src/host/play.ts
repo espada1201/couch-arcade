@@ -46,15 +46,11 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   let pictures = 0;
   const show = () => {
     const room = session.playRoom();
-    if (style === 'cards' || room.positions.size === 0) {
-      if (drawn !== `plain${pictures}`) preview.replaceChildren(chosen.canvas);
-      drawn = `plain${pictures}`;
-      return;
-    }
-    const wall = wallTiles(room, session.screens());
-    const key = `${pictures}|${wall.aspect}|${[...wall.tiles].map(([s, r]) => `${s}:${r.x},${r.y},${r.w},${r.h}`)}`;
+    const wall = style === 'wall' && room.positions.size > 0 ? wallTiles(room, session.screens()) : null;
+    const key = wall ? `${pictures}|${wall.aspect}|${[...wall.tiles].map(([s, r]) => `${s}:${r.x},${r.y},${r.w},${r.h}`)}` : `plain${pictures}`;
     if (key === drawn) return;
     drawn = key;
+    if (!wall) return preview.replaceChildren(chosen.canvas);
     const canvas = wallPreview(chosen.render, wall);
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', `Photo wall preview: ${plural(wall.tiles.size, 'phone')}, each outlined with its number`);
@@ -111,10 +107,11 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const missing = moment && missingNames(moment, typed());
     if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
     if (!requirePlaced(session, fail)) return;
-    const n = session.playRoom().positions.size;
+    const room = session.playRoom();
+    const n = room.positions.size;
     if (style === 'wall') {
       if (n === 0) return fail('None of the phones on the map are connected right now.');
-      const wall = wallTiles(session.playRoom(), session.screens());
+      const wall = wallTiles(room, session.screens());
       const pieces = encodeTiles(chosen.render(...wallPixelSize(wall.aspect)), wall);
       // Counted after the pieces are cut, which takes a moment, so the countdown is the full lead.
       director.run({ stop: rec?.end, program: tileProgram(pieces, session.now() + FLIP_LEAD_MS), frame: true });
@@ -138,7 +135,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   session.subscribe(show);
   show();
   const { el, say, fail } = panel(
-    'Turn your photo, or your words, into a crowd stunt: every phone flips together on a 3, 2, 1 countdown.',
+    'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
     placementNote(session, 'Card stunt needs phones on the map.'),
     styles,
     wallNote,

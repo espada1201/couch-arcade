@@ -31,7 +31,6 @@ export type HostMsg =
   | { t: 'offer'; track: Track | null }
   | ChunkMsg;
 
-/** Screen shapes a phone may report: from a very tall phone to a very wide one. */
 const MIN_SCREEN_ASPECT = 0.2;
 const MAX_SCREEN_ASPECT = 5;
 
