@@ -33,6 +33,8 @@ export type Program =
   | { kind: 'grid'; rows: number; seats: number }
   | { kind: 'card'; rgb: RGB; at: number }
   | { kind: 'live'; rgb: RGB; prev: RGB; at: number }
+  /** Photo wall: this phone's own piece of the picture (a JPEG data URL), shown from `at`; rgb is its average colour (map, optics, the moment before it decodes). */
+  | { kind: 'tile'; src: string; rgb: RGB; at: number }
   | WaveProgram
   | { kind: 'territory'; state: TerritoryState; colors: [RGB, RGB] }
   | { kind: 'potato'; state: PotatoState }
@@ -178,7 +180,8 @@ export function render(prog: Program, me: Me, t: number): Frame {
       return { rgb: litAt(me.seat, prog.schedule, t) ? WHITE : BLACK };
     case 'grid':
       return { rgb: DIM };
-    case 'card': {
+    case 'card':
+    case 'tile': {
       if (t >= prog.at) return { rgb: prog.rgb };
       const left = Math.ceil((prog.at - t) / 1000);
       return { rgb: DIM, label: left <= 3 ? String(left) : undefined };

@@ -65,6 +65,13 @@ describe('rendering', () => {
     expect(render({ kind: 'card', rgb: [1, 2, 3], at: 5000 }, me, 5000).rgb).toEqual([1, 2, 3]);
   });
 
+  it('photo wall counts down like a card, then every phone takes its average colour until its picture is up', () => {
+    const tile = { kind: 'tile' as const, src: 'data:image/jpeg;base64,AAAA', rgb: [1, 2, 3] as [number, number, number], at: 5000 };
+    expect(render(tile, me, 2500).label).toBe('3');
+    expect(render(tile, me, 4999).rgb).toEqual(render({ kind: 'card', rgb: [1, 2, 3], at: 5000 }, me, 4999).rgb);
+    expect(render(tile, me, 5000)).toEqual({ rgb: [1, 2, 3] });
+  });
+
   it('live frames swap on the shared clock, not on arrival', () => {
     const live = { kind: 'live' as const, rgb: [9, 9, 9] as [number, number, number], prev: [1, 1, 1] as [number, number, number], at: 100 };
     expect(render(live, me, 99).rgb).toEqual([1, 1, 1]);
