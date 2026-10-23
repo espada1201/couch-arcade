@@ -92,13 +92,14 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   const stage = new Stage(session, director);
 
   const count = h('span.count', { role: 'status' });
+  // The sync figure never splits across two lines when the bar is tight.
   const updateCount = () => {
     const server = SERVER_SAYS[session.server];
     if (server) return setText(count, server);
     const online = session.online.length;
     const placed = [...session.layout.positions.keys()].filter((s) => session.seats.get(s)?.link).length;
     const sync = session.worstSync;
-    setText(count, `${plural(online, 'phone')} · ${placed} on the map` + (online && Number.isFinite(sync) ? ` · in sync to ±${sync} ms` : online ? ' · syncing…' : ''));
+    setText(count, `${plural(online, 'phone')} · ${online ? `${placed} of ${online}` : placed} on the map` + (online && Number.isFinite(sync) ? ` · in\u00a0sync\u00a0to\u00a0±${sync}\u00a0ms` : online ? ' · syncing…' : ''));
   };
   session.subscribe(updateCount);
   updateCount();

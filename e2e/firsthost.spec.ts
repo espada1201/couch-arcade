@@ -98,7 +98,7 @@ test('plain words: not on the map yet, put phones on the map, and the phone says
   await expect(phone.locator('.status')).toContainText(/· not on the map yet$/);
   await expect(phone.locator('.map-hint')).toContainText('The host will put your phone on the map');
   await expect(host.getByRole('group', { name: 'Phones not on the map yet' })).toContainText('Not on the map yet');
-  await expect(host.locator('.count')).toContainText('0 on the map');
+  await expect(host.locator('.count')).toContainText('1 phone · 0 of 1 on the map');
   await expect(host.getByText(/not placed|Not placed/)).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -690,5 +690,20 @@ test('1280x800: after an upload the preview and Flip are both in view, without s
       return { previewShown: pre.top >= panel.top && pre.bottom <= foot.top + 1, flipShown: flip.top >= foot.top && flip.bottom <= innerHeight };
     });
   await expect.poll(seen).toEqual({ previewShown: true, flipShown: true });
+  expect(errors).toEqual([]);
+});
+
+test('1280x800: the top bar is one row, so the console keeps its height for the panels', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  for (let i = 0; i < 3; i++) await joinPhone(context, code, i, errors);
+  await expect(host.locator('.count')).toContainText('3 phones · 0 of 3 on the map · in sync to');
+  // One row of 34 px buttons plus padding is about 60 px; a second row of buttons made it 110.
+  expect((await host.locator('.topbar').boundingBox())!.height).toBeLessThan(75);
+  const actions = (await host.locator('.top-actions').boundingBox())!;
+  const room = (await host.locator('.topbar .room').boundingBox())!;
+  expect(actions.y).toBeLessThan(room.y + room.height);
+  expect(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });

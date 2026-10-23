@@ -132,6 +132,15 @@ body.host { overflow-x: hidden; }
 .badge { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
 .badge[data-transport='lan'] { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, transparent); }
 .top-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+/* At laptop widths the bar stays one row: the count gives way (it may wrap) before the buttons drop under it. */
+@media (min-width: 1101px) {
+  .topbar { flex-wrap: nowrap; gap: 12px; padding-inline: 16px; }
+  .room { padding-left: 12px; }
+  .mark, .room, .badge { flex: none; }
+  .count { min-width: 0; font-size: 15px; }
+  .top-actions { flex-wrap: nowrap; flex: none; }
+  .top-actions .btn.small { padding: 0 10px; }
+}
 
 /*
  * On a screen big enough to show the map and the controls side by side, the console is exactly one screen
