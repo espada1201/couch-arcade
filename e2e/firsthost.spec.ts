@@ -185,6 +185,49 @@ for (const [w, h] of [[1280, 800], [820, 1180]]) {
   });
 }
 
+for (const [w, h] of [[1280, 800], [390, 844]]) {
+  test(`${w}px: Flip and its message stay in view while the rest of Card stunt scrolls`, async ({ context }) => {
+    const errors: string[] = [];
+    const { host } = await openHost(context, errors);
+    await host.setViewportSize({ width: w, height: h });
+    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    const flip = host.getByRole('button', { name: 'Flip the cards' });
+    await expect(flip).toBeVisible();
+    expect(await inViewport(host, 'button.btn.primary:text("Flip the cards")'), 'at the top of the panel').toBe(true);
+    // Down at the Name field and the preview, Flip is still there.
+    await host.locator('.stunt-preview').scrollIntoViewIfNeeded();
+    expect(await inViewport(host, '.stunt-preview canvas'), 'the preview').toBe(true);
+    expect(await inViewport(host, 'button.btn.primary:text("Flip the cards")'), 'beside the preview').toBe(true);
+    await host.locator('#stunt-name-1').scrollIntoViewIfNeeded();
+    expect(await inViewport(host, '#stunt-name-1'), 'the Name field').toBe(true);
+    expect(await inViewport(host, 'button.btn.primary:text("Flip the cards")'), 'beside the Name field').toBe(true);
+    await flip.click();
+    expect(await inViewport(host, '[role=alert]:not(:empty)'), 'the message').toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('keyboard: Enter in a Name field or in "Or your words" moves focus to Flip, and Enter in words uses them first', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  const flip = host.getByRole('button', { name: 'Flip the cards' });
+  await host.getByRole('button', { name: 'Happy birthday' }).click();
+  await host.locator('#stunt-name-1').fill('MAYA');
+  await host.keyboard.press('Enter');
+  await expect(flip).toBeFocused();
+  await host.locator('#stunt-name-2').focus();
+  await host.keyboard.press('Enter');
+  await expect(flip).toBeFocused();
+  await expect(host.getByRole('button', { name: 'Happy birthday' })).toHaveAttribute('aria-pressed', 'true');
+  await host.locator('#stunt-words').fill('GO TEAM');
+  await host.keyboard.press('Enter');
+  await expect(flip).toBeFocused();
+  // The words are the picture now: no design and no template is chosen any more.
+  await expect(host.locator('.thumbs button[aria-pressed=true], .moments button[aria-pressed=true]')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('Card stunt says what to expect from few phones', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);

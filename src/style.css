@@ -140,6 +140,7 @@ body.host { overflow-x: hidden; }
  */
 @media (min-width: 761px) and (min-height: 600px) {
   .console { height: 100vh; height: 100dvh; min-height: 0; }
+  .panel { overflow-y: auto; }
   .join { overflow-y: auto; min-height: 0; }
   .stage-frame { min-height: 240px; }
 }
@@ -187,8 +188,12 @@ body.host { overflow-x: hidden; }
 .tab:hover { color: var(--text); }
 .tab[aria-selected='true'] { color: var(--text); border-bottom-color: var(--amber); }
 .tab[aria-selected='true'] .tab-num { color: var(--amber); }
-.panel { overflow-y: auto; flex: 1; }
-.panel-body { padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 14px; }
+.panel { flex: 1; }
+.panel-body { --px: 20px; --pb: 28px; padding: 18px var(--px) var(--pb); display: flex; flex-direction: column; gap: 14px; }
+/* The last controls and the status line stay at the bottom of the screen while the panel scrolls (the panel itself, or the page on a small screen). */
+.panel-foot { position: sticky; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin: 0 calc(-1 * var(--px)) calc(-1 * var(--pb)); padding: 10px var(--px) 14px; background: var(--ink-2); border-top: 1px solid var(--line); }
+.panel-foot .note { margin: 0; }
+.panel:has(.panel-foot), :root:has(.panel-foot) { scroll-padding-bottom: 150px; }
 .panel-title { margin: 0; font: 700 18px var(--display); font-stretch: 100%; color: var(--text); }
 .pointer, .needs, .back-to { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-left: 3px solid var(--teal); background: var(--ink-3); border-radius: 0 6px 6px 0; }
 .back-to { margin-bottom: 12px; font-size: 15px; }
@@ -367,7 +372,7 @@ label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
   .qr { width: 120px; }
   .stage-frame { min-height: 300px; }
   .controls { border-left: 0; border-top: 1px solid var(--line); }
-  .panel-body { padding: 16px; }
+  .panel-body { --px: 16px; --pb: 16px; }
   .slider { grid-template-columns: 70px 1fr 80px; }
 }
 /* A laptop-sized host on a phone held sideways: a slimmer header and tab strip, so the stage and controls start above the fold. */
@@ -379,7 +384,7 @@ label.file.drop.over { border-color: var(--amber); background: var(--ink-3); }
   .tab { padding: 8px 6px; }
   .tab-num { display: none; }
   .stage-frame { min-height: 220px; }
-  .panel-body { padding: 12px 16px 20px; gap: 10px; }
+  .panel-body { --px: 16px; --pb: 20px; padding-top: 12px; gap: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

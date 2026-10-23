@@ -10,7 +10,7 @@ import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { flipper } from './flipper';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
-import { lineUpSaid, panel, placementNote, requirePlaced, stopButton } from './panel';
+import { footedPanel, lineUpSaid, panel, placementNote, requirePlaced, stopButton } from './panel';
 import { recorder } from './record';
 import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
@@ -46,6 +46,15 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     say(missingNames(m, typed()) ?? '');
   };
   for (const n of names) n.addEventListener('input', () => moment && moment.names > 0 && useMoment(moment));
+  // Enter means "done typing": on to Flip, which is what comes next.
+  const enterToFlip = (field: HTMLInputElement, before = () => {}) =>
+    field.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      e.preventDefault();
+      before();
+      flip.focus();
+    });
+  names.forEach((n) => enterToFlip(n));
   const moments = h(
     'div.moments',
     { role: 'group', 'aria-label': 'Event templates' },
@@ -63,6 +72,11 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     }),
   );
   const words = h('input', { type: 'text', id: 'stunt-words', maxlength: 24, placeholder: 'GO TEAM', autocomplete: 'off' });
+  const useWords = () => {
+    const text = words.value.trim().toUpperCase();
+    if (text) pick(textStunt(text, session.layout.aspect));
+  };
+  enterToFlip(words, useWords);
   const file = h('input', { type: 'file', accept: 'image/*', id: 'stunt-file' });
   file.addEventListener('change', async () => {
     const f = file.files?.[0];
@@ -106,20 +120,22 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     // The button is gone now that everyone is on the map: carry on at the next step.
     (picked ? flip : file).focus();
   };
-  const { el, say, fail } = panel(
+  const { el, say, fail } = footedPanel(
     'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
-    placementNote(session, 'Card stunt needs phones on the map.', lineUp),
-    styles,
-    ...notes,
-    h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
-    h('p.note', {}, 'Or pick one of these ready-made designs:'),
-    thumbs,
-    moments,
-    h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
-    h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: () => words.value.trim() && pick(textStunt(words.value.trim().toUpperCase(), session.layout.aspect)) }, 'Use words')),
-    preview,
-    rec?.el,
-    flip,
+    [
+      placementNote(session, 'Card stunt needs phones on the map.', lineUp),
+      styles,
+      ...notes,
+      h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),
+      h('p.note', {}, 'Or pick one of these ready-made designs:'),
+      thumbs,
+      moments,
+      h('div.row', {}, h('label.grow', { for: 'stunt-name-1' }, 'Name (birthday, couple)', names[0]), h('label.grow', { for: 'stunt-name-2' }, 'Second name (couple)', names[1])),
+      h('div.row', {}, h('label.grow', { for: 'stunt-words' }, 'Or your words', words), h('button.btn', { type: 'button', onclick: useWords }, 'Use words')),
+      preview,
+      rec?.el,
+    ],
+    [flip],
   );
   // Busy but not disabled, so Flip keeps the keyboard focus the upload gave it.
   const flips = flipper(director, { say, fail, busy: (on) => (on ? flip.setAttribute('aria-disabled', 'true') : flip.removeAttribute('aria-disabled')) }, rec?.end);
