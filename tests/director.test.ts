@@ -95,6 +95,22 @@ describe('the director owns what the phones run', () => {
   });
 });
 
+describe('a hold can change what the phones run without ending its run', () => {
+  it('sends the new program while it holds the room, and stops once something else has it', async () => {
+    const r = await room([0.5]);
+    const stop = vi.fn();
+    const hold = r.director.run({ stop, program: { kind: 'identify' } });
+    expect(hold.update({ kind: 'grid', rows: 2, seats: 2 })).toBe(true);
+    expect(r.phones[0].inbox.at(-1)).toEqual({ t: 'program', program: { kind: 'grid', rows: 2, seats: 2 } });
+    expect(stop).not.toHaveBeenCalled();
+    expect(hold.active).toBe(true);
+    r.director.run({ program: { kind: 'identify' } });
+    const sent = r.phones[0].inbox.length;
+    expect(hold.update({ kind: 'grid', rows: 3, seats: 3 })).toBe(false);
+    expect(r.phones[0].inbox.length).toBe(sent);
+  });
+});
+
 describe('a run that sends picture frames', () => {
   it('holds the next frame for a phone until it has the one before', async () => {
     const r = await room([0.2, 0.8]);
