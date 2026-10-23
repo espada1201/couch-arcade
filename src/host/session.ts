@@ -458,7 +458,7 @@ export class HostSession {
   private setScreen(s: Seat, aspect: number): void {
     if (s.screen === aspect) return;
     s.screen = aspect;
-    this.changed();
+    this.notify();
   }
 
   /** A phone typed its row and seat: kept only while the seat grid is asking, and only inside its size. */
@@ -518,6 +518,10 @@ export class HostSession {
 
   private changed(): void {
     this.save();
+    this.notify();
+  }
+
+  private notify(): void {
     for (const cb of this.listeners) cb();
   }
 

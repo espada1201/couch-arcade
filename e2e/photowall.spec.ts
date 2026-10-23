@@ -59,3 +59,24 @@ test('Photo wall: four phones in a square each show their quadrant of the pictur
   for (const [i, want] of [RED, GREEN, BLUE, YELLOW].entries()) near(await screenCentre(room.phones[i]), want);
   expect(errors).toEqual([]);
 });
+
+test('Photo wall: a phone that was away at the flip shows its piece when it comes back, and its neighbours were cut around it', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await scan(room);
+  const { host, phones } = room;
+  const url = phones[2].url();
+  await phones[2].goto('about:blank');
+  await expect(host.locator('.stage-away')).toContainText('Phone 3 has left');
+  await flipWall(host, 'strips.png', stripsPng([RED, GREEN, BLUE]));
+  await expect(host.getByText(/^3, 2, 1… 2 phones show their piece/)).toBeVisible();
+  for (const p of phones.slice(0, 2)) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  near(await screenCentre(phones[0]), RED);
+  near(await screenCentre(phones[1]), GREEN);
+  await phones[2].goto(url);
+  await phones[2].getByRole('button', { name: 'Join the swarm' }).click();
+  await expect(phones[2].locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  near(await screenCentre(phones[2]), BLUE);
+  expect(errors).toEqual([]);
+});

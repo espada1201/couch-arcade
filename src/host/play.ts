@@ -45,8 +45,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   let drawn = '';
   let pictures = 0;
   const show = () => {
-    const room = session.playRoom();
-    const wall = style === 'wall' && room.positions.size > 0 ? wallTiles(room, session.screens()) : null;
+    const wall = style === 'wall' && session.layout.positions.size > 0 ? wallTiles(session.layout, session.screens()) : null;
     const key = wall ? `${pictures}|${wall.aspect}|${[...wall.tiles].map(([s, r]) => `${s}:${r.x},${r.y},${r.w},${r.h}`)}` : `plain${pictures}`;
     if (key === drawn) return;
     drawn = key;
@@ -111,7 +110,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const n = room.positions.size;
     if (style === 'wall') {
       if (n === 0) return fail('None of the phones on the map are connected right now.');
-      const wall = wallTiles(room, session.screens());
+      const wall = wallTiles(session.layout, session.screens());
       const pieces = encodeTiles(chosen.render(...wallPixelSize(wall.aspect)), wall);
       // Counted after the pieces are cut, which takes a moment, so the countdown is the full lead.
       director.run({ stop: rec?.end, program: tileProgram(pieces, session.now() + FLIP_LEAD_MS), frame: true });

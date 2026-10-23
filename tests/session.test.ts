@@ -378,9 +378,14 @@ describe('phone screen shapes', () => {
       a.say({ t: 'hello', token: 'aaa' });
       let changes = 0;
       session.subscribe(() => changes++);
+      let writes = 0;
+      const set = storage.setItem;
+      storage.setItem = (k, v) => (writes++, set(k, v));
+      const before = writes;
       a.say({ t: 'screen', aspect: 0.46 });
       a.say({ t: 'screen', aspect: 0.46 });
       expect(changes).toBe(1);
+      expect(writes).toBe(before);
       expect(storage.getItem('swarm-host')).toContain('"token":"aaa"');
       expect(storage.getItem('swarm-host')).not.toContain('0.46');
     } finally {
