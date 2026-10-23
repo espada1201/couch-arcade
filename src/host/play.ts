@@ -151,7 +151,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const msg = footedPanel(
     'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
     [
-      placementNote(session, 'Card stunt needs phones on the map.', lineUp),
+      placementNote(session, 'Photo & cards needs phones on the map.', lineUp),
       lined,
       styles,
       ...notes,

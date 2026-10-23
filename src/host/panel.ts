@@ -104,8 +104,8 @@ export function cardStuntPointer(lead: string): HTMLElement {
   return h(
     'div.pointer',
     {},
-    h('p', {}, lead ? `${lead} ` : '', 'For one photo spread across the phones, each showing its own piece, use ', h('strong', {}, 'Card stunt'), '.'),
-    h('button.btn.small', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'card') }, 'Go to Card stunt'),
+    h('p', {}, lead ? `${lead} ` : '', 'For one photo spread across the phones, each showing its own piece, use ', h('strong', {}, 'Photo & cards'), '.'),
+    h('button.btn.small', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'card') }, 'Go to Photo & cards'),
   );
 }
 

@@ -25,7 +25,7 @@ H1 and one paragraph, then four H2s: `Sub-features`, `How to get to it (user POV
 - [Big screen](./big-screen.md): `cards`, `camera`, `big-room`, `slow-follow`, `lost-acks`, `screen-share`, `captions`
 - [Poll](./poll.md): `poll`
 - [Show](./show.md): `show`, `countdown`, `first-dance`
-- [Card stunt](./card-stunt.md): `stunt`, `photo-wall`, `templates`, `record`, `slow-flip`
+- [Photo & cards](./card-stunt.md): `stunt`, `photo-wall`, `templates`, `record`, `slow-flip`
 - [Live screen](./live-screen.md): `live`
 - [Wave](./wave.md): `wave`
 - [Territory](./territory.md): `territory`, `masher`

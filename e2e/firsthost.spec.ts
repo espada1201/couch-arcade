@@ -14,7 +14,7 @@ for (const [w, h] of [[1280, 720], [390, 844]]) {
     const { host, code } = await openHost(context, errors);
     await host.setViewportSize({ width: w, height: h });
     await joinPhone(context, code, 0, errors);
-    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    await host.getByRole('tab', { name: /Photo & cards/ }).click();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
     const alert = host.getByRole('alert').filter({ hasText: 'Place some phones on the map first.' });
     await expect(alert).toBeVisible();
@@ -48,8 +48,8 @@ for (const [w, h] of [[1280, 800], [820, 1180]]) {
     const { host, code } = await openHost(context, errors);
     await host.setViewportSize({ width: w, height: h });
     for (let i = 0; i < 3; i++) await joinPhone(context, code, i, errors);
-    // Card stunt is the tallest panel: the one that used to stretch the map away from its tray.
-    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    // Photo & cards is the tallest panel: the one that used to stretch the map away from its tray.
+    await host.getByRole('tab', { name: /Photo & cards/ }).click();
     expect(await inViewport(host, '.tray')).toBe(true);
     await host.locator('.tray .chip').first().click();
     expect(await host.evaluate(() => scrollY)).toBe(0);
@@ -151,18 +151,18 @@ test('typed seats can also be used before everyone has answered, from a button t
   expect(errors).toEqual([]);
 });
 
-test('Big screen, Show and Live screen each point to Card stunt, and Card stunt says it spreads your photo', async ({ context }) => {
+test('Big screen, Show and Live screen each point to Photo & cards, and Photo & cards says it spreads your photo', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
   await host.setViewportSize({ width: 1280, height: 800 });
   for (const tab of [/Big screen/, /Show/, /Live screen/]) {
     await host.getByRole('tab', { name: tab }).click();
-    const go = host.getByRole('tabpanel').getByRole('button', { name: 'Go to Card stunt' });
+    const go = host.getByRole('tabpanel').getByRole('button', { name: 'Go to Photo & cards' });
     await expect(go).toBeVisible();
     expect(await inViewport(host, '[role=tabpanel] .pointer button')).toBe(true);
     await expect(host.getByRole('tabpanel').locator('.pointer')).toContainText(/one photo.*each.*its own piece/i);
     await go.click();
-    await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(host.getByRole('tab', { name: /Photo & cards/ })).toHaveAttribute('aria-selected', 'true');
     await expect(host.locator('.panel-intro').first()).toContainText(/your photo/i);
   }
   // Show no longer promises pictures it cannot do.
@@ -173,11 +173,11 @@ test('Big screen, Show and Live screen each point to Card stunt, and Card stunt 
 });
 
 for (const [w, h] of [[1280, 800], [820, 1180]]) {
-  test(`${w}px: Card stunt offers the picture upload first, in view`, async ({ context }) => {
+  test(`${w}px: Photo & cards offers the picture upload first, in view`, async ({ context }) => {
     const errors: string[] = [];
     const { host } = await openHost(context, errors);
     await host.setViewportSize({ width: w, height: h });
-    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    await host.getByRole('tab', { name: /Photo & cards/ }).click();
     const above = await host.evaluate(() => document.querySelector('#stunt-file')!.getBoundingClientRect().top < document.querySelector('.thumbs')!.getBoundingClientRect().top);
     expect(above).toBe(true);
     expect(await inViewport(host, '#stunt-file')).toBe(true);
@@ -185,7 +185,7 @@ for (const [w, h] of [[1280, 800], [820, 1180]]) {
   });
 }
 
-for (const [tab, button] of [[/Card stunt/, 'Flip the cards'], [/Wave/, 'Start the wave']] as const) {
+for (const [tab, button] of [[/Photo & cards/, 'Flip the cards'], [/Wave/, 'Start the wave']] as const) {
   test(`${tab.source}: the red "Place some phones on the map first." goes away once a phone is on the map`, async ({ context }) => {
     const errors: string[] = [];
     const { host, code } = await openHost(context, errors);
@@ -207,7 +207,7 @@ test('an error that is still true stays when phones get placed: only the placing
   const errors: string[] = [];
   const { host, code } = await openHost(context, errors);
   await joinPhone(context, code, 0, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.getByRole('button', { name: 'Flip the cards' }).click();
   await expect(host.getByRole('alert').filter({ hasText: 'Place some phones on the map first.' })).toBeVisible();
   // A different message took its place: placing phones must not wipe it.
@@ -222,11 +222,11 @@ test('an error that is still true stays when phones get placed: only the placing
 });
 
 for (const [w, h] of [[1280, 800], [390, 844]]) {
-  test(`${w}px: Flip and its message stay in view while the rest of Card stunt scrolls`, async ({ context }) => {
+  test(`${w}px: Flip and its message stay in view while the rest of Photo & cards scrolls`, async ({ context }) => {
     const errors: string[] = [];
     const { host } = await openHost(context, errors);
     await host.setViewportSize({ width: w, height: h });
-    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    await host.getByRole('tab', { name: /Photo & cards/ }).click();
     const flip = host.getByRole('button', { name: 'Flip the cards' });
     await expect(flip).toBeVisible();
     expect(await inViewport(host, 'button.btn.primary:text("Flip the cards")'), 'at the top of the panel').toBe(true);
@@ -246,7 +246,7 @@ test('320px: a focused field stops above the bar even when a message wraps and m
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
   await host.setViewportSize({ width: 320, height: 640 });
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.getByRole('button', { name: 'Flip the cards' }).click();
   await expect(host.getByRole('alert').filter({ hasText: 'Place some phones on the map first.' })).toBeVisible();
   await host.locator('.panel-foot [role=alert]').evaluate((el) => el.append(' This is a long message that has to wrap onto several lines in a narrow window.'.repeat(3)));
@@ -264,7 +264,7 @@ test('320px: a focused field stops above the bar even when a message wraps and m
 test('keyboard: Enter in a Name field or in "Or your words" moves focus to Flip, and Enter in words uses them first', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   const flip = host.getByRole('button', { name: 'Flip the cards' });
   await host.getByRole('button', { name: 'Happy birthday' }).click();
   await host.locator('#stunt-name-1').fill('MAYA');
@@ -284,7 +284,7 @@ test('keyboard: Enter in a Name field or in "Or your words" moves focus to Flip,
 test('typing "Or your words" updates the preview by itself, like the Name field, and "Use words" still works', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   const chosen = host.locator('.thumbs button[aria-pressed=true], .moments button[aria-pressed=true]');
   await expect(chosen).toHaveCount(1);
   const picture = () => host.locator('.stunt-preview canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL());
@@ -311,7 +311,7 @@ test('the line-up instruction stays when a picture is chosen, and goes when the 
   const errors: string[] = [];
   const { host, code } = await openHost(context, errors);
   for (let i = 0; i < 2; i++) await joinPhone(context, code, i, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
   await expect(host.getByText(DONE)).toBeVisible();
   await host.locator('.thumbs button').nth(1).click();
@@ -327,7 +327,7 @@ test('the line-up instruction goes when the layout changes', async ({ context })
   const errors: string[] = [];
   const { host, code } = await openHost(context, errors);
   for (let i = 0; i < 2; i++) await joinPhone(context, code, i, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
   await expect(host.getByText(DONE)).toBeVisible();
   await joinPhone(context, code, 2, errors);
@@ -341,20 +341,20 @@ test('the line-up instruction goes when the layout changes', async ({ context })
   expect(errors).toEqual([]);
 });
 
-test('Card stunt says what to expect from few phones', async ({ context }) => {
+test('Photo & cards says what to expect from few phones', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await expect(host.getByText('Each phone shows one colour of the picture, so the more phones, the sharper it gets.')).toBeAttached();
   expect(errors).toEqual([]);
 });
 
 for (const [w, h] of [[1280, 800], [820, 1180]]) {
-  test(`${w}px: Card stunt says up front that it needs phones on the map, with a live count`, async ({ context }) => {
+  test(`${w}px: Photo & cards says up front that it needs phones on the map, with a live count`, async ({ context }) => {
     const errors: string[] = [];
     const { host, code } = await openHost(context, errors);
     await host.setViewportSize({ width: w, height: h });
-    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    await host.getByRole('tab', { name: /Photo & cards/ }).click();
     const need = host.locator('.needs');
     await expect(need).toContainText('No phones have joined yet');
     for (let i = 0; i < 3; i++) await joinPhone(context, code, i, errors);
@@ -483,10 +483,10 @@ test('a keyboard-only host reaches the experience tabs with Tab and Enter, and T
   expect(errors).toEqual([]);
 });
 
-test('every control on the Music and Card stunt panels shows a focus ring, the song picker included', async ({ context }) => {
+test('every control on the Music and Photo & cards panels shows a focus ring, the song picker included', async ({ context }) => {
   const { host } = await openHost(context, []);
   await host.setViewportSize({ width: 1280, height: 800 });
-  for (const tab of [/Music/, /Card stunt/]) {
+  for (const tab of [/Music/, /Photo & cards/]) {
     await host.getByRole('tab', { name: tab }).click();
     await host.getByRole('tab', { name: tab }).focus();
     const seen: string[] = [];
@@ -597,7 +597,7 @@ test('help and secondary text on the host console is at least 15 px', async ({ c
       }
       return out;
     });
-  for (const tab of [/Locate/, /Music/, /Poll/, /Show/, /Card stunt/]) {
+  for (const tab of [/Locate/, /Music/, /Poll/, /Show/, /Photo & cards/]) {
     await host.getByRole('tab', { name: tab }).click();
     expect(await small(), String(tab)).toEqual([]);
   }
@@ -607,7 +607,7 @@ test('help and secondary text on the host console is at least 15 px', async ({ c
 test('a picked picture says it is ready and brings Flip into view; each tab opens at its top', async ({ context }) => {
   const errors: string[] = [];
   const { host } = await openHost(context, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.locator('#stunt-file').setInputFiles({ name: 'beach.png', mimeType: 'image/png', buffer: png(60, 40, (x) => (x < 30 ? [80, 160, 240] : [230, 210, 150])) });
   await expect(host.getByText('Your picture is ready. Press Flip the cards.')).toBeVisible();
   expect(await host.getByRole('button', { name: 'Flip the cards' }).evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
@@ -643,20 +643,20 @@ test('keyboard: Enter on a tray number then Enter on the map puts that phone on 
   expect(errors).toEqual([]);
 });
 
-test('Go to Locate from Card stunt offers the way back, and a started camera puts Scan under the keyboard', async ({ context }) => {
+test('Go to Locate from Photo & cards offers the way back, and a started camera puts Scan under the keyboard', async ({ context }) => {
   const errors: string[] = [];
   const { host, code } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');
   await joinPhone(context, code, 0, errors);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.locator('.needs').getByRole('button', { name: 'Go to Locate' }).click();
   await expect(host.getByRole('tab', { name: /Locate/ })).toHaveAttribute('aria-selected', 'true');
   await host.getByRole('button', { name: 'Start simulated camera' }).click();
   await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
   await host.keyboard.press('Enter');
   await expect(host.getByText(/Placed 1 of 1 phone/)).toBeVisible({ timeout: 20000 });
-  await expect(host.getByRole('button', { name: 'Back to Card stunt' })).toBeFocused();
+  await expect(host.getByRole('button', { name: 'Back to Photo & cards' })).toBeFocused();
   await host.keyboard.press('Enter');
-  await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(host.getByRole('tab', { name: /Photo & cards/ })).toHaveAttribute('aria-selected', 'true');
   // Picking a tab directly carries no way back.
   await host.getByRole('tab', { name: /Locate/ }).click();
   await expect(host.getByRole('button', { name: /^Back to/ })).toHaveCount(0);

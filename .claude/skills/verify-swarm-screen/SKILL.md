@@ -1,6 +1,6 @@
 ---
 name: verify-swarm-screen
-description: Drive the real Swarm Screen build (`npm start`: built app plus the LAN WebSocket relay) with a host tab and phone tabs in Playwright, and prove a feature works the way a host and a room of phones use it. Use to verify any change to Locate, Music, Big screen, Poll, Show, Card stunt, Live screen, Wave, Territory, Hot Potato, reconnects, the relay or the landing page, beyond unit tests and the e2e suite.
+description: Drive the real Swarm Screen build (`npm start`: built app plus the LAN WebSocket relay) with a host tab and phone tabs in Playwright, and prove a feature works the way a host and a room of phones use it. Use to verify any change to Locate, Music, Big screen, Poll, Show, Photo & cards, Live screen, Wave, Territory, Hot Potato, reconnects, the relay or the landing page, beyond unit tests and the e2e suite.
 ---
 
 # Verify Swarm Screen

@@ -735,7 +735,7 @@ const CHECKS = {
       await expect(host.getByText(/of 3 phones ready/)).toBeVisible({ timeout: 15_000 });
       await sleep(8000);
       run.note('download while flipping', await host.getByText(/of 3 phones ready/).textContent());
-      await tab(room, 'Card stunt');
+      await tab(room, 'Photo & cards');
       await host.locator('#stunt-file').setInputFiles({ name: 'quadrants.png', mimeType: 'image/png', buffer: QUADRANTS_PNG });
       const all = [...phones, slow];
       await watchScreens(all);
@@ -1076,7 +1076,7 @@ const CHECKS = {
     const room = await openRoom(run);
     await scan(room);
     const { host, phones } = room;
-    await tab(room, 'Card stunt');
+    await tab(room, 'Photo & cards');
     // One colour per phone is the Stadium cards style; Photo wall is the default.
     await host.getByRole('radio', { name: 'Stadium cards' }).check();
     await host.locator('#stunt-file').setInputFiles({
@@ -1109,7 +1109,7 @@ const CHECKS = {
     const row = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });
     await scan(row);
     const { host, phones } = row;
-    await tab(row, 'Card stunt');
+    await tab(row, 'Photo & cards');
     await expect(host.getByRole('radio', { name: 'Photo wall' })).toBeChecked();
     await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
     const preview = host.locator('.stunt-preview canvas');
@@ -1147,7 +1147,7 @@ const CHECKS = {
     await run.shot(phones[1], 'phone-2-stadium');
     const square = await openRoom(run, { sims: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]] });
     await scan(square);
-    await tab(square, 'Card stunt');
+    await tab(square, 'Photo & cards');
     await square.host.locator('#stunt-file').setInputFiles({ name: 'quadrants.png', mimeType: 'image/png', buffer: QUADRANTS_PNG });
     await square.host.getByRole('button', { name: 'Flip the cards' }).click();
     for (const p of square.phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 10_000 });
@@ -1157,7 +1157,7 @@ const CHECKS = {
     [RED, GREEN, BLUE, YELLOW].forEach((want, i) => near(quad[i], want) || run.issue(`square phone ${i + 1} shows ${quad[i]}, not its quadrant`));
     await run.shot(square.host, 'host-square-wall');
     const lined = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });
-    await tab(lined, 'Card stunt');
+    await tab(lined, 'Photo & cards');
     await lined.host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
     await expect(lined.host.getByText('Done. Phones 1 to 3 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.')).toBeVisible();
     await lined.host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
@@ -1176,7 +1176,7 @@ const CHECKS = {
     const room = await openRoom(run, { sims: GRID, phone: { width: 160, height: 280 } });
     await scan(room);
     const { host, phones } = room;
-    await tab(room, 'Card stunt');
+    await tab(room, 'Photo & cards');
     await host.getByRole('radio', { name: 'Stadium cards' }).check();
     await host.getByRole('button', { name: 'Names with a heart' }).click();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
@@ -1221,7 +1221,7 @@ const CHECKS = {
     const room = await openRoom(run, { sims: [[0.2, 0.4], [0.8, 0.4]] });
     await scan(room);
     const { host } = room;
-    await tab(room, 'Card stunt');
+    await tab(room, 'Photo & cards');
     await host.getByLabel('Record the moment with this computer’s camera').check();
     await host.getByRole('button', { name: 'Flip the cards' }).click();
     await expect(host.getByText('● Recording the moment…')).toBeVisible({ timeout: 5000 });

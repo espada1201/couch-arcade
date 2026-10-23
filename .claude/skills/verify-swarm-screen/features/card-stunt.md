@@ -1,4 +1,4 @@
-# Card stunt
+# Photo & cards
 
 Any picture, the host's words or an event template is spread across the crowd and all phones flip together after 3-2-1. There are two styles. In Photo wall (the default), phones laid side by side each show their own piece of the picture. In Stadium cards, every phone takes one colour of it. The host can film it.
 
@@ -17,7 +17,7 @@ Any picture, the host's words or an event template is spread across the crowd an
 ## How to get to it (user POV)
 
 - Flip the cards and its status or red message are a footer pinned to the bottom of the panel (the panel scrolls above it; on a phone-width host the page scrolls and the footer stays at the bottom of the screen), so Flip is in view whatever is scrolled. Enter in a Name field, or in "Or your words" (which first uses the words, like "Use words"), moves focus to Flip.
-- Tab "Card stunt": Style (Photo wall / Stadium cards), picture thumbnails, event templates, name fields, "Or your words", "Or upload a picture", record checkbox, "Flip the cards".
+- Tab "Photo & cards": Style (Photo wall / Stadium cards), picture thumbnails, event templates, name fields, "Or your words", "Or upload a picture", record checkbox, "Flip the cards".
 
 ## Driving it with drive.mjs
 

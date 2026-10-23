@@ -60,7 +60,7 @@ test('a New Year countdown runs on every phone in step, and the host keeps a rec
 
   // A card-stunt template with the couple's names flips on the crowd like any other picture,
   // but only once the names are typed: the placeholder never goes on the crowd.
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.getByRole('button', { name: 'Names with a heart' }).click();
   await host.getByRole('button', { name: 'Flip the cards' }).click();
   await expect(host.getByText('Type both names for “Names with a heart”.')).toBeVisible();

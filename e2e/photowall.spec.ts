@@ -7,7 +7,7 @@ function near(got: number[], want: number[], by = 45): void {
 }
 
 async function flipWall(host: Page, name: string, picture: Buffer): Promise<void> {
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.locator('#stunt-file').setInputFiles({ name, mimeType: 'image/png', buffer: picture });
   await host.getByRole('button', { name: 'Flip the cards' }).click();
 }
@@ -18,7 +18,7 @@ test('Photo wall: three phones in a row show one picture across all three, and S
   const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
   await scan(room);
   const { host, phones } = room;
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await expect(host.getByRole('radio', { name: 'Photo wall' })).toBeChecked();
   await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
   await expect(host.locator('.stunt-preview canvas')).toHaveAttribute('aria-label', 'Photo wall preview: 3 phones, each outlined with its number');
@@ -85,7 +85,7 @@ test('Photo wall: "Line them up for me" puts three phones nobody scanned in a ro
   test.setTimeout(150_000);
   const errors: string[] = [];
   const { host, phones } = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   const need = host.locator('.needs');
   await expect(need).toContainText('0 of 3 phones are on the map');
   const lineUp = need.getByRole('button', { name: 'Line them up for me' });
@@ -95,7 +95,7 @@ test('Photo wall: "Line them up for me" puts three phones nobody scanned in a ro
   await expect(host.getByText('Done. Phones 1 to 3 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.')).toBeVisible();
   await expect(need).toContainText('All 3 phones are on the map');
   await expect(lineUp).toBeHidden();
-  await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(host.getByRole('tab', { name: /Photo & cards/ })).toHaveAttribute('aria-selected', 'true');
   await expect(host.locator('#stunt-file')).toBeFocused();
   await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
   await expect(host.locator('.stunt-preview canvas')).toHaveAttribute('aria-label', 'Photo wall preview: 3 phones, each outlined with its number');
@@ -116,7 +116,7 @@ test('Photo wall: "Line them up for me" with a picture already chosen moves focu
   test.setTimeout(150_000);
   const errors: string[] = [];
   const { host, phones } = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
   const lineUp = host.locator('.needs').getByRole('button', { name: 'Line them up for me' });
   await expect(lineUp).toBeVisible();
@@ -134,7 +134,7 @@ test('the line under Flip is cleared when the picture, words, template or style 
   const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
   await scan(room);
   const { host } = room;
-  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
   const said = host.locator('.panel-body .notice > .note');
   const flip = host.getByRole('button', { name: 'Flip the cards' });
   await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
@@ -168,7 +168,7 @@ for (const [how, press] of [
     const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
     await scan(room);
     const { host, phones } = room;
-    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    await host.getByRole('tab', { name: /Photo & cards/ }).click();
     await host.locator('#stunt-words').pressSequentially('GO TEAM');
     await press(host.getByRole('button', { name: 'Flip the cards' }));
     const said = host.locator('.panel-body .notice > .note');

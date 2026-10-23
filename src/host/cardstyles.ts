@@ -1,4 +1,4 @@
-// The Card stunt styles: what each one flips, how it previews and what it tells the host.
+// The Photo & cards styles: what each one flips, how it previews and what it tells the host.
 import { BLACK, type Program } from '../core/effects';
 import { sampleCrowd, type Image } from '../core/layout';
 import { plural } from '../ui/dom';

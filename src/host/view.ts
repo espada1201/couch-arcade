@@ -129,7 +129,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
     ['big', 'Big screen', () => followPanel(session, director)],
     ['poll', 'Poll', () => pollPanel(session, director)],
     ['show', 'Show', () => showPanel(session, director)],
-    ['card', 'Card stunt', () => cardPanel(session, director)],
+    ['card', 'Photo & cards', () => cardPanel(session, director)],
     ['live', 'Live screen', () => livePanel(session, director)],
     ['wave', 'Wave', () => wavePanel(session, stage, director)],
     ['territory', 'Territory', () => territoryPanel(session, director)],
