@@ -8,6 +8,7 @@ import { css, h, plural, segmented, setText, slider } from '../ui/dom';
 import { FLIP_LEAD_MS, STYLES, STYLE_KEYS, type CardStyle } from './cardstyles';
 import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
+import { flipper } from './flipper';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
 import { panel, placementNote, requirePlaced, stopButton } from './panel';
 import { recorder } from './record';
@@ -23,18 +24,10 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   /** The event template behind the current picture, rebuilt when the names change. */
   let moment: Moment | null = null;
   const preview = h('div.stunt-preview');
-  const previews = { wall: STYLES.wall.preview(session, preview), cards: STYLES.cards.preview(session, preview) };
+  const previews = Object.fromEntries(STYLE_KEYS.map((k) => [k, STYLES[k].preview(session, preview)])) as Record<CardStyle, (s: Stunt) => void>;
   const show = () => previews[style](chosen);
-  /** Counts what a Flip press was made for, so one whose picture or style changed while it was being cut is dropped. */
-  let gen = 0;
-  const cancelFlip = () => {
-    gen++;
-    if (!flip.disabled) return;
-    flip.disabled = false;
-    say('');
-  };
   const pick = (s: Stunt, m: Moment | null = null) => {
-    cancelFlip();
+    flips.cancel();
     if (s !== chosen) chosen.close?.();
     chosen = s;
     moment = m;
@@ -82,25 +75,20 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   });
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', async () => {
+    if (flips.inFlight) return;
     const missing = moment && missingNames(moment, typed());
     if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
     if (!requirePlaced(session, fail)) return;
-    const mine = ++gen;
-    flip.disabled = true;
-    const alive = () => mine === gen;
-    const lead = FLIP_LEAD_MS;
-    const run = await STYLES[style].flip(session, chosen, { lead, say, alive }).finally(() => alive() && (flip.disabled = false));
-    if (!alive()) return;
-    if (typeof run === 'string') return fail(run);
-    director.run({ ...run, stop: rec?.end });
+    const [s, picture] = [style, chosen];
+    if (!(await flips.press((ctl) => STYLES[s].flip(session, picture, ctl)))) return;
     // Film the countdown, the flip, and a few seconds of the crowd holding it.
-    rec?.begin(lead + 8000);
-    say(STYLES[style].status(session.playRoom().positions.size));
+    rec?.begin(FLIP_LEAD_MS + 8000);
+    say(STYLES[s].status(session.playRoom().positions.size));
   });
   // Every style's note stays in the page; only the chosen style's is shown.
   const notes = STYLE_KEYS.map((k) => h('p.note', { hidden: k !== style }, STYLES[k].note));
   const styles = segmented<CardStyle>('Style', STYLE_KEYS.map((k) => [k, STYLES[k].label]), style, (v) => {
-    cancelFlip();
+    flips.cancel();
     style = v;
     notes.forEach((n, i) => (n.hidden = STYLE_KEYS[i] !== v));
     show();
@@ -122,6 +110,8 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     rec?.el,
     flip,
   );
+  // Busy but not disabled, so Flip keeps the keyboard focus the upload gave it.
+  const flips = flipper(director, { say, fail, busy: (on) => (on ? flip.setAttribute('aria-disabled', 'true') : flip.removeAttribute('aria-disabled')) }, rec?.end);
   return el;
 }
 

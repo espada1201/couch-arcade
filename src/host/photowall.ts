@@ -5,7 +5,7 @@ import type { RGB } from '../core/layout';
 import { wallPixelSize, wallTiles, type Wall } from '../core/wall';
 import { canvas2d } from '../ui/canvas';
 import { plural } from '../ui/dom';
-import type { Run } from './director';
+import type { FlipControl, FlipOutcome } from './cardstyles';
 import type { Stunt } from './images';
 import type { HostSession } from './session';
 
@@ -34,8 +34,8 @@ function averageColour(c: HTMLCanvasElement): RGB {
   return [Math.round(sum[0] / n), Math.round(sum[1] / n), Math.round(sum[2] / n)];
 }
 
-/** Every placed phone's piece of `picture`, which is drawn in the wall's shape. Stops early once `alive` says no one wants them. */
-export async function encodeTiles(picture: HTMLCanvasElement, wall: Wall, alive = () => true): Promise<Map<number, WallPiece>> {
+/** Every placed phone's piece of `picture`, which is drawn in the wall's shape. Stops early once `signal` aborts: no one wants them. */
+export async function encodeTiles(picture: HTMLCanvasElement, wall: Wall, signal?: AbortSignal): Promise<Map<number, WallPiece>> {
   const [out, outCtx] = canvas2d(2, 2);
   const pieces = new Map<number, WallPiece>();
   for (const [seat, r] of wall.tiles) {
@@ -58,7 +58,7 @@ export async function encodeTiles(picture: HTMLCanvasElement, wall: Wall, alive 
     pieces.set(seat, { src: encoded?.data ?? null, rgb: averageColour(crop) });
     if (pieces.size % TILES_PER_TURN === 0) {
       await new Promise((r) => setTimeout(r));
-      if (!alive()) break;
+      if (signal?.aborted) break;
     }
   }
   return pieces;
@@ -73,27 +73,23 @@ export function tileProgram(pieces: ReadonlyMap<number, WallPiece>, at: number):
   };
 }
 
-/** What the director needs to flip the room: the program, and that it is a stream of pictures. */
-export type Flip = Pick<Run, 'program' | 'frame'>;
-
-/** What a style does with a Flip press: `lead` is the countdown; `say` the status line; `alive` turns false once the press is out of date. */
-export interface FlipControl {
-  lead: number;
-  say(text: string): void;
-  alive(): boolean;
-}
-
 /**
  * The Photo wall flip over every placed phone, away ones too, so a neighbour is cut around it and it
- * shows its piece when it returns. A message to show instead, or null when `alive` ran out while cutting.
+ * shows its piece when it returns.
  */
-export async function wallFlip(session: HostSession, stunt: Stunt, { lead, say, alive }: FlipControl, cut = encodeTiles): Promise<Flip | string | null> {
-  if (session.playRoom().positions.size === 0) return 'None of the phones on the map are connected right now.';
+export async function wallFlip(session: HostSession, stunt: Stunt, { lead, say, signal }: FlipControl, cut = encodeTiles): Promise<FlipOutcome> {
+  if (session.playRoom().positions.size === 0) return { refuse: 'None of the phones on the map are connected right now.' };
   const wall = wallTiles(session.layout, session.screens());
   say(`Cutting the picture into ${plural(wall.tiles.size, 'piece')}…`);
-  const pieces = await cut(stunt.render(...wallPixelSize(wall.aspect)), wall, alive);
+  let pieces: Map<number, WallPiece>;
+  try {
+    pieces = await cut(stunt.render(...wallPixelSize(wall.aspect)), wall, signal);
+  } catch {
+    return signal.aborted ? { cancelled: true } : { refuse: 'Could not cut the picture.' };
+  }
+  if (signal.aborted) return { cancelled: true };
   // Counted only now, so the countdown is the full lead however long the cutting took.
-  return alive() ? { program: tileProgram(pieces, session.now() + lead), frame: true } : null;
+  return { go: { program: tileProgram(pieces, session.now() + lead), frame: true } };
 }
 
 /**
