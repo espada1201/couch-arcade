@@ -55,6 +55,9 @@ export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice
 export const GOTO_TAB = 'swarm:goto-tab';
 export const gotoTab = (from: Element, id: string): boolean => from.dispatchEvent(new CustomEvent(GOTO_TAB, { bubbles: true, detail: id }));
 
+/** Sent up from Locate when a scan left every phone on the map, so the host page can offer the way back. */
+export const ALL_PLACED = 'swarm:all-placed';
+
 /** True when there are phones on the map; otherwise says so, offers the way to Locate, and returns false. */
 export function requirePlaced(session: HostSession, fail: Notice['fail']): boolean {
   if (session.layout.positions.size > 0) return true;

@@ -7,7 +7,7 @@ import { followPanel } from './follow';
 import { livePanel } from './live';
 import { locatePanel } from './locate';
 import { Director } from './director';
-import { GOTO_TAB } from './panel';
+import { ALL_PLACED, GOTO_TAB } from './panel';
 import { cardPanel, potatoPanel, soundPanel, territoryPanel, wavePanel } from './play';
 import { pollPanel, savedPoll } from './poll';
 import { HostSession } from './session';
@@ -147,6 +147,7 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
   };
   new MutationObserver(syncPanelStop).observe(panelHost, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'tabindex'] });
   let current = '';
+  let back: HTMLButtonElement | null = null;
   /** `from`: the tab that sent the host here with "Go to …", so the way back is one press. */
   const select = (id: string, focus = false, from: string | null = null) => {
     current = id;
@@ -158,21 +159,16 @@ export async function hostView(app: HTMLElement, params: URLSearchParams): Promi
       if (on) panelHost.setAttribute('aria-labelledby', b.id);
     }
     if (!panels.has(id)) panels.set(id, tabs.find((t) => t[0] === id)![2]());
-    const back = from
-      ? h(
-          'div.back-to',
-          {},
-          h('button.btn.small', { type: 'button', onclick: () => select(from, true) }, `Back to ${tabs.find((t) => t[0] === from)![1]}`),
-          h('span', {}, ' when you are done here.'),
-        )
-      : null;
-    panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), ...(back ? [back] : []), panels.get(id)!);
+    back = from ? h('button.btn.small', { type: 'button', onclick: () => select(from, true) }, `Back to ${tabs.find((t) => t[0] === from)![1]}`) : null;
+    panelHost.replaceChildren(h('h2.sr-only', {}, tabs.find((t) => t[0] === id)![1]), ...(back ? [h('div.back-to', {}, back, h('span', {}, ' when you are done here.'))] : []), panels.get(id)!);
     // Every tab opens at its top, not wherever the last one was scrolled to.
     panelHost.scrollTop = 0;
     syncPanelStop();
   };
   // A panel can send the host to another tab ("Go to Locate"); the tab strip lives here.
   panelHost.addEventListener(GOTO_TAB, (e) => select((e as CustomEvent<string>).detail, true, current));
+  // A scan that placed everyone ends at the way back to the task that sent the host here, if there is one.
+  panelHost.addEventListener(ALL_PLACED, () => back?.focus());
   tabs.forEach(([id, label], i) =>
     tablist.append(
       h(

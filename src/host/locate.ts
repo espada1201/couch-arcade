@@ -8,7 +8,7 @@ import { localize, type GrayFrame, type LocalizeResult } from '../core/localize'
 import { errorText, h, plural, setText } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
 import type { Director, Hold } from './director';
-import { notice } from './panel';
+import { ALL_PLACED, notice } from './panel';
 import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -198,6 +198,9 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     finish();
     hold.end();
     drawOverlay();
+    // Focus is stranded on Scan. With everyone placed the job is done: the host page moves it to the way back, if one is offered.
+    const stranded = document.activeElement === document.body || document.activeElement === scanBtn;
+    if (stranded && online.every((s) => session.layout.positions.has(s.seat))) result.dispatchEvent(new CustomEvent(ALL_PLACED, { bubbles: true }));
   });
 
   mirror.addEventListener('change', () => session.setMirror(mirror.checked));

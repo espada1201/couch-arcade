@@ -567,11 +567,24 @@ test('Go to Locate from Card stunt offers the way back, and a started camera put
   await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
   await host.keyboard.press('Enter');
   await expect(host.getByText(/Placed 1 of 1 phone/)).toBeVisible({ timeout: 20000 });
-  await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
-  await host.getByRole('button', { name: 'Back to Card stunt' }).click();
+  // Everyone is placed and a way back is offered: focus is on it, not left on Scan.
+  await expect(host.getByRole('button', { name: 'Back to Card stunt' })).toBeFocused();
+  await host.keyboard.press('Enter');
   await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
   // Picking a tab directly carries no way back.
   await host.getByRole('tab', { name: /Locate/ }).click();
   await expect(host.getByRole('button', { name: /^Back to/ })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('a scan that places everyone leaves keyboard focus on Scan when the host did not come from another tab', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors, 'transport=local&camera=synthetic&fresh=1');
+  await joinPhone(context, code, 0, errors);
+  await host.getByRole('button', { name: 'Start simulated camera' }).click();
+  await host.getByRole('button', { name: 'Scan the room' }).press('Enter');
+  await expect(host.getByText(/Placed 1 of 1 phone/)).toBeVisible({ timeout: 20000 });
+  await expect(host.getByRole('button', { name: /^Back to/ })).toHaveCount(0);
+  await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
   expect(errors).toEqual([]);
 });
