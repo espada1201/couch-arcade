@@ -335,7 +335,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     camMsg.el,
     view,
     h('label.check', { for: 'mirror' }, mirror, h('span', {}, 'Camera faces the crowd (flip left and right)')),
-    h('p.note', { id: 'mirror-about' }, 'Tick this when the camera looks back at the crowd from the front: the map is then flipped left to right, as the crowd sees the room.'),
+    h('p.note', { id: 'mirror-about' }, 'Tick this if the camera looks back at the crowd from the front. The map is then flipped left to right, as the crowd sees the room.'),
     h(
       'details.fallback',
       { open: !!session.perspective },

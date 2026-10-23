@@ -133,7 +133,6 @@ describe('host session', () => {
       expect(session.layout.positions.get(2)).toEqual(a);
       expect(session.layout.positions.get(1)).toEqual(b);
       expect(session.layout.aspect).toBe(aspect);
-      // The Photo wall follows: phone 3 now cuts the left third.
       const tiles = wallTiles(session.layout, new Map()).tiles;
       expect(tiles.get(2)!.x).toBe(0);
       expect(tiles.get(0)!.x).toBeGreaterThan(0.6);

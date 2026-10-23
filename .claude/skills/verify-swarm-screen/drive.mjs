@@ -1168,7 +1168,6 @@ const CHECKS = {
     run.note('lined up, no scan: screenshot centre per phone (left, middle, right)', strip.map((c) => c.join(',')));
     [RED, GREEN, BLUE].forEach((want, i) => near(strip[i], want) || run.issue(`lined-up phone ${i + 1} shows ${strip[i]}, not its ${['left', 'middle', 'right'][i]} third`));
     await run.shot(lined.host, 'host-lined-up-wall');
-    // A wrong order is fixed by picking two phones: swap 1 and 3, flip again, and the thirds follow.
     const swap = lined.host.locator('.swap');
     await swap.getByRole('button', { name: 'Phone 1' }).click();
     await swap.getByRole('button', { name: 'Phone 3' }).click();

@@ -137,7 +137,7 @@ export function recorder(): Recorder | null {
     'div.record',
     {},
     h('label.check', { for: id }, on, h('span', {}, 'Record the moment with this computer’s camera')),
-    h('p.note', { id: `${id}-about` }, 'This computer’s camera films the crowd for the flip and a few seconds after. The video stays on this computer; you can download it.'),
+    h('p.note', { id: `${id}-about` }, 'This computer’s camera films the crowd for the flip and a few seconds after. The video stays on this computer. You can download it.'),
     status,
     link,
   );

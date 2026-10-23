@@ -76,14 +76,14 @@ export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice
   const bar = h('div.panel-foot', {}, ...foot, msg.el);
   const el = h('div.panel-body', {}, h('p.panel-intro', {}, intro), ...body, bar);
   // A message that wraps makes the bar taller; scrolling to a field must stop above the bar, whatever its height.
-  const clearBar = () => el.style.setProperty('--foot-h', `${bar.offsetHeight}px`);
-  new ResizeObserver(clearBar).observe(bar);
+  const measureBar = () => el.style.setProperty('--foot-h', `${bar.offsetHeight}px`);
+  new ResizeObserver(measureBar).observe(bar);
   return {
     ...msg,
     el,
     // The observer runs after the frame, so a message just written has not made the bar taller yet: measure it now.
     show(target) {
-      clearBar();
+      measureBar();
       target.scrollIntoView({ block: 'nearest' });
     },
   };
@@ -168,15 +168,14 @@ export function swapPicker(session: HostSession): HTMLElement {
   let picked: number | null = null;
   let focus: number | null = null;
   const choose = (seat: number) => {
+    focus = seat;
     if (picked === null || picked === seat) {
       picked = picked === seat ? null : seat;
       setText(said, picked === null ? '' : `Phone ${seat + 1} picked. Now pick the phone to swap it with.`);
-      focus = seat;
       return update();
     }
     const first = picked;
     picked = null;
-    focus = seat;
     if (session.swapPlaces(first, seat)) setText(said, swapSaid(first, seat, seatsLeftToRight(session.layout.positions)));
     else update();
   };

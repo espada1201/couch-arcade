@@ -8,7 +8,7 @@ Step one for a host: find where every phone sits. Phones flash blink codes and t
 - `real-camera` the real getUserMedia path, fed a rendered room video (perspective, rolling shutter, blur, noise) by Chrome's fake camera; 9 phones placed to within 1.5 % / 2 %.
 - `perspective` four corner clicks make the map a floor plan (each phone within 4 %).
 - `back-focus` when a scan ends with every phone on the map and the host came here from another tab ("Go to Locate"), keyboard focus moves to the "Back to <tab>" button; with no banner it stays on Scan the room.
-- `mirror` the checkbox "Camera faces the crowd (flip left and right)" has a line under it: tick it when the camera looks back at the crowd from the front, so the map is flipped left to right as the crowd sees the room.
+- `mirror` the checkbox "Camera faces the crowd (flip left and right)" has a line under it: tick it if the camera looks back at the crowd from the front, and the map is flipped left to right as the crowd sees the room.
 - `seat-grid` "Ask phones for their seat": phones type row and seat; the seats go on the map by themselves once every phone has answered; "Use typed seats" does it early.
 - `manual` tap a tray chip then the map to place; drag a placed phone; `]` picks and Shift+arrow nudges.
 
