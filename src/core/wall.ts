@@ -26,16 +26,23 @@ export function wallPixelSize(aspect: number, long = 1600): [number, number] {
   return aspect >= 1 ? [long, Math.max(1, Math.round(long / aspect))] : [Math.max(1, Math.round(long * aspect)), long];
 }
 
-/** Each value replaced by the mean of its cluster, where a cluster is a run of values no further than `gap` apart. */
-function snap(values: number[], gap: number): number[] {
+/**
+ * Each value replaced by the mean of its cluster, where a cluster is a run of values no further than `gap` apart.
+ * A run wider than `gap` is a staggered layout chained together, not one row or column, so it keeps its values.
+ */
+function snap(values: number[], half: number): number[] {
+  // Rows exactly half a phone apart are a brick layout; rounding must not decide whether they merge.
+  const gap = half * (1 - 1e-9);
   const order = values.map((_, i) => i).sort((i, j) => values[i] - values[j]);
   const out = [...values];
   let from = 0;
   for (let k = 1; k <= order.length; k++) {
     if (k < order.length && values[order[k]] - values[order[k - 1]] <= gap) continue;
     const run = order.slice(from, k);
-    const mean = run.reduce((sum, i) => sum + values[i], 0) / run.length;
-    for (const i of run) out[i] = mean;
+    if (values[order[k - 1]] - values[order[from]] <= gap) {
+      const mean = run.reduce((sum, i) => sum + values[i], 0) / run.length;
+      for (const i of run) out[i] = mean;
+    }
     from = k;
   }
   return out;
@@ -54,11 +61,15 @@ export function wallTiles(room: Room, screens: ReadonlyMap<number, number>): Wal
   // Physical points: one unit is the crowd's height.
   const pts = [...room.positions.values()].map((p) => ({ x: p.x * room.aspect, y: p.y }));
   // The width at which two screens would just touch; a phone's own is to its nearest neighbour.
-  const nearest = pts.flatMap((p, i) => {
-    const reach = pts.flatMap((q, j) => (j === i ? [] : [Math.max(Math.abs(q.x - p.x), Math.abs(q.y - p.y) * a)])).filter((d) => d > 1e-9);
-    return reach.length ? [Math.min(...reach)] : [];
+  const reaches = pts.map((p, i) => pts.flatMap((q, j) => (j === i ? [] : [Math.max(Math.abs(q.x - p.x), Math.abs(q.y - p.y) * a)])).filter((d) => d > 1e-9));
+  const first = reaches.flatMap((r) => (r.length ? [Math.min(...r)] : []));
+  if (first.length === 0) return { aspect: a, tiles: new Map(seats.map((s) => [s, { x: 0, y: 0, w: 1, h: 1 }])) };
+  // Phones a hair apart are one phone seen twice, not neighbours: they would pull the width down.
+  const floor = median(first) * 0.25;
+  const nearest = reaches.flatMap((r) => {
+    const apart = r.filter((d) => d >= floor);
+    return apart.length ? [Math.min(...apart)] : [];
   });
-  if (nearest.length === 0) return { aspect: a, tiles: new Map(seats.map((s) => [s, { x: 0, y: 0, w: 1, h: 1 }])) };
   const width = median(nearest);
   // Camera noise: rows and columns of phones become straight.
   const xs = snap(pts.map((p) => p.x), width / 2);

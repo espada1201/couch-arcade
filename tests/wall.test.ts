@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Room } from '../src/core/layout';
+import { rng } from './rng';
 import { PHONE_ASPECT, wallPixelSize, wallTiles, type Rect } from '../src/core/wall';
 
 const a = PHONE_ASPECT;
@@ -94,6 +95,59 @@ describe('wallTiles lays the picture over the phones as they sit', () => {
     const w = wallTiles(room(1, []), none);
     expect(w.tiles.size).toBe(0);
     expect(w.aspect).toBeCloseTo(a, 6);
+  });
+});
+
+/** How much of the smaller tile the two share (0 when they only touch). */
+function overlap(p: Rect, q: Rect): number {
+  const w = Math.min(p.x + p.w, q.x + q.w) - Math.max(p.x, q.x);
+  const h = Math.min(p.y + p.h, q.y + q.h) - Math.max(p.y, q.y);
+  return w > 0 && h > 0 ? (w * h) / Math.min(p.w * p.h, q.w * q.h) : 0;
+}
+
+function worstOverlap(w: ReturnType<typeof wallTiles>): number {
+  const ts = [...w.tiles.values()];
+  let worst = 0;
+  for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) worst = Math.max(worst, overlap(ts[i], ts[j]));
+  return worst;
+}
+
+describe('wallTiles keeps neighbouring phones apart when the layout is not a clean grid', () => {
+  const W = 0.2;
+  const H = W / a;
+
+  it('a brick layout, the second row shifted by half a phone, gives every phone its own tile', () => {
+    const w = wallTiles(room(1, [[0.1, 0.1], [0.3, 0.1], [0.5, 0.1], [0.2, 0.1 + H], [0.4, 0.1 + H], [0.6, 0.1 + H]]), none);
+    expect(worstOverlap(w)).toBeLessThan(0.01);
+    expect(new Set([...w.tiles.values()].map((t) => `${t.x.toFixed(4)},${t.y.toFixed(4)}`)).size).toBe(6);
+  });
+
+  it('phones in a 3 by 3 block, each up to 0.3 of a phone off its place, never take a neighbour’s tile', () => {
+    const rand = rng(7);
+    const off = () => (rand() * 2 - 1) * 0.3 * W;
+    let worst = 0;
+    for (let trial = 0; trial < 200; trial++) {
+      const pts: [number, number][] = [];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) pts.push([0.2 + c * W + off(), 0.1 + r * H + off()]);
+      worst = Math.max(worst, worstOverlap(wallTiles(room(1, pts), none)));
+    }
+    // Beside a neighbour that is itself off its place, a phone can still overlap it; it must never take its tile.
+    expect(worst).toBeLessThan(0.6);
+  });
+
+  it('a clean grid, each row a little off level, still snaps exactly', () => {
+    const pts: [number, number][] = [];
+    const sway = [-0.03, 0, 0.03];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) pts.push([0.2 + c * W + sway[r], 0.1 + r * H]);
+    const w = wallTiles(room(1, pts), none);
+    pts.forEach((_, i) => expectRect(tile(w, i), { x: (i % 3) / 3, y: Math.floor(i / 3) / 3, w: 1 / 3, h: 1 / 3 }));
+  });
+
+  it('phones a hair apart do not shrink the phone width', () => {
+    const w = wallTiles(room(2, [[0, 0.5], [1e-7, 0.5], [0.25, 0.5], [0.5, 0.5]]), none);
+    expect(w.aspect).toBeCloseTo(3 * a, 6);
+    expectRect(tile(w, 2), { x: 1 / 3, y: 0, w: 1 / 3, h: 1 });
+    expectRect(tile(w, 3), { x: 2 / 3, y: 0, w: 1 / 3, h: 1 });
   });
 });
 
