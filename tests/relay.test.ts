@@ -100,9 +100,12 @@ describe('relay server', () => {
 });
 
 describe('relay heartbeat', () => {
-  it('closes a socket that stops answering pings, host or phone, and keeps one that answers', async () => {
+  // The window is a full second so a loaded machine that stalls this worker or the relay for a few
+  // hundred ms does not look like a dead phone; the waits are in windows too.
+  const BEAT = 1000;
+  it('closes a socket that stops answering pings, host or phone, and keeps one that answers', { timeout: 30_000 }, async () => {
     const hbPort = await freePort();
-    const relay = await startRelay(hbPort, { RELAY_HEARTBEAT_MS: '200' });
+    const relay = await startRelay(hbPort, { RELAY_HEARTBEAT_MS: String(BEAT) });
     try {
       const host = await rawPhone(hbPort, 'BEAT', 'role=host&key=beatkey123');
       const deaf = await rawPhone(hbPort, 'BEAT');
@@ -110,15 +113,15 @@ describe('relay heartbeat', () => {
       await new Promise((r) => (live.onopen = r));
       let liveClosed = false;
       live.onclose = () => (liveClosed = true);
-      // The bare sockets never answer a ping: gone within two beats. The host going closes its phones.
-      await vi.waitFor(() => expect(deaf.closed() && host.closed()).toBe(true), { timeout: 3000 });
-      await vi.waitFor(() => expect(liveClosed).toBe(true), { timeout: 3000 });
+      // The bare sockets never answer a ping: gone within two windows. The host going closes its phones.
+      await vi.waitFor(() => expect(deaf.closed() && host.closed()).toBe(true), { timeout: 6 * BEAT });
+      await vi.waitFor(() => expect(liveClosed).toBe(true), { timeout: 6 * BEAT });
       // A browser-like socket answers pings and stays as long as its room exists.
       const host2 = new WebSocket(`ws://127.0.0.1:${hbPort}/relay?room=BEAT2&role=host&key=beatkey123`);
       await new Promise((r) => (host2.onopen = r));
       const phone2 = new WebSocket(`ws://127.0.0.1:${hbPort}/relay?room=BEAT2&role=phone`);
       await new Promise((r) => (phone2.onopen = r));
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 3 * BEAT));
       expect(phone2.readyState).toBe(WebSocket.OPEN);
       expect(host2.readyState).toBe(WebSocket.OPEN);
       host2.close();
