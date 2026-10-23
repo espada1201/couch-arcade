@@ -707,3 +707,16 @@ test('1280x800: the top bar is one row, so the console keeps its height for the 
   expect(await host.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('the two unexplained options say what they do: flip left and right on Locate, record the moment on Photo & cards', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.setViewportSize({ width: 1280, height: 800 });
+  const mirror = host.getByRole('checkbox', { name: /Camera faces the crowd/ });
+  await expect(mirror).toHaveAccessibleDescription(/camera looks back at the crowd from the front.*flipped left to right/i);
+  await host.getByRole('tab', { name: /Photo & cards/ }).click();
+  const record = host.getByRole('checkbox', { name: /Record the moment/ });
+  await expect(record).toHaveAccessibleDescription(/films the crowd for the flip and a few seconds after.*stays on this computer/i);
+  await expect(host.locator('.record .note').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});

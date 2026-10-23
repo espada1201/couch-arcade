@@ -4,7 +4,7 @@ Turn a room full of phones into one screen and one speaker. Everyone scans a QR 
 computer's camera watches every phone flash a unique blink code and works out where each one
 physically sits. Then the crowd is a giant display and speaker array.
 
-- **Music**: Party speaker plays a song file (MP3/M4A) on every phone in step; spatial tones send notes seat to seat.
+- **Music**: Party speaker plays a song file (MP3, M4A or WAV) on every phone in step; spatial tones send notes seat to seat.
 - **Big screen**: every phone shows the whole picture: shared slides, lyrics or an agenda as text cards, live captions, the camera.
 - **Poll**: a ballot on every phone, and on Reveal the room itself becomes the chart.
 - **Show**: one button loops a title card, waves with sound, live aurora and fire, and pictures. Event moments run on their own: a New Year countdown (optionally to midnight) and a first-dance wash.

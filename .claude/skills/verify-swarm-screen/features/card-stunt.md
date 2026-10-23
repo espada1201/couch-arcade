@@ -13,7 +13,7 @@ Any picture, the host's words or an event template is spread across the crowd an
 - `stunt-picture` Stadium cards style, an uploaded picture: each phone shows its quadrant's colour.
 - `stunt-words` "Use words" flips a word image. The preview also follows the words as they are typed (about 0.3 s after the last key, like the Name field), so Use words is only a confirm; an emptied box leaves the last words showing.
 - `templates` Names with a heart needs both names (message, focus on the empty field); Happy birthday needs a name; Just married needs none.
-- `record` "Record the moment" films the flip and offers a `.webm` keepsake.
+- `record` "Record the moment" films the flip and offers a `.webm` keepsake; a line under the box says the computer's camera films the crowd and the video stays on this computer.
 - `slow-flip` with a 5 MB song downloading in the background, a phone on 1 Mbps Wi-Fi still flips with the rest.
 
 ## How to get to it (user POV)

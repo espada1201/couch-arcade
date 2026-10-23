@@ -36,7 +36,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
   const scanHint = h('p.note', { id: 'scan-hint' }, 'Start the camera first.');
   const progress = h('progress', { max: 1, value: 0, hidden: true, 'aria-label': 'Scan progress' });
   const result = h('p.result', { role: 'status', 'aria-live': 'polite' });
-  const mirror = h('input', { type: 'checkbox', id: 'mirror', checked: session.mirror });
+  const mirror = h('input', { type: 'checkbox', id: 'mirror', 'aria-describedby': 'mirror-about', checked: session.mirror });
   const identify = h('button.btn.ghost', { type: 'button', 'aria-pressed': 'false' }, 'Show numbers on phones');
 
   // Labels (and often the full list) only appear once camera permission is granted, so refresh after starting.
@@ -335,6 +335,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     camMsg.el,
     view,
     h('label.check', { for: 'mirror' }, mirror, h('span', {}, 'Camera faces the crowd (flip left and right)')),
+    h('p.note', { id: 'mirror-about' }, 'Tick this when the camera looks back at the crowd from the front: the map is then flipped left to right, as the crowd sees the room.'),
     h(
       'details.fallback',
       { open: !!session.perspective },

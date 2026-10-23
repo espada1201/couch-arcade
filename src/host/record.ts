@@ -36,7 +36,7 @@ let ids = 0;
 export function recorder(): Recorder | null {
   if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) return null;
   const id = `record-${++ids}`;
-  const on = h('input', { type: 'checkbox', id });
+  const on = h('input', { type: 'checkbox', id, 'aria-describedby': `${id}-about` });
   const status = h('p.note', { role: 'status' });
   const failed = (e: unknown) => setText(status, `Couldn’t record: ${errorText(e)}`);
   const link = h('a.btn.small', { hidden: true });
@@ -137,6 +137,7 @@ export function recorder(): Recorder | null {
     'div.record',
     {},
     h('label.check', { for: id }, on, h('span', {}, 'Record the moment with this computer’s camera')),
+    h('p.note', { id: `${id}-about` }, 'This computer’s camera films the crowd for the flip and a few seconds after. The video stays on this computer; you can download it.'),
     status,
     link,
   );
