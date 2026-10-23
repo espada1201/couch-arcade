@@ -198,7 +198,6 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     finish();
     hold.end();
     drawOverlay();
-    // Focus is stranded on Scan. With everyone placed the job is done: the host page moves it to the way back, if one is offered.
     const stranded = document.activeElement === document.body || document.activeElement === scanBtn;
     if (stranded && online.every((s) => session.layout.positions.has(s.seat))) result.dispatchEvent(new CustomEvent(ALL_PLACED, { bubbles: true }));
   });

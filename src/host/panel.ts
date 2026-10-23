@@ -70,10 +70,12 @@ export function panel(intro: string, ...body: Child[]): Notice {
   return { ...msg, el };
 }
 
-/** A `panel` whose last controls (`foot`) and status line stay in view at the bottom while the rest scrolls. */
 export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice {
   const msg = notice();
-  const el = h('div.panel-body', {}, h('p.panel-intro', {}, intro), ...body, h('div.panel-foot', {}, ...foot, msg.el));
+  const bar = h('div.panel-foot', {}, ...foot, msg.el);
+  const el = h('div.panel-body', {}, h('p.panel-intro', {}, intro), ...body, bar);
+  // A message that wraps makes the bar taller; scrolling to a field must stop above the bar, whatever its height.
+  new ResizeObserver(() => el.style.setProperty('--foot-h', `${bar.offsetHeight}px`)).observe(bar);
   return { ...msg, el };
 }
 
@@ -81,7 +83,6 @@ export function footedPanel(intro: string, body: Child[], foot: Child[]): Notice
 export const GOTO_TAB = 'swarm:goto-tab';
 export const gotoTab = (from: Element, id: string): boolean => from.dispatchEvent(new CustomEvent(GOTO_TAB, { bubbles: true, detail: id }));
 
-/** Sent up from Locate when a scan left every phone on the map, so the host page can offer the way back. */
 export const ALL_PLACED = 'swarm:all-placed';
 
 /**

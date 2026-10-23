@@ -1156,7 +1156,6 @@ const CHECKS = {
     run.note('square: screenshot centre per phone (top-left, top-right, bottom-left, bottom-right)', quad.map((c) => c.join(',')));
     [RED, GREEN, BLUE, YELLOW].forEach((want, i) => near(quad[i], want) || run.issue(`square phone ${i + 1} shows ${quad[i]}, not its quadrant`));
     await run.shot(square.host, 'host-square-wall');
-    // Nobody scanned: "Line them up for me" puts the phones in a row, and the wall is cut in clean thirds.
     const lined = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });
     await tab(lined, 'Card stunt');
     await lined.host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();

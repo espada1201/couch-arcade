@@ -193,7 +193,7 @@ body.host { overflow-x: hidden; }
 /* The last controls and the status line stay at the bottom of the screen while the panel scrolls (the panel itself, or the page on a small screen). */
 .panel-foot { position: sticky; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin: 0 calc(-1 * var(--px)) calc(-1 * var(--pb)); padding: 10px var(--px) 14px; background: var(--ink-2); border-top: 1px solid var(--line); }
 .panel-foot .note { margin: 0; }
-.panel:has(.panel-foot), :root:has(.panel-foot) { scroll-padding-bottom: 150px; }
+.panel-body:has(.panel-foot) :not(.panel-foot, .panel-foot *) { scroll-margin-bottom: var(--foot-h, 0px); }
 .panel-title { margin: 0; font: 700 18px var(--display); font-stretch: 100%; color: var(--text); }
 .pointer, .needs, .back-to { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-left: 3px solid var(--teal); background: var(--ink-3); border-radius: 0 6px 6px 0; }
 .back-to { margin-bottom: 12px; font-size: 15px; }

@@ -230,7 +230,6 @@ for (const [w, h] of [[1280, 800], [390, 844]]) {
     const flip = host.getByRole('button', { name: 'Flip the cards' });
     await expect(flip).toBeVisible();
     expect(await inViewport(host, 'button.btn.primary:text("Flip the cards")'), 'at the top of the panel').toBe(true);
-    // Down at the Name field and the preview, Flip is still there.
     await host.locator('.stunt-preview').scrollIntoViewIfNeeded();
     expect(await inViewport(host, '.stunt-preview canvas'), 'the preview').toBe(true);
     expect(await inViewport(host, 'button.btn.primary:text("Flip the cards")'), 'beside the preview').toBe(true);
@@ -242,6 +241,25 @@ for (const [w, h] of [[1280, 800], [390, 844]]) {
     expect(errors).toEqual([]);
   });
 }
+
+test('320px: a focused field stops above the bar even when a message wraps and makes the bar taller', async ({ context }) => {
+  const errors: string[] = [];
+  const { host } = await openHost(context, errors);
+  await host.setViewportSize({ width: 320, height: 640 });
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  await expect(host.getByRole('alert').filter({ hasText: 'Place some phones on the map first.' })).toBeVisible();
+  await host.locator('.panel-foot [role=alert]').evaluate((el) => el.append(' This is a long message that has to wrap onto several lines in a narrow window.'.repeat(3)));
+  const gap = async (field: string) => {
+    await host.evaluate(() => scrollTo(0, 0));
+    await host.locator(field).evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
+    return host.evaluate((f) => document.querySelector('.panel-foot')!.getBoundingClientRect().top - document.querySelector(f)!.getBoundingClientRect().bottom, field);
+  };
+  const bar = await host.locator('.panel-foot').evaluate((el) => el.getBoundingClientRect().height);
+  expect(bar).toBeGreaterThan(200);
+  for (const field of ['#stunt-words', '#stunt-name-2']) expect(await gap(field), field).toBeGreaterThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
 
 test('keyboard: Enter in a Name field or in "Or your words" moves focus to Flip, and Enter in words uses them first', async ({ context }) => {
   const errors: string[] = [];
@@ -259,7 +277,6 @@ test('keyboard: Enter in a Name field or in "Or your words" moves focus to Flip,
   await host.locator('#stunt-words').fill('GO TEAM');
   await host.keyboard.press('Enter');
   await expect(flip).toBeFocused();
-  // The words are the picture now: no design and no template is chosen any more.
   await expect(host.locator('.thumbs button[aria-pressed=true], .moments button[aria-pressed=true]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -273,10 +290,8 @@ test('typing "Or your words" updates the preview by itself, like the Name field,
   const picture = () => host.locator('.stunt-preview canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL());
   const before = await picture();
   await host.locator('#stunt-words').pressSequentially('HAPPY BIRTHDAY MAYA');
-  // No press of Use words: the picture is the words once typing pauses.
   await expect(chosen).toHaveCount(0);
   expect(await picture()).not.toBe(before);
-  // Keeps up with more typing, and an emptied box leaves the last words showing.
   const typed = await picture();
   await host.locator('#stunt-words').pressSequentially('!');
   await expect.poll(picture).not.toBe(typed);
@@ -639,7 +654,6 @@ test('Go to Locate from Card stunt offers the way back, and a started camera put
   await expect(host.getByRole('button', { name: 'Scan the room' })).toBeFocused();
   await host.keyboard.press('Enter');
   await expect(host.getByText(/Placed 1 of 1 phone/)).toBeVisible({ timeout: 20000 });
-  // Everyone is placed and a way back is offered: focus is on it, not left on Scan.
   await expect(host.getByRole('button', { name: 'Back to Card stunt' })).toBeFocused();
   await host.keyboard.press('Enter');
   await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');

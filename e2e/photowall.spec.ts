@@ -96,7 +96,6 @@ test('Photo wall: "Line them up for me" puts three phones nobody scanned in a ro
   await expect(need).toContainText('All 3 phones are on the map');
   await expect(lineUp).toBeHidden();
   await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
-  // No picture chosen yet: the next step is the upload.
   await expect(host.locator('#stunt-file')).toBeFocused();
   await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
   await expect(host.locator('.stunt-preview canvas')).toHaveAttribute('aria-label', 'Photo wall preview: 3 phones, each outlined with its number');
@@ -141,7 +140,6 @@ test('the line under Flip is cleared when the picture, words, template or style 
   await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
   await flip.click();
   await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the picture.');
-  // Words: the old line goes, and the new flip is a greeting.
   await host.locator('#stunt-words').fill('GO TEAM');
   await host.keyboard.press('Enter');
   await expect(said).toHaveText('');
