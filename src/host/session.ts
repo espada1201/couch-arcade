@@ -5,7 +5,7 @@ import type { Program } from '../core/effects';
 import type { Track } from '../core/speaker';
 import { applyHomography, floorPlan } from '../core/homography';
 import { normalize, type Point, type Room } from '../core/layout';
-import { clamp01 } from '../core/math';
+import { clamp01, median } from '../core/math';
 import { TAP_MS, fits, messageBytes, parsePhoneMsg, type HostMsg, type PhoneMsg } from '../core/protocol';
 import { PHONE_LIMIT, PHONE_MESSAGE_BYTES, tokenBucket } from '../net/limits.js';
 import { randomId, type HostEnd, type Link, type ServerState, type Transport } from '../net/transport';
@@ -264,23 +264,55 @@ export class HostSession {
     this.relayout(true);
   }
 
+  /** Freezes the layout as room coordinates, so hand placement never rescales anyone. */
+  private toRoomFrame(): void {
+    if (this.frame !== 'source') return;
+    for (const s of this.seats.values()) {
+      s.raw = this.layout.positions.get(s.seat) ?? null;
+      // Frozen positions are room coordinates now, not camera ones: never mix them with a rescan.
+      s.source = s.raw ? 'manual' : null;
+    }
+    this.roomAspect = this.layout.positions.size > 1 ? this.layout.aspect : 16 / 9;
+    this.frame = 'room';
+    this.mirror = false;
+  }
+
   /**
    * Drop a phone at a point in room space by hand. Everyone's raw position is first
    * rebased onto the current room layout so nobody else jumps.
    */
   placeManually(seat: number, p: Point): void {
-    if (this.frame === 'source') {
-      // Freeze the current layout so that moving one phone never rescales the others.
-      for (const s of this.seats.values()) {
-        s.raw = this.layout.positions.get(s.seat) ?? null;
-        // Frozen positions are room coordinates now, not camera ones: never mix them with a rescan.
-        s.source = s.raw ? 'manual' : null;
-      }
-      this.roomAspect = this.layout.positions.size > 1 ? this.layout.aspect : 16 / 9;
-      this.frame = 'room';
-      this.mirror = false;
-    }
+    this.toRoomFrame();
     this.applyRaw(new Map([[seat, { x: clamp01(p.x), y: clamp01(p.y) }]]), 'manual');
+  }
+
+  /**
+   * Puts every connected phone that is not on the map into one left-to-right row, lowest seat first,
+   * after the phones already placed, which stay where they are on the floor. Returns the seats it placed.
+   */
+  lineUp(): number[] {
+    const seats = this.online.map((s) => s.seat).filter((seat) => !this.layout.positions.has(seat)).sort((a, b) => a - b);
+    if (seats.length === 0) return seats;
+    this.toRoomFrame();
+    const updates = new Map<number, Point>();
+    const placed = [...this.layout.positions];
+    if (placed.length === 0) {
+      this.roomAspect = 16 / 9;
+      seats.forEach((seat, i) => updates.set(seat, { x: (i + 0.5) / seats.length, y: 0.5 }));
+    } else {
+      // The floor in room heights: one unit is the room's height, so x is stretched by the aspect.
+      const floor = placed.map(([, p]) => ({ x: p.x * this.roomAspect, y: p.y }));
+      const gaps = floor.flatMap((p, i) => (floor.length > 1 ? [Math.min(...floor.flatMap((q, j) => (j === i ? [] : [Math.hypot(p.x - q.x, p.y - q.y)])))] : []));
+      // A row's step is the usual gap between placed phones, or a few phones' width when there is only one.
+      const step = Math.max(0.05, median(gaps) || 0.35);
+      const last = floor.reduce((a, b) => (b.x > a.x ? b : a));
+      const width = Math.max(this.roomAspect, last.x + step * seats.length);
+      placed.forEach(([seat], i) => updates.set(seat, { x: floor[i].x / width, y: floor[i].y }));
+      seats.forEach((seat, i) => updates.set(seat, { x: (last.x + step * (i + 1)) / width, y: last.y }));
+      this.roomAspect = width;
+    }
+    this.applyRaw(updates, 'manual');
+    return seats;
   }
 
   /** Whether a saved perspective correction is actually shaping the map right now. */

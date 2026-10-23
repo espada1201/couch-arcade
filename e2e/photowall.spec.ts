@@ -80,3 +80,51 @@ test('Photo wall: a phone that was away at the flip shows its piece when it come
   near(await screenCentre(phones[2]), BLUE);
   expect(errors).toEqual([]);
 });
+
+test('Photo wall: "Line them up for me" puts three phones nobody scanned in a row, and each shows its own third', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  const need = host.locator('.needs');
+  await expect(need).toContainText('0 of 3 phones are on the map');
+  const lineUp = need.getByRole('button', { name: 'Line them up for me' });
+  await expect(lineUp).toBeVisible();
+  await expect(need.getByRole('button', { name: 'Go to Locate' })).toBeVisible();
+  await lineUp.click();
+  await expect(host.getByText('Done. Phones 1 to 3 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.')).toBeVisible();
+  await expect(need).toContainText('All 3 phones are on the map');
+  await expect(lineUp).toBeHidden();
+  await expect(host.getByRole('tab', { name: /Card stunt/ })).toHaveAttribute('aria-selected', 'true');
+  // No picture chosen yet: the next step is the upload.
+  await expect(host.locator('#stunt-file')).toBeFocused();
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  await expect(host.locator('.stunt-preview canvas')).toHaveAttribute('aria-label', 'Photo wall preview: 3 phones, each outlined with its number');
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  for (const [i, want] of [RED, GREEN, BLUE].entries()) near(await screenCentre(phones[i]), want);
+
+  await host.getByRole('radio', { name: 'Stadium cards' }).check();
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  await expect(phones[0].locator('img.tile-picture')).toBeHidden();
+  await expect.poll(async () => bg(phones[0]), { timeout: 8000 }).toEqual(RED);
+  expect(await bg(phones[1])).toEqual(GREEN);
+  expect(await bg(phones[2])).toEqual(BLUE);
+  expect(errors).toEqual([]);
+});
+
+test('Photo wall: "Line them up for me" with a picture already chosen moves focus to Flip, and Enter flips', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  const lineUp = host.locator('.needs').getByRole('button', { name: 'Line them up for me' });
+  await expect(lineUp).toBeVisible();
+  await lineUp.click();
+  await expect(host.getByRole('button', { name: 'Flip the cards' })).toBeFocused();
+  await host.keyboard.press('Enter');
+  for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+  for (const [i, want] of [RED, GREEN, BLUE].entries()) near(await screenCentre(phones[i]), want);
+  expect(errors).toEqual([]);
+});

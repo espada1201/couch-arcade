@@ -10,7 +10,7 @@ import type { Director, Run } from './director';
 import { POTATO_RULES, runGame, territoryRules } from './game';
 import { flipper } from './flipper';
 import { MOMENTS, fileStunt, missingNames, presets, textStunt, type Moment, type Stunt } from './images';
-import { panel, placementNote, requirePlaced, stopButton } from './panel';
+import { lineUpSaid, panel, placementNote, requirePlaced, stopButton } from './panel';
 import { recorder } from './record';
 import { throttle } from './throttle';
 import { speakerPanel } from './speaker';
@@ -26,7 +26,10 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const preview = h('div.stunt-preview');
   const previews = Object.fromEntries(STYLE_KEYS.map((k) => [k, STYLES[k].preview(session, preview)])) as Record<CardStyle, (s: Stunt) => void>;
   const show = () => previews[style](chosen);
+  /** Whether the host has chosen a picture, words or template, as opposed to the one that is showing at the start. */
+  let picked = false;
   const pick = (s: Stunt, m: Moment | null = null) => {
+    picked = true;
     flips.cancel();
     if (s !== chosen) chosen.close?.();
     chosen = s;
@@ -95,9 +98,17 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   });
   session.subscribe(show);
   show();
+  const lineUp = () => {
+    const after = session.layout.positions.size > 0;
+    const seats = session.lineUp();
+    if (seats.length === 0) return;
+    say(lineUpSaid(seats, after));
+    // The button is gone now that everyone is on the map: carry on at the next step.
+    (picked ? flip : file).focus();
+  };
   const { el, say, fail } = panel(
     'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
-    placementNote(session, 'Card stunt needs phones on the map.'),
+    placementNote(session, 'Card stunt needs phones on the map.', lineUp),
     styles,
     ...notes,
     h('label.file.primary-choice', { for: 'stunt-file' }, 'Upload your own picture', file),

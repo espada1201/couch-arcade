@@ -71,15 +71,18 @@ export function cardStuntPointer(lead: string): HTMLElement {
 /**
  * The up-front version of `requirePlaced`: how many connected phones are on the map right now, kept
  * live, with the way to Locate while some are not. For every panel that only works on placed phones.
+ * `lineUp` adds a main button that puts the phones that are not on the map in a row, for panels that can use one.
  */
-export function placementNote(session: HostSession, needs: string): HTMLElement {
+export function placementNote(session: HostSession, needs: string, lineUp?: () => void): HTMLElement {
   const text = h('p', {});
+  const row = lineUp && h('button.btn.small.primary', { type: 'button', onclick: lineUp }, 'Line them up for me');
   const go = h('button.btn.small', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'locate') }, 'Go to Locate');
-  const el = h('div.needs', { role: 'status' }, text, go);
+  const el = h('div.needs', { role: 'status' }, text, row, go);
   const update = () => {
     const online = session.online.length;
     const onMap = session.playRoom().positions.size;
     go.hidden = online === 0 || onMap === online;
+    if (row) row.hidden = go.hidden;
     if (online === 0) text.textContent = `${needs} No phones have joined yet. Scan the QR code with a phone to join.`;
     else if (onMap === online) text.textContent = `${needs} ${online === 1 ? 'Your phone is' : `All ${online} phones are`} on the map.`;
     else text.textContent = `${needs} ${onMap} of ${plural(online, 'phone')} ${online === 1 && onMap === 0 ? 'is' : 'are'} on the map.`;
@@ -87,6 +90,15 @@ export function placementNote(session: HostSession, needs: string): HTMLElement 
   session.subscribe(update);
   update();
   return el;
+}
+
+/** What the host reads once `seats` (0-based) were put in a row; `after`: some phones were already on the map. */
+export function lineUpSaid(seats: number[], after: boolean): string {
+  const n = seats.map((s) => s + 1);
+  if (n.length === 1) return `Done. Phone ${n[0]} is on the map${after ? ' after the others' : ''}.`;
+  const run = n.length > 2 && n.every((v, i) => v === n[0] + i);
+  const list = run ? `${n[0]} to ${n[n.length - 1]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+  return `Done. Phones ${list} are in a row${after ? ' after the ones already on the map' : ''}, phone ${n[0]} on the left. Ask your friends to hold or lay their phones in that order.`;
 }
 
 export function stopButton(director: Director, after?: () => void): HTMLButtonElement {

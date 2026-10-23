@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_IDS } from '../src/core/blinkcode';
+import { wallTiles } from '../src/core/wall';
 import { HostSession } from '../src/host/session';
 import { BasicLink, sendEach, type HostEnd } from '../src/net/transport';
 import { MAX_MESSAGE_BYTES, fits, type HostMsg } from '../src/core/protocol';
@@ -63,6 +64,55 @@ describe('host session', () => {
     expect(session.layout.positions.get(1)).toEqual(before.get(1));
     // Frozen positions are room coordinates now; a later camera scan must not treat them as camera ones.
     expect([...session.seats.values()].map((x) => x.source)).toEqual(['manual', 'manual', 'manual']);
+  });
+
+  describe('lining phones up', () => {
+    const join = async (n: number) => {
+      const { session, phone } = harness();
+      await session.open();
+      const phones = Array.from({ length: n }, () => phone());
+      phones.forEach((p, i) => p.say({ t: 'hello', token: `t${i}` }));
+      return { session, phones };
+    };
+
+    it('puts phones that are not on the map into one row, phone 1 on the left, each its own third of a Photo wall', async () => {
+      const { session } = await join(3);
+      expect(session.lineUp()).toEqual([0, 1, 2]);
+      const at = [0, 1, 2].map((s) => session.layout.positions.get(s)!);
+      expect(at[0].x).toBeLessThan(at[1].x);
+      expect(at[1].x).toBeLessThan(at[2].x);
+      expect(new Set(at.map((p) => p.y)).size).toBe(1);
+      for (const p of at) expect(p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1).toBe(true);
+      const tiles = wallTiles(session.layout, new Map()).tiles;
+      expect([...tiles.values()].map((r) => [r.x, r.w].map((v) => Math.round(v * 1000) / 1000))).toEqual([[0, 0.333], [0.333, 0.333], [0.667, 0.333]]);
+      for (const r of tiles.values()) expect([r.y, r.h]).toEqual([0, 1]);
+    });
+
+    it('leaves phones that are already on the map exactly where they are and lines the rest up after them, in seat order', async () => {
+      const { session } = await join(4);
+      session.setRaw(new Map([[1, { x: 0.2, y: 0.5 }], [2, { x: 0.6, y: 0.5 }]]), 'camera');
+      const before = [1, 2].map((s) => session.layout.positions.get(s)!);
+      const physical = () => [1, 2].map((s) => session.layout.positions.get(s)!.x * session.layout.aspect);
+      const was = physical();
+      expect(session.lineUp()).toEqual([0, 3]);
+      // Nothing moved on the floor, even though the room grew to hold the new phones.
+      expect(physical().map((v) => Math.round(v * 1e6))).toEqual(was.map((v) => Math.round(v * 1e6)));
+      expect(session.layout.positions.get(1)!.y).toBe(before[0].y);
+      const [p0, p1, p2, p3] = [0, 1, 2, 3].map((s) => session.layout.positions.get(s)!);
+      expect(p3.x).toBeGreaterThan(p0.x);
+      expect(p0.x).toBeGreaterThan(p2.x);
+      expect(p1.x).toBeLessThan(p2.x);
+      expect(p0.y).toBe(p2.y);
+      for (const p of [p0, p1, p2, p3]) expect(p.x >= 0 && p.x <= 1).toBe(true);
+    });
+
+    it('does nothing when every connected phone is on the map, and skips phones that are away', async () => {
+      const { session, phones } = await join(3);
+      phones[1].drop();
+      expect(session.lineUp()).toEqual([0, 2]);
+      expect(session.layout.positions.has(1)).toBe(false);
+      expect(session.lineUp()).toEqual([]);
+    });
   });
 
   it('games only see phones that are connected and placed', async () => {

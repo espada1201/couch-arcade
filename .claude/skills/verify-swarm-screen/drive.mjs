@@ -1156,6 +1156,19 @@ const CHECKS = {
     run.note('square: screenshot centre per phone (top-left, top-right, bottom-left, bottom-right)', quad.map((c) => c.join(',')));
     [RED, GREEN, BLUE, YELLOW].forEach((want, i) => near(quad[i], want) || run.issue(`square phone ${i + 1} shows ${quad[i]}, not its quadrant`));
     await run.shot(square.host, 'host-square-wall');
+    // Nobody scanned: "Line them up for me" puts the phones in a row, and the wall is cut in clean thirds.
+    const lined = await openRoom(run, { sims: [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]] });
+    await tab(lined, 'Card stunt');
+    await lined.host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+    await expect(lined.host.getByText('Done. Phones 1 to 3 are in a row, phone 1 on the left. Ask your friends to hold or lay their phones in that order.')).toBeVisible();
+    await lined.host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+    await lined.host.getByRole('button', { name: 'Flip the cards' }).click();
+    for (const p of lined.phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 10_000 });
+    const strip = [];
+    for (const p of lined.phones) strip.push(await screenCentre(p));
+    run.note('lined up, no scan: screenshot centre per phone (left, middle, right)', strip.map((c) => c.join(',')));
+    [RED, GREEN, BLUE].forEach((want, i) => near(strip[i], want) || run.issue(`lined-up phone ${i + 1} shows ${strip[i]}, not its ${['left', 'middle', 'right'][i]} third`));
+    await run.shot(lined.host, 'host-lined-up-wall');
   },
 
   async templates(run) {
