@@ -17,7 +17,6 @@ import { speakerPanel } from './speaker';
 import type { HostSession } from './session';
 import type { Stage } from './stage';
 
-/** How long the host's words rest before the preview shows them. */
 const WORDS_PAUSE_MS = 300;
 
 export function cardPanel(session: HostSession, director: Director): HTMLElement {
@@ -31,10 +30,10 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const show = () => previews[style](chosen);
   /** Whether the host has chosen a picture, words or template, as opposed to the one that is showing at the start. */
   let picked = false;
-  /** The timer that shows the words once typing pauses. */
   let typing = 0;
   const pick = (s: Stunt, m: Moment | null = null) => {
     clearTimeout(typing);
+    typing = 0;
     picked = true;
     flips.cancel();
     // The line under Flip is about the last flip, not about this choice.
@@ -54,12 +53,11 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     say(missingNames(m, typed()) ?? '');
   };
   for (const n of names) n.addEventListener('input', () => moment && moment.names > 0 && useMoment(moment));
-  // Enter means "done typing": on to Flip, which is what comes next.
-  const enterToFlip = (field: HTMLInputElement, before = () => {}) =>
+  const enterToFlip = (field: HTMLInputElement, before?: () => void) =>
     field.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' || e.isComposing) return;
       e.preventDefault();
-      before();
+      before?.();
       flip.focus();
     });
   names.forEach((n) => enterToFlip(n));
@@ -81,14 +79,20 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   );
   const words = h('input', { type: 'text', id: 'stunt-words', maxlength: 24, placeholder: 'GO TEAM', autocomplete: 'off' });
   const useWords = () => {
+    clearTimeout(typing);
+    typing = 0;
     const text = words.value.trim().toUpperCase();
     if (text) pick(textStunt(text, session.layout.aspect));
   };
-  // The preview follows what is typed, as the names do, once the typing pauses.
+  /** Shows the words now if their pause has not run out yet, so a Flip never uses a picture that the timer is about to replace. */
+  const flushWords = () => {
+    if (typing) useWords();
+  };
   words.addEventListener('input', () => {
     clearTimeout(typing);
     typing = window.setTimeout(useWords, WORDS_PAUSE_MS);
   });
+  words.addEventListener('blur', flushWords);
   enterToFlip(words, useWords);
   const file = h('input', { type: 'file', accept: 'image/*', id: 'stunt-file' });
   file.addEventListener('change', async () => {
@@ -106,6 +110,7 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
   const flip = h('button.btn.primary', { type: 'button' }, 'Flip the cards');
   flip.addEventListener('click', async () => {
     if (flips.inFlight) return;
+    flushWords();
     const missing = moment && missingNames(moment, typed());
     if (missing) return fail(missing), names[typed()[0] ? 1 : 0].focus();
     if (!requirePlaced(session, { fail, retract })) return;
@@ -131,7 +136,6 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     const seats = session.lineUp();
     if (seats.length === 0) return;
     say(lineUpSaid(seats, after));
-    // The button is gone now that everyone is on the map: carry on at the next step.
     (picked ? flip : file).focus();
   };
   const { el, say, fail, retract } = footedPanel(

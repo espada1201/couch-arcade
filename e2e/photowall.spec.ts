@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { BLUE, GREEN, QUADRANTS_PNG, RED, YELLOW, bg, openRoom, scan, screenCentre, stripsPng } from './room';
 
 /** Each channel within `by` of the colour wanted: the piece went through a JPEG. */
@@ -159,3 +159,25 @@ test('the line under Flip is cleared when the picture, words, template or style 
   await expect(said).toHaveText('');
   expect(errors).toEqual([]);
 });
+
+for (const [how, press] of [
+  ['a click that never blurs the field', (flip: Locator) => flip.dispatchEvent('click')],
+  ['Tab-style focus then Space', async (flip: Locator) => (await flip.focus(), flip.press('Space'))],
+] as const) {
+  test(`Flip right after typing "Or your words" (${how}) flips the words, and the typing pause does not cancel it`, async ({ context }) => {
+    test.setTimeout(150_000);
+    const errors: string[] = [];
+    const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+    await scan(room);
+    const { host, phones } = room;
+    await host.getByRole('tab', { name: /Card stunt/ }).click();
+    await host.locator('#stunt-words').pressSequentially('GO TEAM');
+    await press(host.getByRole('button', { name: 'Flip the cards' }));
+    const said = host.locator('.panel-body .notice > .note');
+    await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the greeting.');
+    await host.waitForTimeout(600);
+    await expect(said).toHaveText('3, 2, 1… 3 phones show their piece of the greeting.');
+    for (const p of phones) await expect(p.locator('img.tile-picture')).toBeVisible({ timeout: 8000 });
+    expect(errors).toEqual([]);
+  });
+}
