@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { lineUpSaid, notice, requirePlaced, swapSaid } from '../src/host/panel';
+import { lineUpSaid, notice, requirePlaced } from '../src/host/panel';
 import { fakeDocument, room } from './harness';
 
 describe('what the host reads after Line them up for me', () => {
@@ -63,12 +63,5 @@ describe('the message that asks for placed phones', () => {
     msg.fail('Place some phones on the map first. Then try again.');
     place(0.5);
     expect(alert.kids[0]).toBe('Place some phones on the map first. Then try again.');
-  });
-});
-
-describe('what the host reads after swapping two phones', () => {
-  it('names both phones and the new order from the left', () => {
-    expect(swapSaid(0, 2, [2, 1, 0])).toBe('Swapped phones 1 and 3. Left to right: 3, 2, 1.');
-    expect(swapSaid(3, 1, [0, 3, 2, 1])).toBe('Swapped phones 4 and 2. Left to right: 1, 4, 3, 2.');
   });
 });

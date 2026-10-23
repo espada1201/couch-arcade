@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { BLUE, GREEN, QUADRANTS_PNG, RED, YELLOW, bg, openRoom, scan, screenCentre, stripsPng } from './room';
+import { BLUE, GREEN, QUADRANTS_PNG, RED, YELLOW, bg, joinPhone, openRoom, scan, screenCentre, stripsPng } from './room';
 
 /** Each channel within `by` of the colour wanted: the piece went through a JPEG. */
 function near(got: number[], want: number[], by = 45): void {
@@ -228,5 +228,77 @@ test('Photo wall: the swap works from the keyboard, keeps focus in the row, and 
   // The room map moved the two phones: its table is what a screen reader hears.
   const across = (n: number) => host.locator(`tr[data-seat="${n}"]`).getAttribute('data-x').then(Number);
   expect(await across(2)).toBeLessThan(await across(1));
+  expect(errors).toEqual([]);
+});
+
+/** A room of three phones in a row, lined up, on Photo & cards, with the swap row showing. */
+async function linedUpRoom(context: Parameters<typeof openRoom>[0], errors: string[]) {
+  const room = await openRoom(context, errors, [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]]);
+  await room.host.getByRole('tab', { name: /Photo & cards/ }).click();
+  await room.host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+  await expect(room.host.locator('.swap')).toBeVisible();
+  return room;
+}
+
+test('Photo wall: a phone resizing does not take the keyboard host out of the swap row', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await linedUpRoom(context, errors);
+  await host.locator('#stunt-file').setInputFiles({ name: 'strips.png', mimeType: 'image/png', buffer: stripsPng([RED, GREEN, BLUE]) });
+  const swap = host.locator('.swap');
+  const two = swap.getByRole('button', { name: 'Phone 2' });
+  await two.focus();
+  await host.evaluate(() => {
+    const w = window as unknown as { __two: Element | null; __preview: Element | null };
+    w.__two = document.activeElement;
+    w.__preview = document.querySelector('.stunt-preview canvas');
+  });
+  // A different screen shape reshapes the wall: the preview is redrawn once the host has heard.
+  await phones[0].setViewportSize({ width: 360, height: 640 });
+  await expect.poll(() => host.evaluate(() => (window as unknown as { __preview: Element }).__preview !== document.querySelector('.stunt-preview canvas'))).toBe(true);
+  await expect(two).toBeFocused();
+  expect(await host.evaluate(() => (window as unknown as { __two: Element }).__two.isConnected)).toBe(true);
+  // The keys still work from where the host is.
+  await host.keyboard.press('Enter');
+  await expect(two).toHaveAttribute('aria-pressed', 'true');
+  expect(errors).toEqual([]);
+});
+
+test('Photo wall: a swap line is dropped once the line-up it described is gone, and a picked phone that is removed is let go', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones, code } = await linedUpRoom(context, errors);
+  const swap = host.locator('.swap');
+  await swap.getByRole('button', { name: 'Phone 1' }).click();
+  await swap.getByRole('button', { name: 'Phone 3' }).click();
+  await expect(swap).toContainText('Swapped phones 1 and 3. Left to right: 3, 2, 1.');
+  // A fourth phone joins and the host lines everyone up again: the order is not the one the line described.
+  phones.push(await joinPhone(context, code, 3, errors));
+  await host.locator('.needs').getByRole('button', { name: 'Line them up for me' }).click();
+  await expect(swap.getByRole('button')).toHaveCount(4);
+  await expect(swap.getByText(/^Swapped phones/)).toHaveCount(0);
+  // Pick phone 4, then it leaves and is removed from the map.
+  await swap.getByRole('button', { name: 'Phone 4' }).click();
+  await expect(swap).toContainText('Phone 4 picked.');
+  await phones[3].close();
+  await host.getByRole('button', { name: 'Remove disconnected phones' }).click();
+  await expect(swap.getByRole('button')).toHaveCount(3);
+  await expect(swap.getByText(/picked/)).toHaveCount(0);
+  await expect(swap.locator('[aria-pressed=true]')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('Photo wall: a phone that is away shows dashed in the swap row and is named as away', async ({ context }) => {
+  test.setTimeout(150_000);
+  const errors: string[] = [];
+  const { host, phones } = await linedUpRoom(context, errors);
+  const swap = host.locator('.swap');
+  await expect(swap.getByRole('button', { name: 'Phone 3', exact: true })).not.toHaveAttribute('data-offline', /.*/);
+  await phones[2].close();
+  const away = swap.getByRole('button', { name: 'Phone 3, away' });
+  await expect(away).toBeVisible();
+  await expect(away).toHaveAttribute('data-offline', 'true');
+  expect(await away.evaluate((b) => getComputedStyle(b).borderStyle)).toBe('dashed');
+  await expect(swap.getByRole('button', { name: 'Phone 1', exact: true })).not.toHaveAttribute('data-offline', /.*/);
   expect(errors).toEqual([]);
 });
