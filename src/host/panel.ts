@@ -8,6 +8,8 @@ export interface Notice {
   say(text: string): void;
   /** Something the host has to fix. Shown in the `.result` look, in red, brought into view, with an optional button. */
   fail(text: string, action?: { label: string; run: (button: HTMLElement) => void }): void;
+  /** Takes the error away if it still reads `text`, once what caused it is fixed. A status or another error stays. */
+  retract(text: string): void;
 }
 
 /** Brings a message the host just caused into view if it sits below the fold or under the edge of the panel. */
@@ -34,6 +36,9 @@ export function notice(): Notice {
       alert.replaceChildren(text, ...(action ? [' ', h('button.btn.small', { type: 'button', onclick: (e: Event) => action.run(e.currentTarget as HTMLElement) }, action.label)] : []));
       reveal(alert);
     },
+    retract(text) {
+      if (alert.textContent?.startsWith(text)) alert.replaceChildren();
+    },
   };
 }
 
@@ -58,10 +63,20 @@ export const gotoTab = (from: Element, id: string): boolean => from.dispatchEven
 /** Sent up from Locate when a scan left every phone on the map, so the host page can offer the way back. */
 export const ALL_PLACED = 'swarm:all-placed';
 
-/** True when there are phones on the map; otherwise says so, offers the way to Locate, and returns false. */
-export function requirePlaced(session: HostSession, fail: Notice['fail']): boolean {
+const NEED_PLACED = 'Place some phones on the map first.';
+
+/**
+ * True when there are phones on the map; otherwise says so, offers the way to Locate, and returns false.
+ * The message goes again as soon as a phone is on the map.
+ */
+export function requirePlaced(session: HostSession, { fail, retract }: Pick<Notice, 'fail' | 'retract'>): boolean {
   if (session.layout.positions.size > 0) return true;
-  fail('Place some phones on the map first.', { label: 'Go to Locate', run: (button) => gotoTab(button, 'locate') });
+  fail(NEED_PLACED, { label: 'Go to Locate', run: (button) => gotoTab(button, 'locate') });
+  const off = session.subscribe(() => {
+    if (session.layout.positions.size === 0) return;
+    off();
+    retract(NEED_PLACED);
+  });
   return false;
 }
 

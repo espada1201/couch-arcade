@@ -185,6 +185,42 @@ for (const [w, h] of [[1280, 800], [820, 1180]]) {
   });
 }
 
+for (const [tab, button] of [[/Card stunt/, 'Flip the cards'], [/Wave/, 'Start the wave']] as const) {
+  test(`${tab.source}: the red "Place some phones on the map first." goes away once a phone is on the map`, async ({ context }) => {
+    const errors: string[] = [];
+    const { host, code } = await openHost(context, errors);
+    await joinPhone(context, code, 0, errors);
+    await host.getByRole('tab', { name: tab }).click();
+    await host.getByRole('button', { name: button }).click();
+    const alert = host.getByRole('alert').filter({ hasText: 'Place some phones on the map first.' });
+    await expect(alert).toBeVisible();
+    await host.locator('.tray .chip').first().click();
+    const box = (await host.locator('.stage-canvas').boundingBox())!;
+    await host.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await expect(host.locator('.needs')).toContainText('Your phone is on the map');
+    await expect(alert).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('an error that is still true stays when phones get placed: only the placing message goes', async ({ context }) => {
+  const errors: string[] = [];
+  const { host, code } = await openHost(context, errors);
+  await joinPhone(context, code, 0, errors);
+  await host.getByRole('tab', { name: /Card stunt/ }).click();
+  await host.getByRole('button', { name: 'Flip the cards' }).click();
+  await expect(host.getByRole('alert').filter({ hasText: 'Place some phones on the map first.' })).toBeVisible();
+  // A different message took its place: placing phones must not wipe it.
+  await host.locator('#stunt-file').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not a picture') });
+  await expect(host.getByRole('alert').filter({ hasText: 'could not be read as a picture' })).toBeVisible();
+  await host.locator('.tray .chip').first().click();
+  const box = (await host.locator('.stage-canvas').boundingBox())!;
+  await host.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(host.locator('.needs')).toContainText('Your phone is on the map');
+  await expect(host.getByRole('alert').filter({ hasText: 'could not be read as a picture' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 for (const [w, h] of [[1280, 800], [390, 844]]) {
   test(`${w}px: Flip and its message stay in view while the rest of Card stunt scrolls`, async ({ context }) => {
     const errors: string[] = [];
