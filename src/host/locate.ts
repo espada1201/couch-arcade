@@ -8,7 +8,7 @@ import { localize, type GrayFrame, type LocalizeResult } from '../core/localize'
 import { errorText, h, plural, setText } from '../ui/dom';
 import { CameraSource, SyntheticSource, type FrameSource } from './camera';
 import type { Director, Hold } from './director';
-import { ALL_PLACED, notice } from './panel';
+import { ALL_PLACED, gotoTab, notice } from './panel';
 import type { HostSession } from './session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -36,6 +36,9 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
   const scanHint = h('p.note', { id: 'scan-hint' }, 'Start the camera first.');
   const progress = h('progress', { max: 1, value: 0, hidden: true, 'aria-label': 'Scan progress' });
   const result = h('p.result', { role: 'status', 'aria-live': 'polite' });
+  // After everyone is placed: what to do next, with the way there (the scan result alone ended in a dead end).
+  const nextBtn = h('button.btn.small.primary', { type: 'button', onclick: (e: Event) => gotoTab(e.currentTarget as HTMLElement, 'card') }, 'Open Photo & cards');
+  const next = h('div.locate-next.needs', { hidden: true }, h('p', {}, 'Next: open Photo & cards to show a picture.'), nextBtn);
   const mirror = h('input', { type: 'checkbox', id: 'mirror', 'aria-describedby': 'mirror-about', checked: session.mirror });
   const identify = h('button.btn.ghost', { type: 'button', 'aria-pressed': 'false' }, 'Show numbers on phones');
 
@@ -130,6 +133,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
       return;
     }
     scanning = true;
+    next.hidden = true;
     scanBtn.disabled = true;
     let cancelled = false;
     let tick = 0;
@@ -199,7 +203,10 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     hold.end();
     drawOverlay();
     const stranded = document.activeElement === document.body || document.activeElement === scanBtn;
-    if (stranded && online.every((s) => session.layout.positions.has(s.seat))) result.dispatchEvent(new CustomEvent(ALL_PLACED, { bubbles: true }));
+    const everyone = online.every((s) => session.layout.positions.has(s.seat));
+    next.hidden = !everyone;
+    // The tab that sent the host here gets the keyboard back; with none, the next step does.
+    if (stranded && everyone && result.dispatchEvent(new CustomEvent(ALL_PLACED, { bubbles: true, cancelable: true }))) nextBtn.focus();
   });
 
   mirror.addEventListener('change', () => session.setMirror(mirror.checked));
@@ -349,6 +356,7 @@ export function locatePanel(session: HostSession, params: URLSearchParams, direc
     scanHint,
     progress,
     result,
+    next,
     fallback,
   );
 }
