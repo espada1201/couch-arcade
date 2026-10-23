@@ -149,9 +149,9 @@ export function cardPanel(session: HostSession, director: Director): HTMLElement
     (picked ? flip : file).focus();
   };
   const msg = footedPanel(
-    'Turn your photo or your words into a crowd stunt. Every phone flips together on a 3, 2, 1 countdown.',
+    'Turn your photo or your words into a picture across the crowd. Every phone flips together on a 3, 2, 1 countdown.',
     [
-      placementNote(session, 'Photo & cards needs phones on the map.', lineUp),
+      placementNote(session, 'Photo wall and Stadium cards need phones on the map.', lineUp),
       lined,
       styles,
       ...notes,
